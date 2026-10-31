@@ -15,6 +15,9 @@
 *.jks
 *.keystore
 key.properties
+# Private documents (proposal, notes). Readable locally by Claude Code,
+# never pushed to the public repo.
+private/
 
 # ---------- Node.js (backend/ and contracts/) ----------
 # node_modules is rebuilt from package.json with `npm install`,
