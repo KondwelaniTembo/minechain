@@ -22,7 +22,7 @@ prototype shown in a simulated supply chain, not a production system.
 | Mobile Application | `mobile/` | Role-based UI, QR scanning, GPS capture, ECDSA key management, encrypted local database, offline sync |
 | API Communication | `backend/` | REST API over TLS 1.3 with certificate pinning, JWT on every request |
 | Backend Processing | `backend/` | Transaction processing, anomaly detection, reports, accounts, push notifications, PostgreSQL |
-| Blockchain Ledger | `contracts/` | `RegisterConsignment`, `RecordHandoff`, `RecordPurchase`, each emitting an event |
+| Blockchain Ledger | `contracts/` | `registerConsignment`, `recordHandoff`, `recordPurchase`, each emitting an event |
 
 Rules that shape the design:
 
