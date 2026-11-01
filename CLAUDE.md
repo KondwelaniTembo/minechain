@@ -13,6 +13,7 @@ prototype shown in a simulated supply chain, not a production system.
 - **Roles:** miner, transporter, buyer, regulatory officer, system administrator.
 - **Core flow:** a consignment is registered at extraction, handed off to a transporter and
   purchased by a licensed buyer. Each step is signed and anchored on-chain.
+- **Deadline:** 10 November 2026.
 
 ### Four-layer architecture
 
@@ -25,7 +26,7 @@ prototype shown in a simulated supply chain, not a production system.
 
 Rules that shape the design:
 
-- Only the backend service account can write to the contract. Mobile never talks to the
+- Only authorised backend wallets can write to the contract. Mobile never talks to the
   chain directly.
 - Anomaly detection runs in the backend, not the contract. It has five checks: duplicate
   consignment ID, quantity discrepancy over 10%, GPS zone, ECDSA signature, and handoff order.
@@ -70,6 +71,7 @@ Priorities: **M** Must, **S** Should, **C** Could.
 | FR-13 | Officers download audit trails as spreadsheets | S |
 | FR-14 | Analytics dashboard | C (cut) |
 | FR-15 | Multi-language interface | C (cut) |
+| FR-16 | Signed PDF provenance certificate | S |
 
 FR-14 and FR-15 are cut unless time remains. Do not start them without being asked.
 
