@@ -166,7 +166,7 @@ backend/src/
   operations.
 - Read-only commands such as `git status`, `git diff` and `git log` are allowed.
 - Before the developer commits, remind them to check for secrets.
-- Use Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`.
+- Use Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`.
 - Suggest a commit message when a step is finished, but do not run it.
 
 ## Platform
