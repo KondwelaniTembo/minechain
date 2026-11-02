@@ -22,11 +22,11 @@ const WEIGHT_4 = 980n;
 // Ethers returns enums as bigints. These must match the order in the contract,
 // so reordering the Solidity enum fails the tests.
 const Stage = { None: 0n, Registered: 1n, InTransit: 2n, Purchased: 3n };
-const InputField = { Id: 0n, ActorRef: 1n, WeightGrams: 2n, DataHash: 3n };
+const InputField = { Id: 0n, ActorRef: 1n, WeightMilligrams: 2n, DataHash: 3n };
 
 type ConsignmentValues = {
   stage: bigint;
-  weightGrams: bigint;
+  weightMilligrams: bigint;
   timestamp: bigint;
   actorRef: string;
   dataHash: string;
@@ -46,7 +46,7 @@ function expectConsignment(
   expected: ConsignmentValues,
 ) {
   expect(actual.stage).to.equal(expected.stage);
-  expect(actual.weightGrams).to.equal(expected.weightGrams);
+  expect(actual.weightMilligrams).to.equal(expected.weightMilligrams);
   expect(actual.timestamp).to.equal(expected.timestamp);
   expect(actual.actorRef).to.equal(expected.actorRef);
   expect(actual.dataHash).to.equal(expected.dataHash);
@@ -252,7 +252,7 @@ describe("MineChain", function () {
 
       expectConsignment(await mineChain.getConsignment(ID), {
         stage: Stage.Registered,
-        weightGrams: WEIGHT_1,
+        weightMilligrams: WEIGHT_1,
         timestamp,
         actorRef: MINER_REF,
         dataHash: HASH_1,
@@ -301,7 +301,7 @@ describe("MineChain", function () {
 
       expectConsignment(await mineChain.getConsignment(ID), {
         stage: Stage.InTransit,
-        weightGrams: WEIGHT_2,
+        weightMilligrams: WEIGHT_2,
         timestamp,
         actorRef: TRANSPORTER_REF,
         dataHash: HASH_2,
@@ -321,7 +321,7 @@ describe("MineChain", function () {
 
       expectConsignment(await mineChain.getConsignment(ID), {
         stage: Stage.InTransit,
-        weightGrams: WEIGHT_3,
+        weightMilligrams: WEIGHT_3,
         timestamp,
         actorRef: TRANSPORTER_REF_2,
         dataHash: HASH_3,
@@ -363,7 +363,7 @@ describe("MineChain", function () {
 
       expectConsignment(await mineChain.getConsignment(ID), {
         stage: Stage.Purchased,
-        weightGrams: WEIGHT_3,
+        weightMilligrams: WEIGHT_3,
         timestamp,
         actorRef: BUYER_REF,
         dataHash: HASH_3,
@@ -435,7 +435,7 @@ describe("MineChain", function () {
       },
       {
         label: "weight",
-        field: InputField.WeightGrams,
+        field: InputField.WeightMilligrams,
         args: (actorRef: string) => [ID, actorRef, 0n, HASH_4] as const,
       },
       {
@@ -483,7 +483,7 @@ describe("MineChain", function () {
 
       await expect(asRecorder.recordHandoff(ID, TRANSPORTER_REF, 0n, HASH_4))
         .to.be.revertedWithCustomError(mineChain, "InvalidInput")
-        .withArgs(InputField.WeightGrams);
+        .withArgs(InputField.WeightMilligrams);
     });
   });
 
@@ -493,7 +493,7 @@ describe("MineChain", function () {
 
       expectConsignment(await mineChain.getConsignment(UNKNOWN_ID), {
         stage: Stage.None,
-        weightGrams: 0n,
+        weightMilligrams: 0n,
         timestamp: 0n,
         actorRef: ethers.ZeroHash,
         dataHash: ethers.ZeroHash,
@@ -537,7 +537,7 @@ describe("MineChain", function () {
 
       expectConsignment(await mineChain.getConsignment(ID), {
         stage: Stage.Purchased,
-        weightGrams: WEIGHT_4,
+        weightMilligrams: WEIGHT_4,
         timestamp: purchasedAt,
         actorRef: BUYER_REF,
         dataHash: HASH_4,

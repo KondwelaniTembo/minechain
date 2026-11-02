@@ -28,16 +28,16 @@ contract MineChain is AccessControl {
 
     /// @notice The latest known state of a consignment.
     /// @dev Only the latest step is stored, because earlier steps are already
-    /// in the event logs. stage, weightGrams and timestamp share one storage
+    /// in the event logs. stage, weightMilligrams and timestamp share one storage
     /// slot, which is why the two numbers are uint64 rather than uint256.
     /// @param stage Current position in the custody chain.
-    /// @param weightGrams Weight at the latest step, in whole grams.
+    /// @param weightMilligrams Weight at the latest step, in whole milligrams.
     /// @param timestamp Block time when the latest step was anchored.
     /// @param actorRef Reference to the latest actor.
     /// @param dataHash Hash of the latest signed record held by the backend.
     struct Consignment {
         Stage stage;
-        uint64 weightGrams;
+        uint64 weightMilligrams;
         uint64 timestamp;
         bytes32 actorRef;
         bytes32 dataHash;
@@ -52,7 +52,7 @@ contract MineChain is AccessControl {
     enum InputField {
         Id,
         ActorRef,
-        WeightGrams,
+        WeightMilligrams,
         DataHash
     }
 
@@ -73,14 +73,14 @@ contract MineChain is AccessControl {
     /// @notice A consignment was registered at extraction.
     /// @param id The consignment id.
     /// @param minerRef Reference to the miner.
-    /// @param weightGrams Weight in whole grams. Recorded here, judged by the backend.
+    /// @param weightMilligrams Weight in whole milligrams. Recorded here, judged by the backend.
     /// @param dataHash Hash of the signed record held by the backend.
     /// @param timestamp Block time of anchoring, which may be later than the
     /// real capture time because the app works offline.
     event ConsignmentRegistered(
         bytes32 indexed id,
         bytes32 indexed minerRef,
-        uint64 weightGrams,
+        uint64 weightMilligrams,
         bytes32 dataHash,
         uint64 timestamp
     );
@@ -88,14 +88,14 @@ contract MineChain is AccessControl {
     /// @notice A consignment was handed to a transporter.
     /// @param id The consignment id.
     /// @param transporterRef Reference to the transporter.
-    /// @param weightGrams Weight in whole grams. Recorded here, judged by the backend.
+    /// @param weightMilligrams Weight in whole milligrams. Recorded here, judged by the backend.
     /// @param dataHash Hash of the signed record held by the backend.
     /// @param timestamp Block time of anchoring, which may be later than the
     /// real capture time because the app works offline.
     event HandoffRecorded(
         bytes32 indexed id,
         bytes32 indexed transporterRef,
-        uint64 weightGrams,
+        uint64 weightMilligrams,
         bytes32 dataHash,
         uint64 timestamp
     );
@@ -103,14 +103,14 @@ contract MineChain is AccessControl {
     /// @notice A consignment was purchased by a licensed buyer.
     /// @param id The consignment id.
     /// @param buyerRef Reference to the buyer.
-    /// @param weightGrams Weight in whole grams. Recorded here, judged by the backend.
+    /// @param weightMilligrams Weight in whole milligrams. Recorded here, judged by the backend.
     /// @param dataHash Hash of the signed record held by the backend.
     /// @param timestamp Block time of anchoring, which may be later than the
     /// real capture time because the app works offline.
     event PurchaseRecorded(
         bytes32 indexed id,
         bytes32 indexed buyerRef,
-        uint64 weightGrams,
+        uint64 weightMilligrams,
         bytes32 dataHash,
         uint64 timestamp
     );
@@ -127,15 +127,15 @@ contract MineChain is AccessControl {
     /// last line of defence, and it cannot be bypassed by a backend bug.
     /// @param id The new consignment id.
     /// @param minerRef Reference to the miner.
-    /// @param weightGrams Weight in whole grams.
+    /// @param weightMilligrams Weight in whole milligrams.
     /// @param dataHash Hash of the signed record held by the backend.
     function registerConsignment(
         bytes32 id,
         bytes32 minerRef,
-        uint64 weightGrams,
+        uint64 weightMilligrams,
         bytes32 dataHash
     ) external onlyRole(RECORDER_ROLE) {
-        _validateInput(id, minerRef, weightGrams, dataHash);
+        _validateInput(id, minerRef, weightMilligrams, dataHash);
 
         if (consignments[id].stage != Stage.None) {
             revert ConsignmentAlreadyExists(id);
@@ -145,13 +145,13 @@ contract MineChain is AccessControl {
         uint64 timestamp = uint64(block.timestamp);
         consignments[id] = Consignment(
             Stage.Registered,
-            weightGrams,
+            weightMilligrams,
             timestamp,
             minerRef,
             dataHash
         );
 
-        emit ConsignmentRegistered(id, minerRef, weightGrams, dataHash, timestamp);
+        emit ConsignmentRegistered(id, minerRef, weightMilligrams, dataHash, timestamp);
     }
 
     /// @notice Records a consignment passing to a transporter.
@@ -159,15 +159,15 @@ contract MineChain is AccessControl {
     /// can have several transporters.
     /// @param id The consignment id.
     /// @param transporterRef Reference to the transporter.
-    /// @param weightGrams Weight in whole grams.
+    /// @param weightMilligrams Weight in whole milligrams.
     /// @param dataHash Hash of the signed record held by the backend.
     function recordHandoff(
         bytes32 id,
         bytes32 transporterRef,
-        uint64 weightGrams,
+        uint64 weightMilligrams,
         bytes32 dataHash
     ) external onlyRole(RECORDER_ROLE) {
-        _validateInput(id, transporterRef, weightGrams, dataHash);
+        _validateInput(id, transporterRef, weightMilligrams, dataHash);
 
         Stage current = consignments[id].stage;
         if (current != Stage.Registered && current != Stage.InTransit) {
@@ -178,13 +178,13 @@ contract MineChain is AccessControl {
         uint64 timestamp = uint64(block.timestamp);
         consignments[id] = Consignment(
             Stage.InTransit,
-            weightGrams,
+            weightMilligrams,
             timestamp,
             transporterRef,
             dataHash
         );
 
-        emit HandoffRecorded(id, transporterRef, weightGrams, dataHash, timestamp);
+        emit HandoffRecorded(id, transporterRef, weightMilligrams, dataHash, timestamp);
     }
 
     /// @notice Records the purchase of a consignment by a licensed buyer.
@@ -193,15 +193,15 @@ contract MineChain is AccessControl {
     /// function accepts a consignment after this step.
     /// @param id The consignment id.
     /// @param buyerRef Reference to the buyer.
-    /// @param weightGrams Weight in whole grams.
+    /// @param weightMilligrams Weight in whole milligrams.
     /// @param dataHash Hash of the signed record held by the backend.
     function recordPurchase(
         bytes32 id,
         bytes32 buyerRef,
-        uint64 weightGrams,
+        uint64 weightMilligrams,
         bytes32 dataHash
     ) external onlyRole(RECORDER_ROLE) {
-        _validateInput(id, buyerRef, weightGrams, dataHash);
+        _validateInput(id, buyerRef, weightMilligrams, dataHash);
 
         Stage current = consignments[id].stage;
         if (current != Stage.InTransit) {
@@ -212,13 +212,13 @@ contract MineChain is AccessControl {
         uint64 timestamp = uint64(block.timestamp);
         consignments[id] = Consignment(
             Stage.Purchased,
-            weightGrams,
+            weightMilligrams,
             timestamp,
             buyerRef,
             dataHash
         );
 
-        emit PurchaseRecorded(id, buyerRef, weightGrams, dataHash, timestamp);
+        emit PurchaseRecorded(id, buyerRef, weightMilligrams, dataHash, timestamp);
     }
 
     /// @notice Returns the latest known state of a consignment.
@@ -237,17 +237,17 @@ contract MineChain is AccessControl {
     /// backend decision, including weight discrepancies.
     /// @param id The consignment id.
     /// @param actorRef Reference to the miner, transporter or buyer.
-    /// @param weightGrams Weight in whole grams.
+    /// @param weightMilligrams Weight in whole milligrams.
     /// @param dataHash Hash of the signed record held by the backend.
     function _validateInput(
         bytes32 id,
         bytes32 actorRef,
-        uint64 weightGrams,
+        uint64 weightMilligrams,
         bytes32 dataHash
     ) internal pure {
         if (id == bytes32(0)) revert InvalidInput(InputField.Id);
         if (actorRef == bytes32(0)) revert InvalidInput(InputField.ActorRef);
-        if (weightGrams == 0) revert InvalidInput(InputField.WeightGrams);
+        if (weightMilligrams == 0) revert InvalidInput(InputField.WeightMilligrams);
         if (dataHash == bytes32(0)) revert InvalidInput(InputField.DataHash);
     }
 }
