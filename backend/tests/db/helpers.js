@@ -9,6 +9,9 @@ export const PG_ERROR = {
   UNIQUE_VIOLATION: '23505',
   CHECK_VIOLATION: '23514',
   FOREIGN_KEY_VIOLATION: '23503',
+  // ON DELETE RESTRICT reports this instead of 23503 when a referenced row is deleted.
+  // NO ACTION (the default) would give 23503.
+  RESTRICT_VIOLATION: '23001',
   NOT_NULL_VIOLATION: '23502',
   RAISED_EXCEPTION: 'P0001',
 };
