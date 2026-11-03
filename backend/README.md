@@ -35,3 +35,31 @@ from the `backend/` folder.
    ```
 
    Use `npm run test:watch` to re-run the tests automatically each time you save a file.
+
+4. Start the API and check that it is running:
+
+   ```powershell
+   npm run dev
+   ```
+
+   In a second terminal:
+
+   ```powershell
+   curl.exe -i http://localhost:3000/health
+   ```
+
+   `200` with `"database":"up"` means the API reached PostgreSQL. `503` with
+   `"database":"down"` means the API is running but cannot reach the database. In that
+   case, check `DATABASE_URL` and that the database exists. Press Ctrl+C to stop the server.
+
+## Scripts
+
+| Script | What it does |
+|---|---|
+| `npm run dev` | Starts the API and restarts it whenever a file changes (`node --watch`) |
+| `npm start` | Starts the API once. Render runs this |
+| `npm test` | Runs the test suite once |
+| `npm run test:watch` | Re-runs the tests on every save |
+
+`GET /health` needs no login, so Render's health checks can reach it. It returns only
+`up` or `down`.
