@@ -2,7 +2,12 @@ import pg from 'pg';
 
 export function createPool(connectionString) {
   // Creating a pool does not connect yet; connections open on the first query.
-  const pool = new pg.Pool({ connectionString });
+  const pool = new pg.Pool({
+    connectionString,
+    // pg's default is to wait forever for a connection, so a stopped database would make
+    // requests (including /health) hang instead of failing with a clear error.
+    connectionTimeoutMillis: 5000,
+  });
 
   // If an idle connection drops (database restart, network blip), pg emits 'error' on the
   // pool. With no listener, Node treats that as an unhandled error and crashes the server.
