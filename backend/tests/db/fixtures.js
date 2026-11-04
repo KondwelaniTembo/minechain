@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 // Valid example rows for the DB tests. Each test overrides only the field it is about, so a
 // failure points at a single rule. All values are fake.
@@ -118,6 +118,87 @@ export function consignmentInsert(overrides) {
 export async function insertConsignment(db, overrides = {}) {
   const minerId = overrides.miner_id ?? (await insertUser(db, { role: 'miner', status: 'active' })).id;
   const { text, params } = consignmentInsert({ ...overrides, miner_id: minerId });
+  const { rows } = await db.query(text, params);
+  return rows[0];
+}
+
+// ---------- transactions ----------
+
+// Two fixed statements, written out in full. The second is how offline sync will insert:
+// a retry of the same signed record does nothing instead of creating a second row.
+const INSERT_TRANSACTION = `
+  INSERT INTO transactions (
+    consignment_id, actor_id, type, idempotency_key, weight_mg, latitude, longitude, zone_id,
+    captured_at, signed_payload, signature, signer_public_key, data_hash, hash_version,
+    review_status, anchor_status, chain_tx_hash, block_number, anchor_attempts, anchor_error,
+    anchored_at)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+          $19, $20, $21)
+  RETURNING *`;
+const INSERT_TRANSACTION_IDEMPOTENT = `
+  INSERT INTO transactions (
+    consignment_id, actor_id, type, idempotency_key, weight_mg, latitude, longitude, zone_id,
+    captured_at, signed_payload, signature, signer_public_key, data_hash, hash_version,
+    review_status, anchor_status, chain_tx_hash, block_number, anchor_attempts, anchor_error,
+    anchored_at)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+          $19, $20, $21)
+  ON CONFLICT ON CONSTRAINT transactions_idempotency_key_unique DO NOTHING
+  RETURNING *`;
+
+// A valid, accepted registration that has not been anchored yet. consignment_id and
+// actor_id must be supplied; insertTransaction fills them in.
+export function transactionInsert(overrides, { onConflictDoNothing = false } = {}) {
+  const idempotencyKey = overrides.idempotency_key ?? randomUUID();
+  const tx = {
+    type: 'registration',
+    weight_mg: '1500000', // 1.5 kg; bigint goes in as a string to avoid precision loss
+    latitude: -13.45,
+    longitude: 25.82,
+    zone_id: null,
+    captured_at: new Date('2026-11-01T08:00:00Z'),
+    signed_payload: JSON.stringify({ idempotencyKey, weightMg: '1500000', lat: -13.45, lng: 25.82 }),
+    signature: randomBytes(70),
+    signer_public_key: randomBytes(91),
+    data_hash: randomBytes(32),
+    hash_version: 1,
+    review_status: 'passed',
+    anchor_status: 'pending',
+    chain_tx_hash: null,
+    block_number: null,
+    anchor_attempts: 0,
+    anchor_error: null,
+    anchored_at: null,
+    ...overrides,
+    idempotency_key: idempotencyKey,
+  };
+  return {
+    text: onConflictDoNothing ? INSERT_TRANSACTION_IDEMPOTENT : INSERT_TRANSACTION,
+    params: [
+      tx.consignment_id, tx.actor_id, tx.type, tx.idempotency_key, tx.weight_mg, tx.latitude,
+      tx.longitude, tx.zone_id, tx.captured_at, tx.signed_payload, tx.signature,
+      tx.signer_public_key, tx.data_hash, tx.hash_version, tx.review_status, tx.anchor_status,
+      tx.chain_tx_hash, tx.block_number, tx.anchor_attempts, tx.anchor_error, tx.anchored_at,
+    ],
+  };
+}
+
+// Creates the consignment (and its miner, who becomes the actor) unless they are given.
+export async function transactionParents(db, overrides = {}) {
+  let consignmentId = overrides.consignment_id;
+  let actorId = overrides.actor_id;
+  if (!consignmentId) {
+    const consignment = await insertConsignment(db, actorId ? { miner_id: actorId } : {});
+    consignmentId = consignment.id;
+    actorId ??= consignment.miner_id;
+  }
+  actorId ??= (await insertUser(db, { role: 'miner', status: 'active' })).id;
+  return { consignment_id: consignmentId, actor_id: actorId };
+}
+
+export async function insertTransaction(db, overrides = {}) {
+  const parents = await transactionParents(db, overrides);
+  const { text, params } = transactionInsert({ ...overrides, ...parents });
   const { rows } = await db.query(text, params);
   return rows[0];
 }

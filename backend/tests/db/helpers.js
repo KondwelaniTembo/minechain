@@ -14,6 +14,9 @@ export const PG_ERROR = {
   RESTRICT_VIOLATION: '23001',
   // Writing to a GENERATED ALWAYS column, such as consignments.chain_id.
   GENERATED_ALWAYS: '428C9',
+  // A value too big for the column type, such as 1000 in numeric(9,6). Raised before any
+  // CHECK runs.
+  NUMERIC_OUT_OF_RANGE: '22003',
   NOT_NULL_VIOLATION: '23502',
   RAISED_EXCEPTION: 'P0001',
 };
