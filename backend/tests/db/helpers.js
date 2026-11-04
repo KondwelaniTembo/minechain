@@ -12,6 +12,8 @@ export const PG_ERROR = {
   // ON DELETE RESTRICT reports this instead of 23503 when a referenced row is deleted.
   // NO ACTION (the default) would give 23503.
   RESTRICT_VIOLATION: '23001',
+  // Writing to a GENERATED ALWAYS column, such as consignments.chain_id.
+  GENERATED_ALWAYS: '428C9',
   NOT_NULL_VIOLATION: '23502',
   RAISED_EXCEPTION: 'P0001',
 };

@@ -1,54 +1,18 @@
 import { randomBytes } from 'node:crypto';
 import { describe, it, expect } from 'vitest';
 import { useTestDb, expectPgError, PG_ERROR } from './helpers.js';
+import { FAKE_ARGON2_HASH, MISSING_ID, insertUser as insertUserInto, userInsert } from './fixtures.js';
 
 const t = useTestDb();
 
-// Fake values. The hash is well-formed but hashes nothing, and the key is just 91 bytes.
-const FAKE_ARGON2_HASH = '$argon2id$v=19$m=19456,t=2,p=1$ZmFrZXNhbHQ$ZmFrZWhhc2g';
+// Fake: just 91 random bytes, the length of a P-256 SubjectPublicKeyInfo.
 const FAKE_P256_SPKI = randomBytes(91);
 
-let counter = 0;
-function validUser(overrides = {}) {
-  counter += 1;
-  return {
-    username: `user_${counter}`,
-    full_name: 'Test User',
-    licence_number: null,
-    password_hash: FAKE_ARGON2_HASH,
-    role: 'miner',
-    status: 'pending',
-    status_reason: null,
-    public_key: null,
-    actor_ref: randomBytes(32),
-    approved_by: null,
-    approved_at: null,
-    ...overrides,
-  };
-}
-
-// One fixed statement with every column as a parameter, so no test builds SQL from strings.
-const INSERT_USER = `
-  INSERT INTO users (username, full_name, licence_number, password_hash, role, status,
-                     status_reason, public_key, actor_ref, approved_by, approved_at)
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-  RETURNING *`;
-
-function params(user) {
-  return [
-    user.username, user.full_name, user.licence_number, user.password_hash, user.role,
-    user.status, user.status_reason, user.public_key, user.actor_ref, user.approved_by,
-    user.approved_at,
-  ];
-}
-
-async function insertUser(overrides) {
-  const { rows } = await t.db.query(INSERT_USER, params(validUser(overrides)));
-  return rows[0];
-}
+const insertUser = (overrides) => insertUserInto(t.db, overrides);
 
 function expectInsertRejected(overrides, code) {
-  return expectPgError(t.db, INSERT_USER, params(validUser(overrides)), code);
+  const { text, params } = userInsert(overrides);
+  return expectPgError(t.db, text, params, code);
 }
 
 describe('users table', () => {
@@ -155,10 +119,8 @@ describe('users table', () => {
     });
 
     it('rejects approved_by pointing at a user that does not exist', async () => {
-      const missingId = '00000000-0000-4000-8000-000000000000';
-
       await expectInsertRejected(
-        { approved_by: missingId, approved_at: new Date() },
+        { approved_by: MISSING_ID, approved_at: new Date() },
         PG_ERROR.FOREIGN_KEY_VIOLATION,
       );
     });
