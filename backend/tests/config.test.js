@@ -8,6 +8,7 @@ const validEnv = {
   PORT: '3000',
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/minechain_dev',
   TEST_DATABASE_URL: 'postgresql://user:pass@localhost:5432/minechain_test',
+  // Exactly 43 characters, the minimum.
   JWT_SECRET: 'a-fake-test-secret-that-is-long-enough-1234',
   JWT_EXPIRES_IN: '60m',
 };
@@ -24,6 +25,7 @@ describe('loadConfig', () => {
       databaseUrl: validEnv.DATABASE_URL,
       jwtSecret: validEnv.JWT_SECRET,
       jwtExpiresInSeconds: 3600,
+      trustProxyHops: 0,
     });
     expect(Object.isFrozen(config)).toBe(true);
   });
@@ -53,14 +55,45 @@ describe('loadConfig', () => {
     expect(() => loadConfig(withEnv({ JWT_EXPIRES_IN: value }))).toThrow(/JWT_EXPIRES_IN/);
   });
 
-  it('rejects a JWT_SECRET shorter than 32 characters', () => {
-    expect(() => loadConfig(withEnv({ JWT_SECRET: 'too-short' }))).toThrow(/JWT_SECRET: must be at least 32/);
+  it('accepts a JWT_SECRET of exactly 43 characters', () => {
+    expect(validEnv.JWT_SECRET).toHaveLength(43);
+    expect(loadConfig(validEnv).jwtSecret).toBe(validEnv.JWT_SECRET);
+  });
+
+  it('rejects a JWT_SECRET of 42 characters', () => {
+    const secret = 'x'.repeat(42);
+
+    expect(() => loadConfig(withEnv({ JWT_SECRET: secret }))).toThrow(/JWT_SECRET: must be at least 43/);
+  });
+
+  it('accepts a secret made by the generator in .env.example (64 characters)', () => {
+    // randomBytes(48).toString('base64url') always gives 64 characters.
+    const secret = 'Zx9'.repeat(21) + 'Q';
+
+    expect(loadConfig(withEnv({ JWT_SECRET: secret })).jwtSecret).toHaveLength(64);
   });
 
   it('rejects the placeholder secret from .env.example', () => {
-    const placeholder = 'replace-with-at-least-32-random-characters-xxxxxxxx';
+    const placeholder = 'replace-with-at-least-43-random-characters-xxxxxxxxxxxx';
 
     expect(() => loadConfig(withEnv({ JWT_SECRET: placeholder }))).toThrow(/placeholder/);
+  });
+
+  describe('TRUST_PROXY', () => {
+    it('defaults to 0 proxies', () => {
+      expect(loadConfig(validEnv).trustProxyHops).toBe(0);
+    });
+
+    it.each([
+      ['0', 0],
+      ['1', 1],
+    ])('turns TRUST_PROXY=%s into %i', (value, hops) => {
+      expect(loadConfig(withEnv({ TRUST_PROXY: value })).trustProxyHops).toBe(hops);
+    });
+
+    it.each(['-1', '6', '1.5', 'true'])('rejects TRUST_PROXY=%s', (value) => {
+      expect(() => loadConfig(withEnv({ TRUST_PROXY: value }))).toThrow(/TRUST_PROXY/);
+    });
   });
 
   it('rejects a DATABASE_URL that is not a PostgreSQL connection string', () => {

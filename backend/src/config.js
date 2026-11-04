@@ -28,10 +28,16 @@ const envSchema = z
     TEST_DATABASE_URL: postgresUrl.optional(),
     JWT_SECRET: z
       .string()
-      .min(32, 'must be at least 32 characters')
+      // HS256 needs a 256-bit key. 43 base64url characters carry 256 bits of randomness
+      // (6 bits each), so anything shorter cannot be strong enough.
+      .min(43, 'must be at least 43 characters (256 bits for HS256)')
       // Catches a .env copied from .env.example without the placeholder being replaced.
       .refine((value) => !value.startsWith('replace-with'), 'still holds the .env.example placeholder'),
     JWT_EXPIRES_IN: tokenLifetime,
+    // How many proxies sit in front of the app. Render adds one, so it will be 1 there.
+    // With 0, req.ip is the direct caller; behind a proxy that would be the proxy itself,
+    // and every client would share one rate limit.
+    TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV !== 'test') return;
@@ -62,5 +68,6 @@ export function loadConfig(env) {
     databaseUrl: parsed.NODE_ENV === 'test' ? parsed.TEST_DATABASE_URL : parsed.DATABASE_URL,
     jwtSecret: parsed.JWT_SECRET,
     jwtExpiresInSeconds: parsed.JWT_EXPIRES_IN,
+    trustProxyHops: parsed.TRUST_PROXY,
   });
 }
