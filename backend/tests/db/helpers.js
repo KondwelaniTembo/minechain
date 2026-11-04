@@ -17,6 +17,8 @@ export const PG_ERROR = {
   // A value too big for the column type, such as 1000 in numeric(9,6). Raised before any
   // CHECK runs.
   NUMERIC_OUT_OF_RANGE: '22003',
+  // Text that cannot be read as the column's type, such as 'not-an-ip' for inet.
+  INVALID_TEXT_REPRESENTATION: '22P02',
   NOT_NULL_VIOLATION: '23502',
   RAISED_EXCEPTION: 'P0001',
 };

@@ -202,3 +202,68 @@ export async function insertTransaction(db, overrides = {}) {
   const { rows } = await db.query(text, params);
   return rows[0];
 }
+
+// ---------- alerts ----------
+
+// An open quantity_discrepancy alert. transaction_id must be supplied; insertAlert fills
+// it in.
+export function alertInsert(overrides) {
+  const a = {
+    type: 'quantity_discrepancy',
+    severity: 'medium',
+    details: { expectedWeightMg: '1500000', actualWeightMg: '1200000' },
+    status: 'open',
+    reviewed_by: null,
+    review_notes: null,
+    reviewed_at: null,
+    ...overrides,
+  };
+  return {
+    text: `
+      INSERT INTO alerts (transaction_id, type, severity, details, status, reviewed_by,
+                          review_notes, reviewed_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING *`,
+    // Always JSON.stringify: pg would send an array as a PostgreSQL array, not as JSON.
+    params: [
+      a.transaction_id, a.type, a.severity, JSON.stringify(a.details), a.status,
+      a.reviewed_by, a.review_notes, a.reviewed_at,
+    ],
+  };
+}
+
+// Creates a step to attach the alert to unless transaction_id is given.
+export async function insertAlert(db, overrides = {}) {
+  const transactionId = overrides.transaction_id ?? (await insertTransaction(db)).id;
+  const { text, params } = alertInsert({ ...overrides, transaction_id: transactionId });
+  const { rows } = await db.query(text, params);
+  return rows[0];
+}
+
+// ---------- audit_logs ----------
+
+// A system entry with no actor or entity.
+export function auditInsert(overrides) {
+  const e = {
+    actor_id: null,
+    action: 'user.login',
+    entity_type: null,
+    entity_id: null,
+    details: {},
+    ip_address: null,
+    ...overrides,
+  };
+  return {
+    text: `
+      INSERT INTO audit_logs (actor_id, action, entity_type, entity_id, details, ip_address)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *`,
+    params: [e.actor_id, e.action, e.entity_type, e.entity_id, JSON.stringify(e.details), e.ip_address],
+  };
+}
+
+export async function insertAudit(db, overrides) {
+  const { text, params } = auditInsert(overrides);
+  const { rows } = await db.query(text, params);
+  return rows[0];
+}
