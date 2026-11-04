@@ -28,15 +28,31 @@ from the `backend/` folder.
 
    `.env` is git-ignored. Never commit it.
 
-3. Run the tests:
+3. Create the two databases and apply the migrations. Skip the first three commands if
+   the role and databases already exist. `createuser --pwprompt` asks for the password, so
+   it never appears in your command history. Use the same name and password as in `.env`.
+
+   ```powershell
+   createuser -U postgres --pwprompt minechain_app
+   createdb -U postgres -O minechain_app minechain_dev
+   createdb -U postgres -O minechain_app minechain_test
+   npm run migrate
+   npm run migrate:test
+   ```
+
+4. Run the tests:
 
    ```powershell
    npm test
+   npm run test:db
    ```
 
-   Use `npm run test:watch` to re-run the tests automatically each time you save a file.
+   `npm test` runs the unit and API tests and needs no database. `npm run test:db` runs the
+   database tests against `minechain_test`. It applies any pending migrations first, and
+   rolls back every test, so it never leaves data behind. Use `npm run test:watch` to
+   re-run the unit tests each time you save a file.
 
-4. Start the API and check that it is running:
+5. Start the API and check that it is running:
 
    ```powershell
    npm run dev
@@ -57,9 +73,17 @@ from the `backend/` folder.
 | Script | What it does |
 |---|---|
 | `npm run dev` | Starts the API and restarts it whenever a file changes (`node --watch`) |
-| `npm start` | Starts the API once. Render runs this |
-| `npm test` | Runs the test suite once |
-| `npm run test:watch` | Re-runs the tests on every save |
+| `npm start` | Starts the API once. Render will run this (planned) |
+| `npm test` | Runs the unit and API tests once (no database needed) |
+| `npm run test:watch` | Re-runs the unit and API tests on every save |
+| `npm run test:db` | Runs the database tests against `TEST_DATABASE_URL` |
+| `npm run migrate` | Applies pending migrations to `DATABASE_URL` |
+| `npm run migrate:test` | Applies pending migrations to `TEST_DATABASE_URL` |
+| `npm run migrate:down` | Rolls back the latest migration on `DATABASE_URL` (add `-- 2` for two) |
+| `npm run migrate:create -- <name>` | Creates a new SQL migration file in `migrations/` |
 
-`GET /health` needs no login, so Render's health checks can reach it. It returns only
-`up` or `down`.
+The schema, its rules and the reasons behind them are in
+[docs/database-schema.md](../docs/database-schema.md).
+
+`GET /health` needs no login, so Render's health checks will be able to reach it once
+hosting is set up (planned). It returns only `up` or `down`.
