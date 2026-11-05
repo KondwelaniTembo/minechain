@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
 import { createRegisterLimiter, createLoginIpLimiter, createLoginUsernameLimiter } from './middleware/rateLimits.js';
+import { createRequireAuth } from './middleware/requireAuth.js';
 import { notFound } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
@@ -18,6 +19,9 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   }
   if (!services?.users) {
     throw new TypeError('createApp needs services.users');
+  }
+  if (!services.tokens) {
+    throw new TypeError('createApp needs services.tokens');
   }
 
   const app = express();
@@ -46,7 +50,9 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   const loginUsernameLimiter = createLoginUsernameLimiter({ limit: rateLimits.loginPerUsername });
 
   app.use('/health', healthRoutes({ db }));
-  app.use('/auth', authRoutes({ users: services.users, registerLimiter, loginIpLimiter, loginUsernameLimiter }));
+  const requireAuth = createRequireAuth({ tokens: services.tokens, users: services.users });
+
+  app.use('/auth', authRoutes({ users: services.users, registerLimiter, loginIpLimiter, loginUsernameLimiter, requireAuth }));
 
   // Order matters: these two must come after every route.
   app.use(notFound);

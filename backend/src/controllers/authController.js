@@ -25,5 +25,12 @@ export function createAuthController({ users }) {
       res.set('Cache-Control', 'no-store');
       res.status(200).json({ token, tokenType: 'Bearer', expiresIn, user });
     },
+
+    // requireAuth has already checked the token and loaded the current user.
+    me(req, res) {
+      // Personal details: no cache may keep a copy.
+      res.set('Cache-Control', 'no-store');
+      res.status(200).json({ user: req.user });
+    },
   };
 }

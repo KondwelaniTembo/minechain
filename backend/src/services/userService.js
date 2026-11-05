@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { AppError } from '../errors.js';
+import { notActiveError } from './accountStatus.js';
 
 // Only this unique violation means "username taken". Any other one, such as the
 // astronomically unlikely actor_ref clash, is a server problem and stays a 500.
@@ -27,15 +28,12 @@ function invalidCredentials() {
   return new AppError(401, 'INVALID_CREDENTIALS', 'Username or password is incorrect.');
 }
 
-// Only reached after the password was correct, so only someone who knows it learns the
-// account's status. status_reason stays internal, for administrators.
-const NOT_ACTIVE = {
-  pending: { code: 'ACCOUNT_PENDING', message: 'Your account is waiting for approval by an administrator.' },
-  suspended: { code: 'ACCOUNT_SUSPENDED', message: 'Your account has been suspended. Please contact an administrator.' },
-  rejected: { code: 'ACCOUNT_REJECTED', message: 'Your account request was not approved. Please contact an administrator.' },
-};
-// A status added later must never be mistaken for active.
-const UNKNOWN_STATUS = { code: 'ACCOUNT_NOT_ACTIVE', message: 'Your account is not active. Please contact an administrator.' };
+// A token that no longer matches the database: the user is gone, or their role changed.
+// 401, because logging in again is the fix (it issues a fresh token with the current role).
+// Same code and message as any other refused token, so nothing extra is revealed.
+function staleToken() {
+  return new AppError(401, 'TOKEN_INVALID', 'Your session is not valid. Please log in again.');
+}
 
 // Dependencies are passed in, so unit tests can give fakes and DB tests the real ones.
 //   passwords:      the Argon2id service (hash, verify, verifyDummy, needsRehash)
@@ -140,11 +138,11 @@ export function createUserService({ db, passwords, passwordPolicy, audit, tokens
       }
 
       // Status is checked only now, after the password: a pending account with a wrong
-      // password still got the generic 401 above.
+      // password still got the generic 401 above. So only someone who knows the password
+      // learns the account's status.
       if (user.status !== 'active') {
-        const { code, message } = NOT_ACTIVE[user.status] ?? UNKNOWN_STATUS;
         await recordFailedLogin(`account_${user.status}`, { userId: user.id, ipAddress });
-        throw new AppError(403, code, message);
+        throw notActiveError(user.status);
       }
 
       // Success: the optional rehash and the login entry are saved together.
@@ -172,6 +170,27 @@ export function createUserService({ db, passwords, passwordPolicy, audit, tokens
 
       const { token, expiresIn } = await tokens.sign({ userId: user.id, role: user.role });
       return { user: toSafeUser(user), token, expiresIn };
+    },
+
+    // Called by requireAuth on every request, after the token's signature and expiry have
+    // been checked. The token says who the user *was* when it was issued; this checks who
+    // they are *now*, so a suspension or role change takes effect at once rather than when
+    // the token expires. Returns the safe user, read fresh from the database.
+    async getAuthenticatedUser(userId, tokenRole) {
+      // password_hash is not even selected: nothing on this path needs it.
+      const { rows } = await db.query(
+        `SELECT id, username, full_name, licence_number, role, status, created_at
+           FROM users
+          WHERE id = $1`,
+        [userId],
+      );
+      const user = rows[0];
+
+      if (!user) throw staleToken();
+      if (user.status !== 'active') throw notActiveError(user.status);
+      if (user.role !== tokenRole) throw staleToken();
+
+      return toSafeUser(user);
     },
   };
 }

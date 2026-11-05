@@ -26,7 +26,7 @@ const fakeDb = () => ({ query: vi.fn() });
 // A fresh app with a fake users service each time, so no test shares a rate-limit counter.
 function setup({ register = vi.fn().mockResolvedValue(SAFE_USER), ...options } = {}) {
   const users = { register };
-  const app = createApp({ db: fakeDb(), services: { users }, ...options });
+  const app = createApp({ db: fakeDb(), services: { users, tokens: { verify: vi.fn() } }, ...options });
   return { app, users };
 }
 

@@ -7,8 +7,8 @@ function fakeDb() {
   return { query: vi.fn().mockResolvedValue({ rows: [{ '?column?': 1 }], rowCount: 1 }) };
 }
 
-// These tests are about the app shell, not registration, so the users service is a stub.
-const fakeServices = () => ({ users: { register: vi.fn() } });
+// These tests are about the app shell, not authentication, so the services are stubs.
+const fakeServices = () => ({ users: { register: vi.fn() }, tokens: { verify: vi.fn() } });
 
 // createApp with a fake db unless one is given, mirroring how the old tests called it.
 const appWith = (db = fakeDb()) => createApp({ db, services: fakeServices() });
@@ -29,6 +29,10 @@ describe('createApp', () => {
 
   it('refuses to build without the users service', () => {
     expect(() => createApp({ db: fakeDb() })).toThrow('createApp needs services.users');
+  });
+
+  it('refuses to build without the tokens service', () => {
+    expect(() => createApp({ db: fakeDb(), services: { users: {} } })).toThrow('createApp needs services.tokens');
   });
 
   describe('GET /health', () => {

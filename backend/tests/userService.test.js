@@ -460,3 +460,70 @@ describe('userService.authenticate', () => {
     });
   });
 });
+
+// ---------- getAuthenticatedUser ----------
+
+describe('userService.getAuthenticatedUser', () => {
+  // The lookup selects no password_hash, so the fake row has none either.
+  const { password_hash: _hash, ...dbRow } = userRow();
+
+  function setupLookup(rows) {
+    const db = { query: vi.fn().mockResolvedValue({ rows, rowCount: rows.length }) };
+    const service = createUserService({ db, passwords: {}, passwordPolicy: vi.fn(), audit: {}, tokens: {} });
+    return { service, db };
+  }
+
+  it('looks the user up by id, as a parameter, without selecting the password hash', async () => {
+    const { service, db } = setupLookup([dbRow]);
+
+    await service.getAuthenticatedUser('user-1', 'miner');
+
+    const [text, params] = db.query.mock.calls[0];
+    expect(text).toMatch(/WHERE id = \$1/);
+    expect(text).not.toMatch(/password_hash/);
+    expect(params).toEqual(['user-1']);
+  });
+
+  it('returns the safe user for an active account whose role matches', async () => {
+    const { service } = setupLookup([dbRow]);
+
+    expect(await service.getAuthenticatedUser('user-1', 'miner')).toEqual({
+      id: 'user-1',
+      username: 'mutale_banda',
+      fullName: 'Mutale Banda',
+      licenceNumber: null,
+      role: 'miner',
+      status: 'active',
+      createdAt: new Date('2026-11-05T09:00:00Z'),
+    });
+  });
+
+  it.each([
+    ['pending', 'ACCOUNT_PENDING'],
+    ['suspended', 'ACCOUNT_SUSPENDED'],
+    ['rejected', 'ACCOUNT_REJECTED'],
+    ['archived', 'ACCOUNT_NOT_ACTIVE'],
+  ])('refuses a %s account with 403 %s, the same answer as at login', async (status, code) => {
+    const { service } = setupLookup([{ ...dbRow, status }]);
+
+    await expect(service.getAuthenticatedUser('user-1', 'miner')).rejects.toMatchObject({ status: 403, code });
+  });
+
+  it('refuses a token whose role no longer matches with 401 TOKEN_INVALID', async () => {
+    const { service } = setupLookup([{ ...dbRow, role: 'buyer' }]);
+
+    await expect(service.getAuthenticatedUser('user-1', 'miner')).rejects.toMatchObject({ status: 401, code: 'TOKEN_INVALID' });
+  });
+
+  it('refuses a token for a user who no longer exists with 401 TOKEN_INVALID', async () => {
+    const { service } = setupLookup([]);
+
+    await expect(service.getAuthenticatedUser('user-1', 'miner')).rejects.toMatchObject({ status: 401, code: 'TOKEN_INVALID' });
+  });
+
+  it('reports a status problem before a role mismatch', async () => {
+    const { service } = setupLookup([{ ...dbRow, status: 'suspended', role: 'buyer' }]);
+
+    await expect(service.getAuthenticatedUser('user-1', 'miner')).rejects.toMatchObject({ status: 403, code: 'ACCOUNT_SUSPENDED' });
+  });
+});
