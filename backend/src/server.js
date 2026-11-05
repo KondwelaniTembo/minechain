@@ -18,7 +18,7 @@ try {
 }
 
 const db = createDb(createPool(config.databaseUrl));
-const app = createApp({ db, services: createServices({ db }), trustProxyHops: config.trustProxyHops });
+const app = createApp({ db, services: createServices({ db, config }), trustProxyHops: config.trustProxyHops });
 
 const server = app.listen(config.port, () => {
   console.log(`MineChain API listening on http://localhost:${config.port} (${config.nodeEnv})`);

@@ -11,6 +11,13 @@ export const FAKE_ARGON2_HASH = '$argon2id$v=19$m=19456,t=2,p=1$ZmFrZXNhbHQ$ZmFr
 // A valid UUID that no row will ever have, for "points at nothing" tests.
 export const MISSING_ID = '00000000-0000-4000-8000-000000000000';
 
+// The parts of loadConfig's result that createServices needs. The secret is fake and only
+// long enough to pass the 43-character rule; it is never used outside tests.
+export const FAKE_CONFIG = Object.freeze({
+  jwtSecret: 'test-only-jwt-secret-never-used-in-production-0000',
+  jwtExpiresInSeconds: 3600,
+});
+
 // A small triangle near Kasempa, as [lat, lng] corners.
 export const SAMPLE_BOUNDARY = [
   [-13.45, 25.82],

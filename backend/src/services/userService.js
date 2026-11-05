@@ -20,11 +20,45 @@ function toSafeUser(row) {
   };
 }
 
+// One builder for both "unknown username" and "wrong password", so the two can never drift
+// apart. Any difference in status, code or wording would tell an attacker which usernames
+// exist (user enumeration).
+function invalidCredentials() {
+  return new AppError(401, 'INVALID_CREDENTIALS', 'Username or password is incorrect.');
+}
+
+// Only reached after the password was correct, so only someone who knows it learns the
+// account's status. status_reason stays internal, for administrators.
+const NOT_ACTIVE = {
+  pending: { code: 'ACCOUNT_PENDING', message: 'Your account is waiting for approval by an administrator.' },
+  suspended: { code: 'ACCOUNT_SUSPENDED', message: 'Your account has been suspended. Please contact an administrator.' },
+  rejected: { code: 'ACCOUNT_REJECTED', message: 'Your account request was not approved. Please contact an administrator.' },
+};
+// A status added later must never be mistaken for active.
+const UNKNOWN_STATUS = { code: 'ACCOUNT_NOT_ACTIVE', message: 'Your account is not active. Please contact an administrator.' };
+
 // Dependencies are passed in, so unit tests can give fakes and DB tests the real ones.
-//   passwords:      the Argon2id service (hash)
+//   passwords:      the Argon2id service (hash, verify, verifyDummy, needsRehash)
 //   passwordPolicy: checkPasswordPolicy(password, { username }) -> list of problems
 //   audit:          the audit service (record)
-export function createUserService({ db, passwords, passwordPolicy, audit }) {
+//   tokens:         the token service (sign)
+export function createUserService({ db, passwords, passwordPolicy, audit, tokens }) {
+  // Failed logins are written with the top-level db, as their own statement, and never
+  // inside a db.transaction callback: the caller throws straight afterwards, and a throw
+  // inside a transaction would roll the entry back. A record of failed attempts is exactly
+  // what an officer needs when someone is guessing passwords, so it must always be kept.
+  // details holds only a fixed reason word. The username that was typed is never stored,
+  // because people sometimes type their password into the username field.
+  const recordFailedLogin = (reason, { userId = null, ipAddress }) =>
+    audit.record(db, {
+      action: 'user.login_failed',
+      actorId: userId,
+      entityType: userId ? 'user' : null,
+      entityId: userId,
+      details: { reason },
+      ipAddress,
+    });
+
   return {
     // input has already passed registerSchema. ipAddress comes from the request, for the
     // audit entry.
@@ -79,6 +113,65 @@ export function createUserService({ db, passwords, passwordPolicy, audit }) {
         }
         throw err;
       }
+    },
+
+    // Returns { user, token, expiresIn } for an active user with the right password.
+    // Every failure path costs about the same (one Argon2 verify, one audit insert), so
+    // response time does not reveal whether the username exists.
+    async authenticate(username, password, { ipAddress = null } = {}) {
+      const { rows } = await db.query(
+        `SELECT id, username, full_name, licence_number, role, status, created_at, password_hash
+           FROM users
+          WHERE lower(username) = lower($1)`,
+        [username],
+      );
+      const user = rows[0];
+
+      if (!user) {
+        // Same Argon2 work as a real check, then the same answer as a wrong password.
+        await passwords.verifyDummy(password);
+        await recordFailedLogin('unknown_username', { ipAddress });
+        throw invalidCredentials();
+      }
+
+      if (!(await passwords.verify(user.password_hash, password))) {
+        await recordFailedLogin('wrong_password', { userId: user.id, ipAddress });
+        throw invalidCredentials();
+      }
+
+      // Status is checked only now, after the password: a pending account with a wrong
+      // password still got the generic 401 above.
+      if (user.status !== 'active') {
+        const { code, message } = NOT_ACTIVE[user.status] ?? UNKNOWN_STATUS;
+        await recordFailedLogin(`account_${user.status}`, { userId: user.id, ipAddress });
+        throw new AppError(403, code, message);
+      }
+
+      // Success: the optional rehash and the login entry are saved together.
+      const rehashed = passwords.needsRehash(user.password_hash);
+      const newHash = rehashed ? await passwords.hash(password) : null;
+      await db.transaction(async (tx) => {
+        if (rehashed) {
+          // AND password_hash = $3: if the password was changed in the moment since it was
+          // read, the newer hash is kept rather than overwritten with this one.
+          await tx.query('UPDATE users SET password_hash = $1 WHERE id = $2 AND password_hash = $3', [
+            newHash,
+            user.id,
+            user.password_hash,
+          ]);
+        }
+        await audit.record(tx, {
+          action: 'user.login',
+          actorId: user.id,
+          entityType: 'user',
+          entityId: user.id,
+          details: { rehashed },
+          ipAddress,
+        });
+      });
+
+      const { token, expiresIn } = await tokens.sign({ userId: user.id, role: user.role });
+      return { user: toSafeUser(user), token, expiresIn };
     },
   };
 }

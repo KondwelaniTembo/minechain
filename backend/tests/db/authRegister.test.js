@@ -3,6 +3,7 @@ import request from 'supertest';
 import { useTestDb } from './helpers.js';
 import { createApp } from '../../src/app.js';
 import { createServices } from '../../src/services/index.js';
+import { FAKE_CONFIG } from './fixtures.js';
 
 const t = useTestDb();
 
@@ -10,7 +11,7 @@ const t = useTestDb();
 // the real services, Argon2 and PostgreSQL. Only the database connection differs: t.db is
 // the test's own connection inside an open transaction, so its ROLLBACK undoes everything.
 // Requests are sent one at a time, because a single connection cannot run two at once.
-const realApp = () => createApp({ db: t.db, services: createServices({ db: t.db }) });
+const realApp = () => createApp({ db: t.db, services: createServices({ db: t.db, config: FAKE_CONFIG }) });
 
 const VALID = {
   username: 'mutale_banda',

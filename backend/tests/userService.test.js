@@ -219,3 +219,244 @@ describe('userService.register', () => {
     });
   });
 });
+
+// ---------- authenticate ----------
+
+const STORED_HASH = '$argon2id$v=19$m=19456,t=2,p=1$stored$stored';
+const NEW_HASH = '$argon2id$v=19$m=19456,t=2,p=1$new$new';
+const PASSWORD = 'gold river kasempa';
+
+const userRow = (overrides = {}) => ({
+  id: 'user-1',
+  username: 'mutale_banda',
+  full_name: 'Mutale Banda',
+  licence_number: null,
+  role: 'miner',
+  status: 'active',
+  created_at: new Date('2026-11-05T09:00:00Z'),
+  password_hash: STORED_HASH,
+  ...overrides,
+});
+
+// user: the row the lookup finds, or null for an unknown username.
+function setupAuth({ user = userRow(), passwordCorrect = true, needsRehash = false } = {}) {
+  const tx = { query: vi.fn().mockResolvedValue({ rows: [], rowCount: 1 }) };
+  const db = {
+    query: vi.fn().mockResolvedValue({ rows: user ? [user] : [], rowCount: user ? 1 : 0 }),
+    transaction: vi.fn(async (fn) => fn(tx)),
+  };
+  const passwords = {
+    verify: vi.fn().mockResolvedValue(passwordCorrect),
+    verifyDummy: vi.fn().mockResolvedValue(false),
+    needsRehash: vi.fn().mockReturnValue(needsRehash),
+    hash: vi.fn().mockResolvedValue(NEW_HASH),
+  };
+  const audit = { record: vi.fn().mockResolvedValue({ id: '1', occurredAt: new Date() }) };
+  const tokens = { sign: vi.fn().mockResolvedValue({ token: 'header.payload.signature', expiresIn: 3600 }) };
+  const service = createUserService({ db, passwords, passwordPolicy: vi.fn(), audit, tokens });
+  return { service, db, tx, passwords, audit, tokens };
+}
+
+const errorShape = (err) => ({ status: err.status, code: err.code, message: err.message, details: err.details });
+
+describe('userService.authenticate', () => {
+  it('looks the user up ignoring case, with the username as a parameter', async () => {
+    const { service, db } = setupAuth();
+
+    await service.authenticate('Mutale_Banda', PASSWORD);
+
+    const [text, params] = db.query.mock.calls[0];
+    expect(text).toMatch(/WHERE lower\(username\) = lower\(\$1\)/);
+    expect(params).toEqual(['Mutale_Banda']);
+  });
+
+  describe('unknown username', () => {
+    it('runs the dummy Argon2 check, then answers 401 INVALID_CREDENTIALS', async () => {
+      const { service, passwords } = setupAuth({ user: null });
+
+      const err = await service.authenticate('nobody_here', PASSWORD).catch((e) => e);
+
+      expect(passwords.verifyDummy).toHaveBeenCalledWith(PASSWORD);
+      expect(passwords.verify).not.toHaveBeenCalled();
+      expect(errorShape(err)).toEqual({ status: 401, code: 'INVALID_CREDENTIALS', message: 'Username or password is incorrect.', details: undefined });
+    });
+
+    it('records user.login_failed with no actor, no entity and only the reason', async () => {
+      const { service, db, audit } = setupAuth({ user: null });
+
+      await service.authenticate('nobody_here', PASSWORD, { ipAddress: '196.46.10.7' }).catch(() => {});
+
+      expect(audit.record).toHaveBeenCalledWith(db, {
+        action: 'user.login_failed',
+        actorId: null,
+        entityType: null,
+        entityId: null,
+        details: { reason: 'unknown_username' },
+        ipAddress: '196.46.10.7',
+      });
+    });
+
+    it('never stores what was typed, even a password typed into the username field', async () => {
+      const { service, audit } = setupAuth({ user: null });
+
+      await service.authenticate(PASSWORD, 'whatever was typed second').catch(() => {});
+
+      const logged = JSON.stringify(audit.record.mock.calls);
+      expect(logged).not.toContain(PASSWORD);
+      expect(logged).not.toContain('whatever was typed second');
+    });
+  });
+
+  describe('wrong password', () => {
+    it('checks the real hash, then answers exactly like an unknown username', async () => {
+      const wrong = setupAuth({ passwordCorrect: false });
+      const unknown = setupAuth({ user: null });
+
+      const wrongErr = await wrong.service.authenticate('mutale_banda', 'not the password').catch((e) => e);
+      const unknownErr = await unknown.service.authenticate('nobody_here', 'not the password').catch((e) => e);
+
+      expect(wrong.passwords.verify).toHaveBeenCalledWith(STORED_HASH, 'not the password');
+      expect(wrong.passwords.verifyDummy).not.toHaveBeenCalled();
+      expect(errorShape(wrongErr)).toEqual(errorShape(unknownErr));
+    });
+
+    it('records user.login_failed with the user and the reason only', async () => {
+      const { service, db, audit } = setupAuth({ passwordCorrect: false });
+
+      await service.authenticate('mutale_banda', 'not the password').catch(() => {});
+
+      expect(audit.record).toHaveBeenCalledWith(db, {
+        action: 'user.login_failed',
+        actorId: 'user-1',
+        entityType: 'user',
+        entityId: 'user-1',
+        details: { reason: 'wrong_password' },
+        ipAddress: null,
+      });
+      expect(JSON.stringify(audit.record.mock.calls)).not.toContain('not the password');
+    });
+  });
+
+  describe('accounts that are not active', () => {
+    it.each([
+      ['pending', 'ACCOUNT_PENDING', 'Your account is waiting for approval by an administrator.'],
+      ['suspended', 'ACCOUNT_SUSPENDED', 'Your account has been suspended. Please contact an administrator.'],
+      ['rejected', 'ACCOUNT_REJECTED', 'Your account request was not approved. Please contact an administrator.'],
+    ])('a %s account with the right password gets 403 %s and no token', async (status, code, message) => {
+      const { service, audit, tokens } = setupAuth({ user: userRow({ status }) });
+
+      const err = await service.authenticate('mutale_banda', PASSWORD).catch((e) => e);
+
+      expect(errorShape(err)).toEqual({ status: 403, code, message, details: undefined });
+      expect(audit.record.mock.calls[0][1]).toMatchObject({ action: 'user.login_failed', details: { reason: `account_${status}` } });
+      expect(tokens.sign).not.toHaveBeenCalled();
+    });
+
+    it('treats a status it does not know as not active', async () => {
+      const { service, tokens } = setupAuth({ user: userRow({ status: 'archived' }) });
+
+      const err = await service.authenticate('mutale_banda', PASSWORD).catch((e) => e);
+
+      expect(err).toMatchObject({ status: 403, code: 'ACCOUNT_NOT_ACTIVE' });
+      expect(tokens.sign).not.toHaveBeenCalled();
+    });
+
+    it('gives a pending account with the wrong password the generic 401, so its status stays hidden', async () => {
+      const { service, audit } = setupAuth({ user: userRow({ status: 'pending' }), passwordCorrect: false });
+
+      const err = await service.authenticate('mutale_banda', 'not the password').catch((e) => e);
+
+      expect(err).toMatchObject({ status: 401, code: 'INVALID_CREDENTIALS' });
+      expect(audit.record.mock.calls[0][1].details).toEqual({ reason: 'wrong_password' });
+    });
+  });
+
+  // Failed attempts must survive the throw that follows them, so they are never written
+  // inside a db.transaction callback, where the throw would roll them back.
+  describe('failed-login entries are written outside any transaction', () => {
+    it.each([
+      ['an unknown username', { user: null }],
+      ['a wrong password', { passwordCorrect: false }],
+      ['a pending account', { user: userRow({ status: 'pending' }) }],
+    ])('for %s', async (_label, options) => {
+      const { service, db, audit } = setupAuth(options);
+
+      await service.authenticate('mutale_banda', PASSWORD).catch(() => {});
+
+      expect(db.transaction).not.toHaveBeenCalled();
+      expect(audit.record).toHaveBeenCalledOnce();
+      // The first argument is the top-level db, not a transaction's tx.
+      expect(audit.record.mock.calls[0][0]).toBe(db);
+    });
+  });
+
+  describe('active account with the right password', () => {
+    it('returns the safe user, a token and its lifetime', async () => {
+      const { service, tokens } = setupAuth();
+
+      const result = await service.authenticate('mutale_banda', PASSWORD);
+
+      expect(result).toEqual({
+        user: {
+          id: 'user-1',
+          username: 'mutale_banda',
+          fullName: 'Mutale Banda',
+          licenceNumber: null,
+          role: 'miner',
+          status: 'active',
+          createdAt: new Date('2026-11-05T09:00:00Z'),
+        },
+        token: 'header.payload.signature',
+        expiresIn: 3600,
+      });
+      expect(tokens.sign).toHaveBeenCalledWith({ userId: 'user-1', role: 'miner' });
+    });
+
+    it('records user.login inside the transaction', async () => {
+      const { service, tx, audit } = setupAuth();
+
+      await service.authenticate('mutale_banda', PASSWORD, { ipAddress: '196.46.10.7' });
+
+      expect(audit.record).toHaveBeenCalledWith(tx, {
+        action: 'user.login',
+        actorId: 'user-1',
+        entityType: 'user',
+        entityId: 'user-1',
+        details: { rehashed: false },
+        ipAddress: '196.46.10.7',
+      });
+    });
+
+    it('leaves the hash alone when it already uses the current settings', async () => {
+      const { service, tx, passwords } = setupAuth({ needsRehash: false });
+
+      await service.authenticate('mutale_banda', PASSWORD);
+
+      expect(passwords.hash).not.toHaveBeenCalled();
+      expect(tx.query).not.toHaveBeenCalled();
+    });
+
+    it('re-hashes an older hash and saves it, without overwriting a newer change', async () => {
+      const { service, tx, passwords, audit } = setupAuth({ needsRehash: true });
+
+      await service.authenticate('mutale_banda', PASSWORD);
+
+      expect(passwords.needsRehash).toHaveBeenCalledWith(STORED_HASH);
+      expect(passwords.hash).toHaveBeenCalledWith(PASSWORD);
+      const [text, params] = tx.query.mock.calls[0];
+      expect(text).toMatch(/UPDATE users SET password_hash = \$1 WHERE id = \$2 AND password_hash = \$3/);
+      expect(params).toEqual([NEW_HASH, 'user-1', STORED_HASH]);
+      expect(audit.record.mock.calls[0][1].details).toEqual({ rehashed: true });
+    });
+
+    it('never logs the password or a hash', async () => {
+      const { service, audit } = setupAuth({ needsRehash: true });
+
+      await service.authenticate('mutale_banda', PASSWORD);
+
+      const logged = JSON.stringify(audit.record.mock.calls);
+      expect(logged).not.toContain(PASSWORD);
+      expect(logged).not.toContain('$argon2id$');
+    });
+  });
+});
