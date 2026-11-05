@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import { loadConfig } from './config.js';
 import { createPool, createDb } from './db.js';
 import { createApp } from './app.js';
+import { createServices } from './services/index.js';
 
 // Loads backend/.env into process.env for local development. On Render there is no .env
 // file, and the variables come from the dashboard instead, so this quietly does nothing.
@@ -17,7 +18,7 @@ try {
 }
 
 const db = createDb(createPool(config.databaseUrl));
-const app = createApp({ db });
+const app = createApp({ db, services: createServices({ db }), trustProxyHops: config.trustProxyHops });
 
 const server = app.listen(config.port, () => {
   console.log(`MineChain API listening on http://localhost:${config.port} (${config.nodeEnv})`);
