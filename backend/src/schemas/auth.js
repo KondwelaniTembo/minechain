@@ -26,3 +26,17 @@ export const registerSchema = z
     licenceNumber: z.string().trim().min(1, 'must not be blank').max(50, 'must be at most 50 characters').optional(),
   })
   .strict();
+
+// Login only checks that both values are present and of a sane size. The password policy
+// is not applied: it is for choosing a new password, and applying it here would lock out
+// anyone whose password met an older rule.
+export const loginSchema = z
+  .object({
+    // Trimmed and capped like the database rule. Its format is not checked further: a
+    // malformed username cannot exist, so authentication answers it with the usual 401.
+    username: z.string().trim().min(1, 'is required').max(32, 'must be at most 32 characters'),
+    // Not trimmed. The cap stops anyone sending megabytes for Argon2 to work through. It is
+    // far above the 128-character registration maximum, so it never refuses a real password.
+    password: z.string().min(1, 'is required').max(1024, 'must be at most 1024 characters'),
+  })
+  .strict();

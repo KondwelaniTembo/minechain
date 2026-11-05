@@ -13,5 +13,17 @@ export function createAuthController({ users }) {
         message: 'Your account has been requested. An administrator must approve it before you can log in.',
       });
     },
+
+    // By the time this runs, both login limiters and validate(loginSchema) have passed.
+    // A 401 or 403 from authenticate goes to errorHandler unchanged.
+    async login(req, res) {
+      const { username, password } = req.validated.body;
+      const { user, token, expiresIn } = await users.authenticate(username, password, { ipAddress: req.ip });
+
+      // The response holds a token, so no phone, browser or proxy may keep a copy of it.
+      // RFC 6749 (OAuth 2.0) requires this for token responses.
+      res.set('Cache-Control', 'no-store');
+      res.status(200).json({ token, tokenType: 'Bearer', expiresIn, user });
+    },
   };
 }

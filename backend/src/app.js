@@ -2,7 +2,7 @@ import express from 'express';
 import helmet from 'helmet';
 import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
-import { createRegisterLimiter } from './middleware/rateLimits.js';
+import { createRegisterLimiter, createLoginIpLimiter, createLoginUsernameLimiter } from './middleware/rateLimits.js';
 import { notFound } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
@@ -10,7 +10,8 @@ import { errorHandler } from './middleware/errorHandler.js';
 // listens on a port. Tests pass fakes and hand the app straight to Supertest.
 //
 //   trustProxyHops: how many proxies sit in front of the app (config TRUST_PROXY)
-//   rateLimits:     { registerPerHour } to override the limit, for tests
+//   rateLimits:     { registerPerHour, loginPerIp, loginPerUsername } to override the
+//                   limits, for tests
 export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } = {}) {
   if (!db || typeof db.query !== 'function') {
     throw new TypeError('createApp needs a db object with a query() method');
@@ -41,9 +42,11 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
 
   // Created here, not at import, so every app instance (and every test) counts separately.
   const registerLimiter = createRegisterLimiter({ limit: rateLimits.registerPerHour });
+  const loginIpLimiter = createLoginIpLimiter({ limit: rateLimits.loginPerIp });
+  const loginUsernameLimiter = createLoginUsernameLimiter({ limit: rateLimits.loginPerUsername });
 
   app.use('/health', healthRoutes({ db }));
-  app.use('/auth', authRoutes({ users: services.users, registerLimiter }));
+  app.use('/auth', authRoutes({ users: services.users, registerLimiter, loginIpLimiter, loginUsernameLimiter }));
 
   // Order matters: these two must come after every route.
   app.use(notFound);
