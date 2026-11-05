@@ -78,3 +78,119 @@ describe('createPool', () => {
     await pool.end();
   });
 });
+
+// A fake pool whose connect() hands out one fake connection. The connection records every
+// statement, so the tests can check the exact BEGIN / COMMIT / ROLLBACK sequence.
+function fakePoolWithClient({ failOn } = {}) {
+  const statements = [];
+  const client = {
+    query: vi.fn(async (text) => {
+      statements.push(text);
+      if (failOn && text === failOn) throw new Error(`${failOn} failed`);
+      return { rows: [], rowCount: 0 };
+    }),
+    release: vi.fn(),
+  };
+  const pool = { connect: vi.fn().mockResolvedValue(client), query: vi.fn(), end: vi.fn() };
+  return { pool, client, statements };
+}
+
+describe('db.transaction on a pool', () => {
+  it('runs fn between BEGIN and COMMIT on one connection, and returns its result', async () => {
+    const { pool, client, statements } = fakePoolWithClient();
+
+    const result = await createDb(pool).transaction(async (tx) => {
+      await tx.query('INSERT INTO users DEFAULT VALUES');
+      return 'saved';
+    });
+
+    expect(result).toBe('saved');
+    expect(statements).toEqual(['BEGIN', 'INSERT INTO users DEFAULT VALUES', 'COMMIT']);
+    // Every query went to the same connection, not to the pool.
+    expect(pool.query).not.toHaveBeenCalled();
+    expect(client.release).toHaveBeenCalledWith(undefined);
+  });
+
+  it('rolls back and passes the error on when fn throws', async () => {
+    const { pool, client, statements } = fakePoolWithClient();
+
+    await expect(
+      createDb(pool).transaction(async (tx) => {
+        await tx.query('INSERT INTO users DEFAULT VALUES');
+        throw new Error('audit insert failed');
+      }),
+    ).rejects.toThrow('audit insert failed');
+
+    expect(statements).toEqual(['BEGIN', 'INSERT INTO users DEFAULT VALUES', 'ROLLBACK']);
+    expect(client.release).toHaveBeenCalledWith(undefined);
+  });
+
+  it('keeps the original error and discards the connection if ROLLBACK itself fails', async () => {
+    const { pool, client } = fakePoolWithClient({ failOn: 'ROLLBACK' });
+
+    await expect(
+      createDb(pool).transaction(async () => {
+        throw new Error('original problem');
+      }),
+    ).rejects.toThrow('original problem');
+
+    // Passing an error to release() tells pg to destroy the connection, not reuse it.
+    expect(client.release).toHaveBeenCalledWith(expect.objectContaining({ message: 'ROLLBACK failed' }));
+  });
+
+  it('gives fn a db whose own transaction() uses a savepoint', async () => {
+    const { pool, statements } = fakePoolWithClient();
+
+    await createDb(pool).transaction(async (tx) => {
+      await tx.transaction(async (inner) => {
+        await inner.query('SELECT 1');
+      });
+    });
+
+    expect(statements).toEqual(['BEGIN', 'SAVEPOINT app_transaction', 'SELECT 1', 'RELEASE SAVEPOINT app_transaction', 'COMMIT']);
+  });
+});
+
+describe('db.transaction inside an existing transaction', () => {
+  function fakeConnection() {
+    const statements = [];
+    const connection = {
+      query: vi.fn(async (text) => {
+        statements.push(text);
+        return { rows: [], rowCount: 0 };
+      }),
+    };
+    return { db: createDb(connection, { inTransaction: true }), statements };
+  }
+
+  it('wraps fn in a savepoint and releases it on success', async () => {
+    const { db, statements } = fakeConnection();
+
+    await db.transaction(async (tx) => tx.query('SELECT 1'));
+
+    expect(statements).toEqual(['SAVEPOINT app_transaction', 'SELECT 1', 'RELEASE SAVEPOINT app_transaction']);
+  });
+
+  it('rolls back to the savepoint, releases it, and passes the error on when fn throws', async () => {
+    const { db, statements } = fakeConnection();
+
+    await expect(
+      db.transaction(async () => {
+        throw new Error('nested failure');
+      }),
+    ).rejects.toThrow('nested failure');
+
+    expect(statements).toEqual([
+      'SAVEPOINT app_transaction',
+      'ROLLBACK TO SAVEPOINT app_transaction',
+      // Without this, the rolled-back savepoint would stay on the stack.
+      'RELEASE SAVEPOINT app_transaction',
+    ]);
+  });
+
+  it('refuses close(), which only makes sense for the pool', () => {
+    const { db } = fakeConnection();
+
+    expect(() => db.close()).toThrow(TypeError);
+  });
+});

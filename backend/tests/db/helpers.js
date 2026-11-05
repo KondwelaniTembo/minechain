@@ -46,9 +46,10 @@ export function useTestDb() {
   beforeEach(async () => {
     client = await pool.connect();
     await client.query('BEGIN');
-    // The same query helper the app uses. A single client has query() just like a pool,
-    // so createDb works with it unchanged.
-    handle.db = createDb(client);
+    // The same query helper the app uses. inTransaction: true, because this connection is
+    // already inside the test's BEGIN, so db.transaction() uses savepoints and the test's
+    // final ROLLBACK still undoes everything.
+    handle.db = createDb(client, { inTransaction: true });
   });
 
   afterEach(async () => {

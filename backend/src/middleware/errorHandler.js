@@ -1,3 +1,5 @@
+import { AppError } from '../errors.js';
+
 // Errors raised by express.json() carry a `type`. These are the client's fault, so they get
 // a specific 4xx response instead of a generic 500.
 const BODY_PARSER_ERRORS = {
@@ -12,6 +14,13 @@ export function errorHandler(err, req, res, next) {
   // handler then closes the connection.
   if (res.headersSent) {
     return next(err);
+  }
+
+  // Deliberate errors from our own code: their message was written for the client.
+  if (err instanceof AppError) {
+    const body = { code: err.code, message: err.message };
+    if (err.details) body.details = err.details;
+    return res.status(err.status).json({ error: body });
   }
 
   const known = BODY_PARSER_ERRORS[err.type];
