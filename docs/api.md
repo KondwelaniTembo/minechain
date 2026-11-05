@@ -103,6 +103,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
 | 403 | `ACCOUNT_SUSPENDED` | The account has been suspended | Your account has been suspended. Please contact an administrator. |
 | 403 | `ACCOUNT_REJECTED` | The account request was not approved | Your account request was not approved. Please contact an administrator. |
 | 403 | `ACCOUNT_NOT_ACTIVE` | Any other status that is not active (a fallback) | Your account is not active. Please contact an administrator. |
+| 403 | `FORBIDDEN` | Logged in and active, but this role may not use this endpoint (see [Roles and access](#roles-and-access)) | You do not have permission to do this. |
 
 **401 vs 403:** a 401 means the credentials don't work, and logging in again may help. A 403
 means the server knows exactly who you are, and the account is not allowed in. Logging in
@@ -166,6 +167,64 @@ Retry-After: 812
   }
 }
 ```
+
+## Roles and access
+
+Every account has exactly one of five roles: `miner`, `transporter`, `buyer`, `officer`
+(regulatory officer) or `admin` (system administrator). Each protected endpoint states which
+roles may use it, and the server checks this on every request:
+
+1. **The token is checked** (`requireAuth`). If it fails, the answer is 401, or 403 for an
+   account that is not active.
+2. **The role is checked** (`requireRole`). The role is read from the database at that
+   moment, never from the token. A role outside the endpoint's list gets **403
+   `FORBIDDEN`**, "You do not have permission to do this." The message never says which
+   roles would be allowed.
+
+If an administrator changes someone's role, that person's existing token stops working at
+once (401 `TOKEN_INVALID`). After logging in again, the new role applies.
+
+**Planned access by role.** No endpoint uses role checks yet. This matrix shows which role
+is planned to use which part of the system, based on FR-06 (each role sees only its own
+modules) and the requirements listed. It will be updated as each endpoint is built, and
+the endpoint sections below remain the source of truth for what exists.
+
+| Module (requirement) | Miner | Transporter | Buyer | Officer | Admin | Status |
+|---|:-:|:-:|:-:|:-:|:-:|---|
+| Own account: `GET /auth/me` | ✓ | ✓ | ✓ | ✓ | ✓ | **Built** |
+| Register a consignment at extraction (FR-01, FR-02) | ✓ | | | | | Planned |
+| Record a handoff to a transporter (FR-02, FR-03) | | ✓ | | | | Planned |
+| Record a purchase (FR-02, FR-03) | | | ✓ | | | Planned |
+| Sync signed work recorded offline (FR-07) | ✓ | ✓ | ✓ | | | Planned |
+| Verify a consignment by QR code (FR-04) | | ✓ | ✓ | ✓ | | Planned |
+| View a consignment's full custody chain (FR-04, FR-05) | | | ✓ | ✓ | | Planned |
+| Signed provenance certificate (FR-16) | | | ✓ | | | Planned |
+| Transaction reports and spreadsheet export (FR-09) | | | ✓ | ✓ | ✓ read-only | Planned |
+| Review anomaly alerts, with case notes (FR-08) | | | | ✓ | | Planned |
+| Download audit trails (FR-13) | | | | ✓ | | Planned |
+| Approve or reject account requests (FR-12) | | | | | ✓ | Planned |
+| Manage accounts and roles: create, suspend, change role (FR-10) | | | | | ✓ | Planned |
+| Manage licensed GPS extraction zones (FR-11) | | | | | ✓ | Planned |
+| Monitor system health: API errors, blockchain sync failures, database capacity (System Administrator use case) | | | | | ✓ | Planned |
+| Trigger a manual re-synchronisation (System Administrator use case) | | | | | ✓ | Planned |
+
+The administrator's rows follow the System Administrator use case: managing accounts and
+zones, checking and downloading reports, monitoring the system's health, and starting a
+manual re-synchronisation.
+
+Three things to note about the matrix:
+
+- **Each role records only its own custody step.** A transporter cannot register a
+  consignment, and a miner cannot record a purchase, so a signed step always comes from the
+  kind of actor the contract stage expects.
+- **The administrator runs the system, but does not record custody steps or review
+  alerts.** The administrator may check and download reports, read-only, but cannot create,
+  change or sign anything in the custody chain, and cannot close an alert. A manual
+  re-synchronisation only retries sending steps that are already recorded and approved; it
+  never creates or changes one. Keeping these apart means one stolen administrator account
+  cannot also fake supply chain records or clear anomaly alerts.
+- **Officers have read access across all actors and zones,** which is what regulatory review
+  needs. They do not record custody steps either.
 
 ---
 
