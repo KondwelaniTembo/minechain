@@ -184,6 +184,8 @@ one database transaction, so every consignment has at least one step.
   - `signer_public_key` is 91 bytes;
   - `data_hash` is 32 bytes;
   - `hash_version` is 1 or higher.
+  - The payload format, signature encoding and `data_hash` scheme are defined in
+    [signing-spec.md](signing-spec.md).
 - `review_status`: `passed`, `flagged`, `cleared` or `rejected`.
 - `anchor_status`: `pending`, `submitted`, `confirmed` or `failed`.
   - `submitted` and `confirmed` need a `chain_tx_hash`.
