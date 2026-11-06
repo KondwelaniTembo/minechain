@@ -15,6 +15,11 @@ and `FAKE-SIGNATURE`. None of them is a real identifier, password or token.
 | `POST` | [`/auth/register`](#post-authregister) | Request an account (FR-12) | No |
 | `POST` | [`/auth/login`](#post-authlogin) | Log in and receive a token (FR-06) | No |
 | `GET` | [`/auth/me`](#get-authme) | The logged-in user's own account | Yes |
+| `GET` | [`/admin/users`](#get-adminusers) | List accounts by status (FR-10, FR-12) | Yes, admin only |
+| `POST` | [`/admin/users/{id}/approve`](#post-adminusersidapprove) | Approve an account request (FR-12) | Yes, admin only |
+| `POST` | [`/admin/users/{id}/reject`](#post-adminusersidreject) | Reject an account request, with a reason (FR-12) | Yes, admin only |
+| `POST` | [`/admin/users/{id}/suspend`](#post-adminusersidsuspend) | Suspend an active account, with a reason (FR-10) | Yes, admin only |
+| `POST` | [`/admin/users/{id}/reactivate`](#post-adminusersidreactivate) | Reactivate a suspended account (FR-10) | Yes, admin only |
 
 ## Conventions
 
@@ -184,8 +189,9 @@ roles may use it, and the server checks this on every request:
 If an administrator changes someone's role, that person's existing token stops working at
 once (401 `TOKEN_INVALID`). After logging in again, the new role applies.
 
-**Planned access by role.** No endpoint uses role checks yet. This matrix shows which role
-is planned to use which part of the system, based on FR-06 (each role sees only its own
+**Planned access by role.** The [`/admin/users`](#admin-account-management) endpoints are
+the first to use role checks. This matrix shows which role uses, or is planned to use,
+which part of the system, based on FR-06 (each role sees only its own
 modules) and the requirements listed. It will be updated as each endpoint is built, and
 the endpoint sections below remain the source of truth for what exists.
 
@@ -202,8 +208,9 @@ the endpoint sections below remain the source of truth for what exists.
 | Transaction reports and spreadsheet export (FR-09) | | | ✓ | ✓ | ✓ read-only | Planned |
 | Review anomaly alerts, with case notes (FR-08) | | | | ✓ | | Planned |
 | Download audit trails (FR-13) | | | | ✓ | | Planned |
-| Approve or reject account requests (FR-12) | | | | | ✓ | Planned |
-| Manage accounts and roles: create, suspend, change role (FR-10) | | | | | ✓ | Planned |
+| Approve or reject account requests (FR-12): `/admin/users/{id}/approve`, `/reject` | | | | | ✓ | **Built** |
+| List accounts; suspend and reactivate them (FR-10): `GET /admin/users`, `/admin/users/{id}/suspend`, `/reactivate` | | | | | ✓ | **Built** |
+| Create officer and admin accounts; change role (FR-10) | | | | | ✓ | Planned |
 | Manage licensed GPS extraction zones (FR-11) | | | | | ✓ | Planned |
 | Monitor system health: API errors, blockchain sync failures, database capacity (System Administrator use case) | | | | | ✓ | Planned |
 | Trigger a manual re-synchronisation (System Administrator use case) | | | | | ✓ | Planned |
@@ -463,3 +470,257 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
 | 500 | `INTERNAL_ERROR` | Unexpected server fault | Something went wrong |
 
 See [Authentication](#authentication) for the `WWW-Authenticate` header on each 401.
+
+---
+
+## Admin account management
+
+Five endpoints let an administrator review account requests (FR-12) and suspend or
+reactivate accounts (FR-10). Creating officer and administrator accounts and changing a
+role are planned for a later step.
+
+**Rules shared by all five:**
+
+- **Admin only.** Every request needs a token, and the account must be an active `admin`.
+  Anyone else gets 401 or 403 (see [Roles and access](#roles-and-access)). This applies to
+  every path under `/admin/users`, including paths that do not exist: a non-admin gets 403,
+  not 404, so the paths cannot be discovered.
+- **No caching.** Every response, errors included, carries `Cache-Control: no-store`.
+- **Rate limits:** none yet. To be reviewed in the security review on Saturday 14 November.
+- **One action per endpoint.** Each action moves an account from one status to another, and
+  only from that status:
+
+  | Action | From | To | Body | Roles it applies to |
+  |---|---|---|---|---|
+  | Approve | `pending` | `active` | none, or `{}` | `miner`, `transporter`, `buyer` |
+  | Reject | `pending` | `rejected` | `{ "reason": "…" }` | `miner`, `transporter`, `buyer` |
+  | Suspend | `active` | `suspended` | `{ "reason": "…" }` | All roles, with two extra rules for administrators (below) |
+  | Reactivate | `suspended` | `active` | none, or `{}` | All roles |
+
+  **Rejected is final.** No action leads out of `rejected`. The person must request a new
+  account under a different username.
+- **Two administrators acting at once:** the check and the change happen in one database
+  step, so only one of them succeeds. The other gets 409 `INVALID_STATUS_TRANSITION`.
+- **Every change is recorded** in the audit log, in the same database transaction, with the
+  administrator as the actor, their IP address, and `{ from, to }` plus the reason where
+  there is one. The actions are `user.approve`, `user.reject`, `user.suspend` and
+  `user.reactivate`.
+- **`{id}`** is the user's id, a UUID. Upper- or lower-case letters are both accepted.
+
+**Reasons.** Reject and suspend need a reason: 3 to 500 characters after surrounding spaces
+are trimmed. Line breaks are allowed. **A reason is kept permanently** in the append-only
+audit log, where it can never be edited or removed. Keep it short and factual, for example
+`Licence number could not be verified`, and do not add personal details that are not needed.
+The reason is shown to administrators only, never to the account's owner.
+
+**The admin view of a user.** All five endpoints return users in this form. Unlike
+[`GET /auth/me`](#get-authme), it includes the status reason and the approval. It never
+contains the password hash, the on-chain reference or the device's public key.
+
+| Field | Meaning |
+|---|---|
+| `id` | The user's id |
+| `username`, `fullName`, `licenceNumber`, `role`, `status` | As in `/auth/me` |
+| `statusReason` | Why the account is suspended or rejected; `null` otherwise |
+| `approvedBy` | The id of the administrator who approved the account; `null` if never approved through the API (for example a seeded account) |
+| `approvedAt` | When it was approved; `null` with `approvedBy` |
+| `createdAt`, `updatedAt` | When the account was requested, and when it last changed |
+
+**Errors these endpoints can return**, on top of the [token errors](#authentication):
+
+| Status | Code | When | Message |
+|---|---|---|---|
+| 400 | `VALIDATION_FAILED` | `{id}` is not a UUID; a reason is missing, too short or too long; a body or query has a field it should not | Some fields are missing or invalid. |
+| 403 | `FORBIDDEN` | Logged in and active, but not an administrator | You do not have permission to do this. |
+| 403 | `CANNOT_SUSPEND_SELF` | An administrator tried to suspend their own account | You cannot suspend your own account. |
+| 404 | `USER_NOT_FOUND` | No user has this id | No user has this id. |
+| 409 | `INVALID_STATUS_TRANSITION` | The account is not in the status this action starts from (for example approving an active account, or anything on a rejected one) | Only a pending account can be approved. This account is active. (The wording names the action and the actual status.) |
+| 409 | `ROLE_NOT_APPROVABLE` | Approve or reject on an officer or administrator account. Those are created by an administrator, never requested | Officer and administrator accounts are created by an administrator, not approved or rejected. |
+| 409 | `LAST_ACTIVE_ADMIN` | Suspending this administrator would leave no other active administrator | At least one other active administrator must remain, so this account cannot be suspended. |
+| 500 | `INTERNAL_ERROR` | Unexpected server fault | Something went wrong |
+
+---
+
+## GET /admin/users
+
+Lists accounts with one status, oldest request first. With no query it lists the first page
+of pending requests: the queue an administrator works through (FR-12).
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | None yet |
+| **Request body** | None |
+
+**Query parameters**
+
+| Parameter | Default | Rules |
+|---|---|---|
+| `status` | `pending` | `pending`, `active`, `suspended` or `rejected` |
+| `limit` | `20` | Whole number, 1 to 100 |
+| `offset` | `0` | Whole number, 0 to 10 000: how many matching accounts to skip |
+
+`limit` and `offset` must be plain digits: `1e2`, `0x10` or ` 5 ` are refused, not
+converted. Any other parameter is refused with `VALIDATION_FAILED`.
+
+```
+GET /admin/users?status=pending&limit=20&offset=0
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+```
+
+**200 OK**
+
+```json
+{
+  "users": [
+    {
+      "id": "3f2b6c1e-0000-4000-8000-000000000001",
+      "username": "mutale_banda",
+      "fullName": "Mutale Banda",
+      "licenceNumber": "ZM-ASM-0042",
+      "role": "miner",
+      "status": "pending",
+      "statusReason": null,
+      "approvedBy": null,
+      "approvedAt": null,
+      "createdAt": "2026-11-05T09:00:00.000Z",
+      "updatedAt": "2026-11-05T09:00:00.000Z"
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+`total` counts every account with that status, not only this page, so the app can show
+"page 1 of 3". An `offset` past the end gives an empty `users` list with the real `total`.
+
+---
+
+## POST /admin/users/{id}/approve
+
+Approves a pending request from a miner, transporter or buyer (FR-12). The account becomes
+`active` and can log in. `approvedBy` and `approvedAt` are set.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | None yet |
+| **Request body** | None, or `{}`. Any field is refused |
+
+```
+POST /admin/users/3f2b6c1e-0000-4000-8000-000000000001/approve
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+```
+
+**200 OK**
+
+```json
+{
+  "user": {
+    "id": "3f2b6c1e-0000-4000-8000-000000000001",
+    "username": "mutale_banda",
+    "fullName": "Mutale Banda",
+    "licenceNumber": "ZM-ASM-0042",
+    "role": "miner",
+    "status": "active",
+    "statusReason": null,
+    "approvedBy": "3f2b6c1e-0000-4000-8000-0000000000ad",
+    "approvedAt": "2026-11-06T10:15:00.000Z",
+    "createdAt": "2026-11-05T09:00:00.000Z",
+    "updatedAt": "2026-11-06T10:15:00.000Z"
+  }
+}
+```
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `USER_NOT_FOUND`,
+`INVALID_STATUS_TRANSITION` (the account is not pending) and `ROLE_NOT_APPROVABLE` (an
+officer or administrator account). See [the shared table](#admin-account-management).
+
+---
+
+## POST /admin/users/{id}/reject
+
+Rejects a pending request from a miner, transporter or buyer (FR-12). The account becomes
+`rejected` for good, and the reason is stored in `statusReason`.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | None yet |
+
+**Request body**
+
+| Field | Type | Required | Rules |
+|---|---|---|---|
+| `reason` | string | yes | Surrounding spaces are trimmed. 3–500 characters. Kept permanently in the audit log |
+
+```json
+{ "reason": "Licence number could not be verified" }
+```
+
+**200 OK**: the user in the admin view, with `"status": "rejected"` and
+`"statusReason": "Licence number could not be verified"`.
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `USER_NOT_FOUND`,
+`INVALID_STATUS_TRANSITION` (the account is not pending) and `ROLE_NOT_APPROVABLE`.
+
+---
+
+## POST /admin/users/{id}/suspend
+
+Suspends an active account of any role (FR-10). The account's next request is refused with
+403 `ACCOUNT_SUSPENDED`, even with a token that has not expired, because every request
+checks the account in the database.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | None yet |
+
+**Request body**: `reason`, with the same rules as for
+[reject](#post-adminusersidreject).
+
+```json
+{ "reason": "Lost device reported" }
+```
+
+**200 OK**: the user in the admin view, with `"status": "suspended"` and
+`"statusReason": "Lost device reported"`.
+
+**Two rules for administrator accounts:**
+
+- An administrator cannot suspend themselves: 403 `CANNOT_SUSPEND_SELF`.
+- At least one other active administrator must remain: 409 `LAST_ACTIVE_ADMIN`. This also
+  holds when two administrators try to suspend each other at the same moment. The second
+  request waits for the first and is then refused, so the system can never be left
+  without an administrator.
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `CANNOT_SUSPEND_SELF`, `USER_NOT_FOUND`,
+`INVALID_STATUS_TRANSITION` (the account is not active) and `LAST_ACTIVE_ADMIN`.
+
+---
+
+## POST /admin/users/{id}/reactivate
+
+Makes a suspended account active again (FR-10). `statusReason` is cleared; the suspension's
+reason remains in the audit log. `approvedBy` and `approvedAt` keep the original approval.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | None yet |
+| **Request body** | None, or `{}`. Any field is refused |
+
+```
+POST /admin/users/3f2b6c1e-0000-4000-8000-000000000001/reactivate
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+```
+
+**200 OK**: the user in the admin view, with `"status": "active"` and
+`"statusReason": null`. The user's existing token works again at once.
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `USER_NOT_FOUND` and
+`INVALID_STATUS_TRANSITION` (the account is not suspended; a rejected account can never be
+reactivated).

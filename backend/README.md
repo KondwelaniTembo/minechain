@@ -144,7 +144,8 @@ database tests call it directly.
 ## Documentation
 
 - [docs/api.md](../docs/api.md): every endpoint (`/health`, `/auth/register`,
-  `/auth/login`, `/auth/me`), with request bodies, examples, error codes and rate limits.
+  `/auth/login`, `/auth/me` and the `/admin/users` account endpoints), with request bodies,
+  examples, error codes and rate limits.
 - [docs/database-schema.md](../docs/database-schema.md): the schema, its rules and the
   reasons behind them.
 - [docs/decisions.md](../docs/decisions.md): the decisions log, including the known
