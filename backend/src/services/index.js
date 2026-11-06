@@ -3,6 +3,7 @@ import { checkPasswordPolicy } from './passwordPolicy.js';
 import { createAuditService } from './auditService.js';
 import { createUserService } from './userService.js';
 import { createTokenService } from './tokenService.js';
+import { createAccountService } from './accountService.js';
 
 // The one place where the real services are connected to each other. server.js and the
 // end-to-end DB tests both use it, so the wiring is never written twice. Unit tests skip it
@@ -13,6 +14,7 @@ export function createServices({ db, config }) {
   const audit = createAuditService();
   const tokens = createTokenService({ secret: config.jwtSecret, expiresInSeconds: config.jwtExpiresInSeconds });
   const users = createUserService({ db, passwords, passwordPolicy: checkPasswordPolicy, audit, tokens });
+  const accounts = createAccountService({ db, audit });
 
-  return { users, tokens };
+  return { users, tokens, accounts };
 }
