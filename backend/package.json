@@ -16,7 +16,8 @@
     "migrate": "node-pg-migrate up -m migrations -d DATABASE_URL",
     "migrate:down": "node-pg-migrate down -m migrations -d DATABASE_URL",
     "migrate:test": "node-pg-migrate up -m migrations -d TEST_DATABASE_URL",
-    "migrate:create": "node-pg-migrate create -m migrations -j sql"
+    "migrate:create": "node-pg-migrate create -m migrations -j sql",
+    "seed": "node scripts/seed.js"
   },
   "keywords": [],
   "author": "",

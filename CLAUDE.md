@@ -13,7 +13,7 @@ prototype shown in a simulated supply chain, not a production system.
 - **Roles:** miner, transporter, buyer, regulatory officer, system administrator.
 - **Core flow:** a consignment is registered at extraction, handed off to a transporter and
   purchased by a licensed buyer. Each step is signed and anchored on-chain.
-- **Deadline:** 10 November 2026.
+- **Deadline:** Sunday 15 November 2026.
 
 ### Four-layer architecture
 

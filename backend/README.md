@@ -85,6 +85,47 @@ from the `backend/` folder.
    `"database":"down"` means the API is running but cannot reach the database. In that
    case, check `DATABASE_URL` and that the database exists. Press Ctrl+C to stop the server.
 
+6. Seed the first admin, the demo GPS zone and the demo users (see [Seeding](#seeding)):
+
+   ```powershell
+   npm run seed
+   ```
+
+## Seeding
+
+`npm run seed` creates what an empty database needs before anyone can log in:
+
+| What | When |
+|---|---|
+| The first admin, from `SEED_ADMIN_USERNAME` and `SEED_ADMIN_PASSWORD` | Always |
+| The GPS zone "ZCAS Campus (demo)", owned by that admin | Always |
+| One active user per role: `seed_miner`, `seed_transporter`, `seed_buyer`, `seed_officer`, all with `SEED_DEMO_PASSWORD` | Only outside production, and only when `SEED_DEMO_PASSWORD` is set |
+
+Before the first run:
+
+1. Set `SEED_ADMIN_USERNAME`, `SEED_ADMIN_PASSWORD` and, if you want demo users,
+   `SEED_DEMO_PASSWORD` in `.env`. Both passwords must meet the registration password policy.
+2. Fill in `ZCAS_CAMPUS_BOUNDARY` in `src/seed/seedData.js`: at least 3 corners in
+   **`[latitude, longitude]`** order, with at most 6 decimal places each. The comment there
+   shows an example. While it is empty, the seed refuses to run.
+
+It is safe to run again. Existing users and zones are matched by name in any letter case
+and never changed, so a second run prints `0 created` and reports everything as already
+existing. Everything is saved in one transaction, so a failed run saves nothing. Each row
+created gets a `user.create` or `gps_zone.create` audit entry with `"source": "seed"`. The
+passwords are never printed.
+
+**In production** (`NODE_ENV=production`) the seed refuses to run unless you pass
+`--production-admin-only`, which creates only the admin and the zone:
+
+```powershell
+npm run seed -- --production-admin-only
+```
+
+The `--` is required. Without it, npm takes the flag as its own option, the script never
+sees it, and the seed refuses to run. The seed also refuses `NODE_ENV=test`, because the
+database tests call it directly.
+
 ## Scripts
 
 | Script | What it does |
@@ -98,6 +139,7 @@ from the `backend/` folder.
 | `npm run migrate:test` | Applies pending migrations to `TEST_DATABASE_URL` |
 | `npm run migrate:down` | Rolls back the latest migration on `DATABASE_URL` (add `-- 2` for two) |
 | `npm run migrate:create -- <name>` | Creates a new SQL migration file in `migrations/` |
+| `npm run seed` | Creates the first admin, the demo zone and demo users (see [Seeding](#seeding)). Add `-- --production-admin-only` in production |
 
 ## Documentation
 
