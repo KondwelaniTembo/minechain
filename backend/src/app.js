@@ -2,6 +2,7 @@ import express from 'express';
 import helmet from 'helmet';
 import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
+import { adminUserRoutes } from './routes/adminUsers.js';
 import { createRegisterLimiter, createLoginIpLimiter, createLoginUsernameLimiter } from './middleware/rateLimits.js';
 import { createRequireAuth } from './middleware/requireAuth.js';
 import { notFound } from './middleware/notFound.js';
@@ -53,6 +54,11 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   const requireAuth = createRequireAuth({ tokens: services.tokens, users: services.users });
 
   app.use('/auth', authRoutes({ users: services.users, registerLimiter, loginIpLimiter, loginUsernameLimiter, requireAuth }));
+
+  // FR-10 and FR-12 account management. services.accounts is not in the checks above, so
+  // existing tests that build the app with only users and tokens keep working. If it were
+  // ever missing, these routes would fail closed: a logged 500, never an open route.
+  app.use('/admin/users', adminUserRoutes({ accounts: services.accounts, requireAuth }));
 
   // Order matters: these two must come after every route.
   app.use(notFound);
