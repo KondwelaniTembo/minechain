@@ -22,6 +22,7 @@ and `FAKE-SIGNATURE`. None of them is a real identifier, password or token.
 | `POST` | [`/admin/users/{id}/suspend`](#post-adminusersidsuspend) | Suspend an active account, with a reason (FR-10) | Yes, admin only |
 | `POST` | [`/admin/users/{id}/reactivate`](#post-adminusersidreactivate) | Reactivate a suspended account (FR-10) | Yes, admin only |
 | `POST` | [`/admin/users/{id}/reset-key`](#post-adminusersidreset-key) | Remove a suspended account's device key, for a lost phone | Yes, admin only |
+| `POST` | [`/sync/steps`](#post-syncsteps) | Upload signed custody steps from the phone's offline queue (FR-03, FR-07) | Yes, miner, transporter or buyer |
 
 ## Conventions
 
@@ -204,7 +205,7 @@ the endpoint sections below remain the source of truth for what exists.
 | Register a consignment at extraction (FR-01, FR-02) | ✓ | | | | | Planned |
 | Record a handoff to a transporter (FR-02, FR-03) | | ✓ | | | | Planned |
 | Record a purchase (FR-02, FR-03) | | | ✓ | | | Planned |
-| Sync signed work recorded offline (FR-07) | ✓ | ✓ | ✓ | | | Planned |
+| Sync signed work recorded offline (FR-03, FR-07): `POST /sync/steps` | ✓ | ✓ | ✓ | | | **Built** |
 | Verify a consignment by QR code (FR-04) | | ✓ | ✓ | ✓ | | Planned |
 | View a consignment's full custody chain (FR-04, FR-05) | | | ✓ | ✓ | | Planned |
 | Signed provenance certificate (FR-16) | | | ✓ | | | Planned |
@@ -881,3 +882,146 @@ reason, and now `"publicKeyFingerprint": null`.
 `INVALID_STATUS_TRANSITION` (the account is not suspended: "Only a suspended account can
 have its device key reset. This account is active.") and `NO_PUBLIC_KEY` (the account has
 no key, so nothing was changed). See [the shared table](#admin-account-management).
+
+---
+
+## POST /sync/steps
+
+Uploads signed custody steps from the phone's offline queue (FR-03, FR-07): registrations by
+miners, handoffs by transporters and purchases by buyers. Each step is the exact text the
+phone signed, with its signature, as defined in the [signing spec](signing-spec.md). The
+server verifies each one, stores it as evidence, and later anchors it on Sepolia.
+
+| | |
+|---|---|
+| **Login needed** | Yes: miner, transporter or buyer. Officers and administrators get 403 `FORBIDDEN` |
+| **Rate limits** | 60 requests per 15 minutes **per user** (not per IP: many phones at one site share an IP). Over the limit: 429 `TOO_MANY_REQUESTS` with `Retry-After` |
+
+**Request body**
+
+| Field | Type | Required | Rules |
+|---|---|---|---|
+| `steps` | array | yes | 1 to 50 items, processed in this order |
+| `steps[].payload` | string | yes | The exact signed text (signing spec, section 3), 1–512 characters. Not trimmed or changed |
+| `steps[].signature` | string | yes | The DER signature in standard base64, 1–100 characters |
+
+Any other field, at either level (for example `actorId` or `receivedAt`), is refused with
+`VALIDATION_FAILED`. The actor is always the logged-in user, and the server sets every other
+value itself, including the time it received the step.
+
+A queue longer than 50 steps is sent as several requests, oldest steps first. Fifty steps is
+about 25 kB, so a full batch uploads in a few seconds on 3G.
+
+```
+POST /sync/steps
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+Content-Type: application/json
+```
+
+```json
+{
+  "steps": [
+    {
+      "payload": "minechain-step/1/handoff\nstep_id=6f1d2c3a-0000-4000-8000-000000000002\nactor_id=3f2b6c1e-0000-4000-8000-000000000002\nqr_code=MC-2026-000123\nweight_mg=1495000\nlatitude=-15.390012\nlongitude=28.322540\ncaptured_at=2026-11-10T14:30:05.250Z\n",
+      "signature": "MEUCIQFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE="
+    }
+  ]
+}
+```
+
+In JSON, each line break of the payload is written `\n`; decoding gives back the exact
+signed text.
+
+**200 OK**, with `Cache-Control: no-store`, whenever the batch was processed, whatever each
+step's outcome. One result per step, in the order sent:
+
+```json
+{
+  "results": [
+    { "index": 0, "stepId": "6f1d2c3a-0000-4000-8000-000000000002", "outcome": "created",
+      "transactionId": "7a3e9b10-0000-4000-8000-000000000001", "reviewStatus": "passed" },
+    { "index": 1, "stepId": "6f1d2c3a-0000-4000-8000-000000000002", "outcome": "duplicate",
+      "transactionId": "7a3e9b10-0000-4000-8000-000000000001", "reviewStatus": "passed" },
+    { "index": 2, "stepId": "6f1d2c3a-0000-4000-8000-000000000003", "outcome": "flagged",
+      "code": "INVALID_SIGNATURE",
+      "message": "The record was saved, but its signature did not match your device key. An officer will review it.",
+      "transactionId": "7a3e9b10-0000-4000-8000-000000000002", "reviewStatus": "flagged",
+      "alerts": ["invalid_signature"] },
+    { "index": 3, "stepId": null, "outcome": "rejected", "code": "PAYLOAD_MALFORMED",
+      "message": "This record is not in the signed format the server expects." },
+    { "index": 4, "stepId": "6f1d2c3a-0000-4000-8000-000000000004", "outcome": "deferred",
+      "code": "CONSIGNMENT_NOT_FOUND",
+      "message": "This consignment has not reached the server yet. Keep the record and sync again later." }
+  ]
+}
+```
+
+| Result field | Present | Meaning |
+|---|---|---|
+| `index` | always | The step's position in the request, from 0 |
+| `stepId` | always | The `step_id` from the payload, or `null` if the payload could not be read |
+| `outcome` | always | One of the five outcomes below |
+| `code`, `message` | flagged, rejected, deferred | A stable code for the app's logic, and a plain-language message to show the user |
+| `transactionId` | created, duplicate, flagged | The stored step's id |
+| `reviewStatus` | created, duplicate, flagged | `passed` or `flagged` (later also `cleared` or `rejected`, after an officer's review) |
+| `alerts` | flagged | The alert types raised, for example `["invalid_signature"]` |
+
+### The five outcomes
+
+| Outcome | Stored? | Meaning | What the app does |
+|---|---|---|---|
+| `created` | yes | Stored, and every check passed | Mark the step as synced and remove it from the queue |
+| `duplicate` | already | This exact step was stored before (a retry, for example after a lost response). Nothing new was written | The same as `created` |
+| `flagged` | yes | Stored as evidence, but a check failed. An alert is open for an officer, and the consignment is **held** until it is reviewed | Remove it from the queue, and show the user that the step is under review |
+| `rejected` | no | Can never be accepted as it is. Sending it again unchanged will give the same answer | **Keep the record** (it is signed evidence) and show the code. Never delete it silently |
+| `deferred` | not yet | Valid, but something it depends on has not reached the server yet | Keep it in the queue **unchanged**, and send it again with the next sync, with growing pauses. Show the user any step deferred for more than 72 hours |
+
+### Codes
+
+| Code | Outcome | Meaning | What the app does |
+|---|---|---|---|
+| `INVALID_SIGNATURE` | flagged | The signature did not verify against the account's registered device key. The record may have been changed after signing, or signed on another phone | Show "under review". Check that `publicKeyFingerprint` on `/auth/me` matches this phone's key |
+| `PAYLOAD_MALFORMED` | rejected | Not a valid signed payload (wrong bytes, lines, order or values) | An app bug: report it, keep the record |
+| `PAYLOAD_UNSUPPORTED_VERSION` | rejected | The payload's format version is not one this server reads | Ask the user to update the app |
+| `SIGNATURE_MALFORMED` | rejected | Not strict base64, or not 8–72 bytes | An app bug: report it, keep the record |
+| `ACTOR_MISMATCH` | rejected | The payload's `actor_id` is not the logged-in user | Make sure the account that signed the step is the one logged in |
+| `STEP_NOT_ALLOWED_FOR_ROLE` | rejected | Registration is for miners, handoff for transporters, purchase for buyers | An app bug: the app should not offer this step to this role |
+| `STEP_ID_CONFLICT` | rejected | A **different** record with the same `step_id` was already stored for this user | An app bug: every step needs a fresh `step_id`. Keep both records |
+| `QR_CODE_ALREADY_REGISTERED` | rejected | This custody record's QR code already belongs to a consignment | Check the custody record that was scanned |
+| `CONSIGNMENT_CLOSED` | rejected | The consignment has already been purchased; no further step is possible | Check the custody record that was scanned |
+| `NO_DEVICE_KEY` | deferred | The account has no registered device key yet | Register the key ([`PUT /auth/me/public-key`](#put-authmepublic-key)), then send the step again |
+| `CONSIGNMENT_NOT_FOUND` | deferred | No consignment has this QR code yet: most likely the miner's registration has not been synced | Send it again later. It will be accepted once the registration arrives |
+| `STAGE_NOT_READY` | deferred | A purchase while the consignment is still at `registered`: most likely the transporter's handoff has not been synced | Send it again later |
+
+`QR_CODE_ALREADY_REGISTERED` and `CONSIGNMENT_CLOSED` are temporary answers. When the
+anomaly rules for duplicate consignments and handoff order are built, these steps will be
+stored as `flagged` with an alert instead, so an officer sees them.
+
+### How the server handles a batch
+
+- **Steps are processed one at a time, in the order sent, each in its own database
+  transaction.** One bad step never stops the others, and nothing is ever half-saved.
+- **A retry is always recognised first,** before any rule about the consignment, so a step
+  stored yesterday comes back as `duplicate` even if the consignment has moved on since.
+- **The consignment's stage moves only for passed steps:** a handoff moves it to
+  `in_transit` (a second handoff is a relay and leaves it there), and a purchase moves it to
+  `purchased`, which is final. A flagged step is stored, but leaves the stage where it was.
+- **If the server fails part-way through** (500 `INTERNAL_ERROR`), the steps already stored
+  stay stored. Sending the whole batch again is safe: they come back as `duplicate`.
+- Each stored step is recorded in the audit log as `transaction.create`. Rejected and
+  deferred steps are not recorded.
+
+**Errors** (for the whole request; individual steps never cause these)
+
+| Status | Code | When | Message |
+|---|---|---|---|
+| 400 | `VALIDATION_FAILED` | No `steps`, 0 or more than 50 steps, a field that is missing, empty, too long or not allowed | Some fields are missing or invalid. |
+| 400 | `INVALID_JSON` | The body is not valid JSON | Request body is not valid JSON |
+| 401 | `TOKEN_MISSING`, `TOKEN_INVALID`, `TOKEN_EXPIRED` | See [Authentication](#authentication) | |
+| 403 | `ACCOUNT_PENDING`, `ACCOUNT_SUSPENDED`, `ACCOUNT_REJECTED` | The account is not active | See [Authentication](#authentication) |
+| 403 | `FORBIDDEN` | An officer or administrator account, which never signs custody steps | You do not have permission to do this. |
+| 413 | `PAYLOAD_TOO_LARGE` | The body is over 100 kB | Request body is too large |
+| 429 | `TOO_MANY_REQUESTS` | 60 requests from this user in 15 minutes | Too many sync requests. Please wait a few minutes and try again. |
+| 500 | `INTERNAL_ERROR` | Unexpected server fault. Steps already stored stay stored; resending is safe | Something went wrong |
+
+Every response, errors included, carries `Cache-Control: no-store`.

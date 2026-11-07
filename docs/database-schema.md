@@ -233,14 +233,47 @@ one database transaction, so every consignment has at least one step.
 
 ## Offline sync and duplicate steps
 
-Each signed record carries its own `idempotency_key`. The sync endpoint inserts with
-`ON CONFLICT ON CONSTRAINT transactions_idempotency_key_unique DO NOTHING`, so a retry of
-a record that was already saved affects no rows. The server then loads the existing row:
+Steps arrive in batches through `POST /sync/steps` (see `docs/api.md`). Each step is handled
+in its own database transaction, in the order sent, and gets one of five outcomes:
 
-- the same `data_hash` means a genuine retry, so the server replies `200` with the
-  existing step;
-- a different hash means the key was reused for different data, so the server replies
-  `409`.
+| Outcome | Stored? | When |
+|---|---|---|
+| `created` | yes | Stored with `review_status = 'passed'` |
+| `duplicate` | already | The same step was stored before; nothing is written |
+| `flagged` | yes | Stored with `review_status = 'flagged'` and an open alert, which holds the consignment |
+| `rejected` | no | It can never be accepted as it is (a malformed record, the wrong account or role, a reused step id) |
+| `deferred` | not yet | Something it depends on has not arrived. The app resends it unchanged later |
+
+**Retries.** Each signed record carries its own `idempotency_key`. Before any consignment
+rule, the server looks it up for this actor:
+
+- the same `data_hash` means a genuine retry: the result is `duplicate`, with the existing
+  step;
+- a different hash means the key was reused for different data: the result is `rejected`
+  with `STEP_ID_CONFLICT`.
+
+The insert itself uses
+`ON CONFLICT ON CONSTRAINT transactions_idempotency_key_unique DO NOTHING`, so if two
+copies of one step arrive at the same moment, only one row is written and the other copy
+is compared the same way.
+
+**Deferred steps.** `transactions.consignment_id` is `NOT NULL`, so a handoff or purchase
+whose consignment has not reached the server yet cannot be stored. It is `deferred`
+(`CONSIGNMENT_NOT_FOUND`), and so is a purchase while the consignment is still `registered`
+(`STAGE_NOT_READY`). Nothing is written; the step is accepted unchanged once the earlier step
+arrives.
+
+**Stages.** A registration creates the consignment for its QR code. Handoffs and purchases
+lock the consignment row with `SELECT … FOR UPDATE`, so two steps for one consignment are
+decided one after the other. **The stage moves only for `passed` steps:** a handoff moves it
+to `in_transit` (another handoff at `in_transit` is a relay and leaves it there), and a
+purchase moves it to `purchased`, which is final. A flagged step is stored but leaves the
+stage where it was; a step on a consignment that is already held is stored normally, and the
+anchoring worker skips held consignments.
+
+**Values.** Weight, coordinates and capture time are stored from the signed text, with no
+floating-point step. `received_at` is always set by the database. `zone_id` is NULL until
+the GPS zone check is built.
 
 One row means one anchoring job. If the server stops after sending to Sepolia, the row
 stays `submitted` with its `chain_tx_hash`, and the anchoring worker checks that hash

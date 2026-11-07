@@ -324,12 +324,27 @@ Uniqueness is:
 - The server stores it as the step's idempotency key, and the database allows each user
   each key only once.
 - **An exact copy** of a stored step (same payload, same signature) is a genuine retry. The
-  server answers with the stored step and creates nothing.
+  sync result is `duplicate`, with the stored step's id, and nothing is created.
 - **The same `step_id` with anything different** (another payload, or the other
-  malleability form of the signature) gives a different anchor hash, and the server
-  refuses it with 409.
+  malleability form of the signature) gives a different anchor hash, and the step is
+  `rejected` with `STEP_ID_CONFLICT`.
 - `actor_id` is also signed and must equal the logged-in user, so a step can never be
-  submitted under another account.
+  submitted under another account (`rejected` with `ACTOR_MISMATCH`).
+
+**How this works in sync** (`POST /sync/steps`, see `docs/api.md`):
+
+- The retry check runs **before** any rule about the consignment, so a step stored earlier
+  always comes back as `duplicate`, even after the consignment has moved on (for example a
+  handoff resent after the purchase).
+- The app can therefore resend a whole batch whenever it is unsure whether the last one
+  arrived, for example after a lost response or a 500. Every step already stored answers
+  `duplicate`; only the missing ones are stored.
+- A step that arrives **before** the one it depends on (a handoff before the miner's
+  registration) is not an error: it is `deferred`, and the app sends the same signed text
+  again later. The signature stays valid however late it arrives.
+- One edge case: if the user's device key is reset and re-registered after a step was
+  stored, a retry of that step hashes with the new key and is answered `STEP_ID_CONFLICT`
+  instead of `duplicate`. This only happens after a lost phone, whose queue is lost with it.
 
 `captured_at` is the phone's clock, which the user controls. For now, a time in the future
 or older than 72 hours is accepted and stored as signed (section 10). The server also stores
