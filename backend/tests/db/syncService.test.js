@@ -304,19 +304,6 @@ describe('syncSteps: rejected and deferred items store nothing', () => {
 
     expect(res).toMatchObject({ outcome: 'rejected', code: 'QR_CODE_ALREADY_REGISTERED' });
   });
-
-  it.each([
-    ['handoff', 'transporter'],
-    ['purchase', 'buyer'],
-  ])('defers a %s with STEP_TYPE_NOT_YET_SUPPORTED until handoffs and purchases are built', async (type, role) => {
-    const { user, phone } = await userWithPhone(role);
-    const { mineral: _m, ...rest } = registrationFor(user);
-
-    const res = await syncOne(user, itemFor(phone, { ...rest, type }));
-
-    expect(res).toMatchObject({ outcome: 'deferred', code: 'STEP_TYPE_NOT_YET_SUPPORTED' });
-    expect(await counts()).toEqual(NOTHING);
-  });
 });
 
 describe('syncSteps: a signature that does not verify', () => {
@@ -468,5 +455,303 @@ describe('syncSteps: database faults', () => {
     expect((await counts()).steps).toBe(1);
     const [resent] = await sync().syncSteps(user, [good]);
     expect(resent.outcome).toBe('duplicate');
+  });
+});
+
+// ---------- handoffs and purchases ----------
+
+// A handoff's or purchase's fields for a consignment's custody record. No mineral: only a
+// registration signs it.
+function custodyFor(user, type, qrCode, overrides = {}) {
+  const { mineral: _mineral, ...fields } = registrationFor(user);
+  return { ...fields, type, qrCode, ...overrides };
+}
+
+// A miner registers a new consignment; returns its custody record code.
+async function registered() {
+  const miner = await userWithPhone('miner');
+  const fields = registrationFor(miner.user);
+  const res = await syncOne(miner.user, itemFor(miner.phone, fields));
+  expect(res.outcome).toBe('created');
+  return { miner, qrCode: fields.qrCode };
+}
+
+async function stageOf(qrCode) {
+  const { rows } = await t.db.query('SELECT stage FROM consignments WHERE qr_code = $1', [qrCode]);
+  return rows[0]?.stage;
+}
+
+// In custody order. Not by received_at: inside one test transaction now() never moves, so
+// every step has the same received_at.
+async function stepsOf(qrCode) {
+  const { rows } = await t.db.query(
+    `SELECT s.type, s.review_status, s.anchor_status
+       FROM transactions s JOIN consignments c ON c.id = s.consignment_id
+      WHERE c.qr_code = $1
+      ORDER BY CASE s.type WHEN 'registration' THEN 1 WHEN 'handoff' THEN 2 ELSE 3 END`,
+    [qrCode],
+  );
+  return rows;
+}
+
+// A transporter's handoff, or a buyer's purchase, synced for one custody record.
+async function custody(role, type, qrCode, overrides = {}) {
+  const party = await userWithPhone(role);
+  const fields = custodyFor(party.user, type, qrCode, overrides);
+  const item = itemFor(party.phone, fields);
+  const res = await syncOne(party.user, item);
+  return { ...party, fields, item, res };
+}
+const handoff = (qrCode, overrides) => custody('transporter', 'handoff', qrCode, overrides);
+const purchase = (qrCode, overrides) => custody('buyer', 'purchase', qrCode, overrides);
+
+describe('syncSteps: handoffs', () => {
+  it('stores a handoff on a registered consignment and moves it to in_transit', async () => {
+    const { qrCode } = await registered();
+
+    const { res, user } = await handoff(qrCode, { weightMg: '1495000' });
+
+    expect(res).toMatchObject({ outcome: 'created', reviewStatus: 'passed' });
+    expect(await stageOf(qrCode)).toBe('in_transit');
+    const { rows } = await t.db.query(
+      'SELECT s.type, s.actor_id, s.weight_mg, c.qr_code FROM transactions s JOIN consignments c ON c.id = s.consignment_id WHERE s.id = $1',
+      [res.transactionId],
+    );
+    expect(rows[0]).toEqual({ type: 'handoff', actor_id: user.id, weight_mg: '1495000', qr_code: qrCode });
+  });
+
+  it('allows a second handoff at in_transit (a relay), and the stage stays in_transit', async () => {
+    const { qrCode } = await registered();
+    await handoff(qrCode);
+
+    const { res } = await handoff(qrCode);
+
+    expect(res.outcome).toBe('created');
+    expect(await stageOf(qrCode)).toBe('in_transit');
+    expect((await stepsOf(qrCode)).map((s) => s.type)).toEqual(['registration', 'handoff', 'handoff']);
+  });
+
+  it('audits the handoff with its type', async () => {
+    const { qrCode } = await registered();
+
+    const { res } = await handoff(qrCode);
+
+    const { rows } = await t.db.query("SELECT details FROM audit_logs WHERE action = 'transaction.create' AND entity_id = $1", [
+      res.transactionId,
+    ]);
+    expect(rows[0].details).toEqual({ type: 'handoff', reviewStatus: 'passed' });
+  });
+
+  it('rejects a handoff signed by a miner with STEP_NOT_ALLOWED_FOR_ROLE', async () => {
+    const { miner, qrCode } = await registered();
+    const before = await counts();
+
+    const res = await syncOne(miner.user, itemFor(miner.phone, custodyFor(miner.user, 'handoff', qrCode)));
+
+    expect(res).toMatchObject({ outcome: 'rejected', code: 'STEP_NOT_ALLOWED_FOR_ROLE' });
+    expect(await counts()).toEqual(before);
+  });
+});
+
+describe('syncSteps: purchases', () => {
+  it('stores a purchase on a consignment in transit and moves it to purchased', async () => {
+    const { qrCode } = await registered();
+    await handoff(qrCode);
+
+    const { res } = await purchase(qrCode);
+
+    expect(res).toMatchObject({ outcome: 'created', reviewStatus: 'passed' });
+    expect(await stageOf(qrCode)).toBe('purchased');
+  });
+
+  it('defers a purchase while the consignment is still registered with STAGE_NOT_READY', async () => {
+    // Most likely the transporter has not synced the handoff yet.
+    const { qrCode } = await registered();
+    const before = await counts();
+
+    const { res } = await purchase(qrCode);
+
+    expect(res).toMatchObject({ outcome: 'deferred', code: 'STAGE_NOT_READY' });
+    expect(res.message).toEqual(expect.any(String));
+    expect(await counts()).toEqual(before);
+    expect(await stageOf(qrCode)).toBe('registered');
+  });
+
+  it('accepts the deferred purchase unchanged once the handoff has arrived', async () => {
+    const { qrCode } = await registered();
+    const buyer = await purchase(qrCode);
+    expect(buyer.res.outcome).toBe('deferred');
+    await handoff(qrCode);
+
+    const again = await syncOne(buyer.user, buyer.item);
+
+    expect(again.outcome).toBe('created');
+    expect(await stageOf(qrCode)).toBe('purchased');
+  });
+
+  it('rejects a purchase signed by a transporter with STEP_NOT_ALLOWED_FOR_ROLE', async () => {
+    const { qrCode } = await registered();
+    const transporter = await userWithPhone('transporter');
+
+    const res = await syncOne(transporter.user, itemFor(transporter.phone, custodyFor(transporter.user, 'purchase', qrCode)));
+
+    expect(res).toMatchObject({ outcome: 'rejected', code: 'STEP_NOT_ALLOWED_FOR_ROLE' });
+  });
+});
+
+describe('syncSteps: out-of-order arrival', () => {
+  it('defers a handoff whose consignment has not reached the server, then accepts it after the registration', async () => {
+    const miner = await userWithPhone('miner');
+    const registration = registrationFor(miner.user);
+    const transporter = await userWithPhone('transporter');
+    const handoffItem = itemFor(transporter.phone, custodyFor(transporter.user, 'handoff', registration.qrCode));
+
+    // The transporter's phone reaches a network first.
+    const early = await syncOne(transporter.user, handoffItem);
+    expect(early).toMatchObject({ outcome: 'deferred', code: 'CONSIGNMENT_NOT_FOUND' });
+    expect(await counts()).toEqual(NOTHING);
+
+    // Then the miner syncs, and the transporter's app resends the same item unchanged.
+    await syncOne(miner.user, itemFor(miner.phone, registration));
+    const later = await syncOne(transporter.user, handoffItem);
+
+    expect(later.outcome).toBe('created');
+    expect(await stageOf(registration.qrCode)).toBe('in_transit');
+  });
+
+  it('defers a purchase for an unknown custody record with CONSIGNMENT_NOT_FOUND', async () => {
+    const { res } = await purchase('MC-TEST-UNKNOWN');
+
+    expect(res).toMatchObject({ outcome: 'deferred', code: 'CONSIGNMENT_NOT_FOUND' });
+    expect(await counts()).toEqual(NOTHING);
+  });
+});
+
+describe('syncSteps: after the purchase', () => {
+  async function purchased() {
+    const { qrCode } = await registered();
+    const transporter = await handoff(qrCode);
+    const buyer = await purchase(qrCode);
+    expect(await stageOf(qrCode)).toBe('purchased');
+    return { qrCode, transporter, buyer };
+  }
+
+  it.each([
+    ['a handoff', handoff],
+    ['a second purchase', purchase],
+  ])('rejects %s with CONSIGNMENT_CLOSED and stores nothing', async (_label, step) => {
+    const { qrCode } = await purchased();
+    const before = await counts();
+
+    const { res } = await step(qrCode);
+
+    expect(res).toMatchObject({ outcome: 'rejected', code: 'CONSIGNMENT_CLOSED' });
+    expect(await counts()).toEqual(before);
+    expect(await stageOf(qrCode)).toBe('purchased');
+  });
+
+  it('still answers duplicate for a resend of an earlier handoff, because retries are checked first', async () => {
+    const { transporter } = await purchased();
+    const before = await counts();
+
+    const again = await syncOne(transporter.user, transporter.item);
+
+    expect(again).toMatchObject({ outcome: 'duplicate', transactionId: transporter.res.transactionId });
+    expect(await counts()).toEqual(before);
+  });
+
+  it('still answers duplicate for a resend of the purchase itself', async () => {
+    const { buyer } = await purchased();
+
+    const again = await syncOne(buyer.user, buyer.item);
+
+    expect(again).toMatchObject({ outcome: 'duplicate', transactionId: buyer.res.transactionId });
+  });
+});
+
+describe('syncSteps: flagged custody steps', () => {
+  // A handoff signed by a phone that is not the transporter's registered one.
+  async function flaggedHandoff(qrCode) {
+    const transporter = await userWithPhone('transporter');
+    const payload = canonicalise(custodyFor(transporter.user, 'handoff', qrCode));
+    const res = await syncOne(transporter.user, { payload, signature: signWith(newPhone(), payload) });
+    return { ...transporter, res };
+  }
+
+  it('stores a flagged handoff with its alert, and leaves the stage unchanged', async () => {
+    const { qrCode } = await registered();
+
+    const { res } = await flaggedHandoff(qrCode);
+
+    expect(res).toMatchObject({ outcome: 'flagged', code: 'INVALID_SIGNATURE', reviewStatus: 'flagged' });
+    expect(await stageOf(qrCode)).toBe('registered');
+    const { rows } = await t.db.query('SELECT type, status FROM alerts WHERE transaction_id = $1', [res.transactionId]);
+    expect(rows).toEqual([{ type: 'invalid_signature', status: 'open' }]);
+  });
+
+  it('still stores later steps on the held consignment normally (the worker skips held ones)', async () => {
+    const { qrCode } = await registered();
+    await flaggedHandoff(qrCode);
+
+    const { res } = await handoff(qrCode);
+
+    expect(res.outcome).toBe('created');
+    expect(await stageOf(qrCode)).toBe('in_transit');
+  });
+
+  it('leaves a consignment in transit there after a flagged purchase, so a genuine purchase can follow', async () => {
+    const { qrCode } = await registered();
+    await handoff(qrCode);
+    const buyer = await userWithPhone('buyer');
+    const payload = canonicalise(custodyFor(buyer.user, 'purchase', qrCode));
+
+    const flagged = await syncOne(buyer.user, { payload, signature: signWith(newPhone(), payload) });
+    expect(flagged.outcome).toBe('flagged');
+    expect(await stageOf(qrCode)).toBe('in_transit');
+
+    // The partial unique index counts only passed or cleared purchases, so this is allowed.
+    const { res } = await purchase(qrCode);
+    expect(res.outcome).toBe('created');
+    expect(await stageOf(qrCode)).toBe('purchased');
+  });
+});
+
+describe('syncSteps: the full custody chain', () => {
+  it('records miner, transporter and buyer as three passed steps, ending purchased', async () => {
+    const miner = await userWithPhone('miner');
+    const transporter = await userWithPhone('transporter');
+    const buyer = await userWithPhone('buyer');
+    const registration = registrationFor(miner.user, { weightMg: '1500000' });
+    const { qrCode } = registration;
+
+    const results = [
+      await syncOne(miner.user, itemFor(miner.phone, registration)),
+      await syncOne(transporter.user, itemFor(transporter.phone, custodyFor(transporter.user, 'handoff', qrCode, { weightMg: '1495000' }))),
+      await syncOne(buyer.user, itemFor(buyer.phone, custodyFor(buyer.user, 'purchase', qrCode, { weightMg: '1494500' }))),
+    ];
+
+    expect(results.map((r) => [r.outcome, r.reviewStatus])).toEqual([
+      ['created', 'passed'],
+      ['created', 'passed'],
+      ['created', 'passed'],
+    ]);
+    expect(await stageOf(qrCode)).toBe('purchased');
+    expect(await stepsOf(qrCode)).toEqual([
+      { type: 'registration', review_status: 'passed', anchor_status: 'pending' },
+      { type: 'handoff', review_status: 'passed', anchor_status: 'pending' },
+      { type: 'purchase', review_status: 'passed', anchor_status: 'pending' },
+    ]);
+    // Each step was signed by, and stored for, the person who performed it.
+    const { rows } = await t.db.query(
+      `SELECT s.type, s.actor_id FROM transactions s JOIN consignments c ON c.id = s.consignment_id
+        WHERE c.qr_code = $1 ORDER BY s.type`,
+      [qrCode],
+    );
+    expect(Object.fromEntries(rows.map((r) => [r.type, r.actor_id]))).toEqual({
+      registration: miner.user.id,
+      handoff: transporter.user.id,
+      purchase: buyer.user.id,
+    });
+    expect((await counts()).audits).toBe(3);
   });
 });
