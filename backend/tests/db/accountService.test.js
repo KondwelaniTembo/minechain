@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, it, expect } from 'vitest';
 import { useTestDb } from './helpers.js';
 import { FAKE_CONFIG, MISSING_ID, insertUser } from './fixtures.js';
@@ -14,7 +15,7 @@ const IP = '203.0.113.7';
 
 const ADMIN_KEYS = [
   'id', 'username', 'fullName', 'licenceNumber', 'role', 'status', 'statusReason',
-  'approvedBy', 'approvedAt', 'createdAt', 'updatedAt',
+  'approvedBy', 'approvedAt', 'createdAt', 'updatedAt', 'publicKeyFingerprint',
 ].sort();
 
 const activeAdmin = (overrides = {}) => insertUser(t.db, { role: 'admin', status: 'active', ...overrides });
@@ -70,15 +71,29 @@ describe('list', () => {
     expect(result).toMatchObject({ total: 2, limit: 20, offset: 0 });
   });
 
-  it('returns exactly the admin columns, never the hash, actor_ref or public key', async () => {
-    await pendingUser({ public_key: Buffer.alloc(91, 1) });
+  it('returns exactly the admin columns, never the hash, actor_ref or raw public key', async () => {
+    const key = Buffer.alloc(91, 1);
+    await pendingUser({ public_key: key });
 
     const { users } = await accounts().list({ status: 'pending', limit: 20, offset: 0 });
 
     expect(Object.keys(users[0]).sort()).toEqual(ADMIN_KEYS);
     const text = JSON.stringify(users);
     expect(text).not.toContain('argon2');
-    expect(text).not.toMatch(/password|actor_?ref|public_?key/i);
+    expect(text).not.toMatch(/password|actor_?ref/i);
+    // Only the fingerprint, never the key itself in any form.
+    expect(users[0]).not.toHaveProperty('publicKey');
+    expect(text).not.toContain(key.toString('base64'));
+    expect(text).not.toContain(key.toString('hex'));
+    expect(users[0].publicKeyFingerprint).toBe(createHash('sha256').update(key).digest('hex'));
+  });
+
+  it('shows a null fingerprint for an account with no device key', async () => {
+    await pendingUser();
+
+    const { users } = await accounts().list({ status: 'pending', limit: 20, offset: 0 });
+
+    expect(users[0].publicKeyFingerprint).toBeNull();
   });
 
   it('pages with limit and offset, while total counts every match', async () => {

@@ -170,6 +170,7 @@ describe('requireAuth on GET /auth/me', () => {
           role: 'miner',
           status: 'active',
           createdAt: '2026-11-05T09:00:00.000Z',
+          publicKeyFingerprint: null,
         },
       });
       expect(lookup).toHaveBeenCalledWith(USER_ID, 'miner');

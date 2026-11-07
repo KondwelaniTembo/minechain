@@ -6,6 +6,7 @@ import {
   verify,
   anchorHash,
   publicKeyFingerprint,
+  spkiFingerprint,
   createSignatureService,
 } from '../src/services/signatureService.js';
 import { canonicalise } from '../src/services/stepPayload.js';
@@ -490,5 +491,17 @@ describe('publicKeyFingerprint', () => {
 
   it('is part of createSignatureService', () => {
     expect(createSignatureService().publicKeyFingerprint(SPKI)).toBe(publicKeyFingerprint(SPKI));
+  });
+});
+
+describe('spkiFingerprint, for stored key bytes', () => {
+  it('gives the same fingerprint as publicKeyFingerprint for a valid key', () => {
+    expect(spkiFingerprint(SPKI)).toBe(publicKeyFingerprint(SPKI));
+  });
+
+  it('does not validate again, so reading a stored row can never fail on it', () => {
+    const odd = Buffer.alloc(91, 1);
+
+    expect(spkiFingerprint(odd)).toBe(createHash('sha256').update(odd).digest('hex'));
   });
 });

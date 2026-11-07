@@ -1,11 +1,13 @@
 import { AppError } from '../errors.js';
 import { SELF_REGISTER_ROLES } from '../schemas/auth.js';
+import { spkiFingerprint } from './signatureService.js';
 
 // The columns an administrator may see, written out once. A fixed constant placed into
 // fixed statements, never anything from a request, so no input can become SQL. It leaves
-// out password_hash, actor_ref (the on-chain identity) and public_key on purpose.
+// out password_hash and actor_ref (the on-chain identity) on purpose. public_key is
+// selected only so toAdminUser can show its fingerprint; the raw key is never returned.
 const ADMIN_COLUMNS = `id, username, full_name, licence_number, role, status, status_reason,
-                       approved_by, approved_at, created_at, updated_at`;
+                       approved_by, approved_at, created_at, updated_at, public_key`;
 
 const LIST_USERS = `
   SELECT ${ADMIN_COLUMNS}
@@ -87,6 +89,9 @@ function toAdminUser(row) {
     approvedAt: row.approved_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    // Lets an administrator see whether the account has a device key before resetting it,
+    // and compare it with the fingerprint the user's phone shows.
+    publicKeyFingerprint: row.public_key ? spkiFingerprint(row.public_key) : null,
   };
 }
 

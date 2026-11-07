@@ -56,7 +56,11 @@ describe('admin user routes through the real stack', () => {
     expect(res.body).toMatchObject({ total: 1, limit: 20, offset: 0 });
     expect(res.body.users).toEqual([expect.objectContaining({ id: pending.id, status: 'pending' })]);
     expect(res.text).not.toContain('argon2');
-    expect(res.text).not.toMatch(/password|actor_?ref|public_?key/i);
+    expect(res.text).not.toMatch(/password|actor_?ref/i);
+    // The key appears only as its fingerprint, never as the key itself.
+    expect(res.body.users[0]).not.toHaveProperty('publicKey');
+    expect(res.text).not.toContain(Buffer.alloc(91, 1).toString('base64'));
+    expect(res.body.users[0].publicKeyFingerprint).toMatch(/^[0-9a-f]{64}$/);
   });
 
   it('approves a request, after which the new user is let in', async () => {

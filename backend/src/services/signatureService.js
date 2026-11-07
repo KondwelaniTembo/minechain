@@ -167,7 +167,16 @@ export function anchorHash({ payload, signature, publicKey }) {
 // it can tell whether the registered key is the one in its own Keystore. The key is
 // validated first, so a fingerprint always names a real P-256 key in canonical form.
 export function publicKeyFingerprint(input) {
-  const { bytes } = parseKey(input);
+  return spkiFingerprint(parseKey(input).bytes);
+}
+
+// The same fingerprint for key bytes that were validated when they were stored (a
+// users.public_key or transactions.signer_public_key read back from the database). It does
+// not validate again, on purpose: it runs on every /auth/me and every admin list, and a key
+// that somehow failed validation there would turn each of those requests into a 500 and
+// lock the user out. Showing its fingerprint is harmless; using it to verify is not, and
+// verify always validates.
+export function spkiFingerprint(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
 }
 

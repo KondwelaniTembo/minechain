@@ -1,14 +1,22 @@
 import { randomBytes } from 'node:crypto';
 import { AppError } from '../errors.js';
 import { notActiveError } from './accountStatus.js';
+import { SIGNING_ROLES } from '../roles.js';
+import { createSignatureService, spkiFingerprint } from './signatureService.js';
+import { SigningError } from './signingError.js';
 
 // Only this unique violation means "username taken". Any other one, such as the
 // astronomically unlikely actor_ref clash, is a server problem and stays a 500.
 const USERNAME_CONSTRAINT = 'users_username_lower_key';
+// The unique index from the users-public-key-unique migration: this key is on another account.
+const PUBLIC_KEY_CONSTRAINT = 'users_public_key_key';
 const UNIQUE_VIOLATION = '23505';
 
 // Column names stay snake_case in SQL; the API speaks camelCase. Only safe fields are
 // selected in the first place, so password_hash and actor_ref can never leak from here.
+// public_key is selected only to be turned into its fingerprint: the raw key is never
+// returned. The app compares the fingerprint with its own Keystore key's to know whether to
+// register (null), carry on (equal), or ask an administrator (different).
 function toSafeUser(row) {
   return {
     id: row.id,
@@ -18,8 +26,27 @@ function toSafeUser(row) {
     role: row.role,
     status: row.status,
     createdAt: row.created_at,
+    publicKeyFingerprint: row.public_key ? spkiFingerprint(row.public_key) : null,
   };
 }
+
+// Sets the key only if the account has none yet, and only for an active account in a
+// signing role. The check and the change are one statement, so two registrations at the
+// same moment cannot both succeed: the second waits for the first's row lock, re-checks
+// public_key IS NULL, and matches nothing.
+const REGISTER_PUBLIC_KEY = `
+  UPDATE users
+     SET public_key = $2
+   WHERE id = $1 AND public_key IS NULL AND status = 'active' AND role = ANY ($3::text[])
+  RETURNING id, username, full_name, licence_number, role, status, created_at, public_key`;
+
+// Read only when the UPDATE matched nothing, to choose the answer. same_key is NULL when
+// the account has no key, which counts as false.
+const KEY_STATE = `
+  SELECT id, username, full_name, licence_number, role, status, created_at, public_key,
+         public_key = $2 AS same_key
+    FROM users
+   WHERE id = $1`;
 
 // One builder for both "unknown username" and "wrong password", so the two can never drift
 // apart. Any difference in status, code or wording would tell an attacker which usernames
@@ -40,7 +67,9 @@ function staleToken() {
 //   passwordPolicy: checkPasswordPolicy(password, { username }) -> list of problems
 //   audit:          the audit service (record)
 //   tokens:         the token service (sign)
-export function createUserService({ db, passwords, passwordPolicy, audit, tokens }) {
+//   signatures:     the signature service (parsePublicKey); defaults to the real one, which
+//                   is pure, so tests that never register a key need not pass it
+export function createUserService({ db, passwords, passwordPolicy, audit, tokens, signatures = createSignatureService() }) {
   // Failed logins are written with the top-level db, as their own statement, and never
   // inside a db.transaction callback: the caller throws straight afterwards, and a throw
   // inside a transaction would roll the entry back. A record of failed attempts is exactly
@@ -84,7 +113,7 @@ export function createUserService({ db, passwords, passwordPolicy, audit, tokens
           const { rows } = await tx.query(
             `INSERT INTO users (username, full_name, licence_number, password_hash, role, status, actor_ref)
              VALUES ($1, $2, $3, $4, $5, 'pending', $6)
-             RETURNING id, username, full_name, licence_number, role, status, created_at`,
+             RETURNING id, username, full_name, licence_number, role, status, created_at, public_key`,
             [input.username, input.fullName, input.licenceNumber ?? null, passwordHash, input.role, randomBytes(32)],
           );
           const user = rows[0];
@@ -118,7 +147,7 @@ export function createUserService({ db, passwords, passwordPolicy, audit, tokens
     // response time does not reveal whether the username exists.
     async authenticate(username, password, { ipAddress = null } = {}) {
       const { rows } = await db.query(
-        `SELECT id, username, full_name, licence_number, role, status, created_at, password_hash
+        `SELECT id, username, full_name, licence_number, role, status, created_at, public_key, password_hash
            FROM users
           WHERE lower(username) = lower($1)`,
         [username],
@@ -179,7 +208,7 @@ export function createUserService({ db, passwords, passwordPolicy, audit, tokens
     async getAuthenticatedUser(userId, tokenRole) {
       // password_hash is not even selected: nothing on this path needs it.
       const { rows } = await db.query(
-        `SELECT id, username, full_name, licence_number, role, status, created_at
+        `SELECT id, username, full_name, licence_number, role, status, created_at, public_key
            FROM users
           WHERE id = $1`,
         [userId],
@@ -191,6 +220,82 @@ export function createUserService({ db, passwords, passwordPolicy, audit, tokens
       if (user.role !== tokenRole) throw staleToken();
 
       return toSafeUser(user);
+    },
+
+    // Registers the device key of the logged-in user (signing-spec section 2). userId comes
+    // from requireAuth, never from the request body. publicKey is the base64 text the app
+    // sent. Returns the safe user, now with its publicKeyFingerprint.
+    //   - first registration: saved, with a user.key_register audit entry;
+    //   - the same key again: nothing written, same answer, because the phone may retry
+    //     after the first response was lost on a bad network;
+    //   - a different key: 409, because replacing a key needs an administrator.
+    async registerPublicKey(userId, publicKey, { ipAddress = null } = {}) {
+      // Validated before the transaction opens. The bytes stored are the key's canonical
+      // export, which parsePublicKey has already proved equal to what was sent.
+      let keyBytes;
+      try {
+        keyBytes = signatures.parsePublicKey(publicKey).export({ type: 'spki', format: 'der' });
+      } catch (err) {
+        if (err instanceof SigningError) {
+          throw new AppError(
+            400,
+            'INVALID_PUBLIC_KEY',
+            'The device key must be a P-256 public key in SPKI DER form, sent as standard base64.',
+          );
+        }
+        throw err;
+      }
+      // The audit entry names the key by fingerprint: the log is append-only for ever, and
+      // the fingerprint identifies the key exactly without copying it there.
+      const keyFingerprint = spkiFingerprint(keyBytes);
+
+      try {
+        return await db.transaction(async (tx) => {
+          const { rows } = await tx.query(REGISTER_PUBLIC_KEY, [userId, keyBytes, SIGNING_ROLES]);
+          if (rows.length === 1) {
+            await audit.record(tx, {
+              action: 'user.key_register',
+              actorId: userId,
+              entityType: 'user',
+              entityId: userId,
+              details: { keyFingerprint },
+              ipAddress,
+            });
+            return toSafeUser(rows[0]);
+          }
+
+          // Nothing was updated: read the row only to explain why.
+          const { rows: current } = await tx.query(KEY_STATE, [userId, keyBytes]);
+          const user = current[0];
+          // requireAuth loaded this user a moment ago; if it is gone or changed, the
+          // answers match what requireAuth itself would now give.
+          if (!user) throw staleToken();
+          if (user.status !== 'active') throw notActiveError(user.status);
+          if (!SIGNING_ROLES.includes(user.role)) {
+            // The route refuses these roles first; this keeps the rule for any other caller.
+            throw new AppError(403, 'FORBIDDEN', 'You do not have permission to do this.');
+          }
+          if (user.same_key) return toSafeUser(user);
+          if (user.public_key) {
+            throw new AppError(
+              409,
+              'PUBLIC_KEY_ALREADY_REGISTERED',
+              'This account already has a different device key. Ask an administrator to reset it.',
+            );
+          }
+          // Active, a signing role, no key, yet the UPDATE matched nothing: the row changed
+          // between the two statements. A plain error, so it is a logged 500, not a guess.
+          throw new Error('The account changed while its key was being registered');
+        });
+      } catch (err) {
+        // The index decides, not an earlier check, so two accounts registering the same key
+        // at the same moment cannot both succeed. The failed UPDATE rolled the transaction
+        // back, so nothing was written.
+        if (err.code === UNIQUE_VIOLATION && err.constraint === PUBLIC_KEY_CONSTRAINT) {
+          throw new AppError(409, 'PUBLIC_KEY_IN_USE', 'This device key is already registered to another account.');
+        }
+        throw err;
+      }
     },
   };
 }

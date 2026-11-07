@@ -76,7 +76,10 @@ describe('userService.register against PostgreSQL', () => {
   it('returns a safe user without password_hash or actor_ref', async () => {
     const user = await createUserService(realDeps()).register(INPUT);
 
-    expect(Object.keys(user).sort()).toEqual(['createdAt', 'fullName', 'id', 'licenceNumber', 'role', 'status', 'username']);
+    expect(Object.keys(user).sort()).toEqual([
+      'createdAt', 'fullName', 'id', 'licenceNumber', 'publicKeyFingerprint', 'role', 'status', 'username',
+    ]);
+    expect(user.publicKeyFingerprint).toBeNull();
     expect(JSON.stringify(user)).not.toContain('argon2');
   });
 

@@ -191,6 +191,8 @@ describe('userService.register', () => {
       role: 'miner',
       status: 'pending',
       createdAt: new Date('2026-11-05T09:00:00Z'),
+      // A new account never has a device key.
+      publicKeyFingerprint: null,
     });
   });
 
@@ -405,6 +407,7 @@ describe('userService.authenticate', () => {
           role: 'miner',
           status: 'active',
           createdAt: new Date('2026-11-05T09:00:00Z'),
+          publicKeyFingerprint: null,
         },
         token: 'header.payload.signature',
         expiresIn: 3600,
@@ -495,6 +498,7 @@ describe('userService.getAuthenticatedUser', () => {
       role: 'miner',
       status: 'active',
       createdAt: new Date('2026-11-05T09:00:00Z'),
+      publicKeyFingerprint: null,
     });
   });
 
