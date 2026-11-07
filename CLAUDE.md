@@ -34,6 +34,46 @@ Rules that shape the design:
 - The app is offline-first: work is signed and cached locally, then synced when the network
   returns.
 
+## Current status
+
+Updated 8 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
+
+- **Branch:** `feature/backend-logic`, last commit `bd35d11`. `main` has Days 1–3 (PR #4).
+- **Last test totals the developer ran:** `npm test` 868, `npm run test:db` 458, contract 37.
+
+**Done on this branch** (docs updated for all of it):
+
+- Seed script (`npm run seed`): first admin, demo GPS zone, demo users.
+- Admin account endpoints (FR-10, FR-12): list, approve, reject, suspend, reactivate,
+  reset-key.
+- Signing: `docs/signing-spec.md` v1, `stepPayload`, `signatureService`, and the fixed
+  vectors in `docs/signing-vectors.json` (never regenerate them).
+- Device key registration (`PUT /auth/me/public-key`) and the unique-key migration.
+- Sync (`POST /sync/steps`): registration, handoff and purchase; stage rules; deferral of
+  out-of-order steps; bad signatures stored as flagged with an alert; per-user limiter;
+  real-signature chain test.
+
+**Next, in order:**
+
+1. Anchoring worker to the contract. Plan first: anchor a consignment's steps in stage
+   order, skip held consignments, RPC fallback.
+2. The five anomaly rules: turn `QR_CODE_ALREADY_REGISTERED` and `CONSIGNMENT_CLOSED` into
+   flagged steps with alerts, add a `MESSAGES` entry for every new flagged code, set
+   `zone_id`.
+3. GPS zones API (FR-11).
+4. Then: CSV reports, officer and admin account creation, Render deploy, open the PR.
+
+**Working rules that held all weekend:**
+
+- Manual mode. Never run git. Never run tests unless asked.
+- One sub-step at a time, and stop after each. "Plan only" first on new or risky work.
+- Refusal tests take a function that starts the action, not a promise already started.
+- Values from signed payloads stay as text, never JavaScript floats.
+- Rejected and deferred items (sync steps, refused tokens and roles) are never audited.
+- Check `docs/decisions.md` before changing any decided behaviour.
+
+Known limits are listed in `docs/decisions.md`; they are not repeated here.
+
 ## Repo layout
 
 | Path | Contents |
