@@ -15,11 +15,13 @@ and `FAKE-SIGNATURE`. None of them is a real identifier, password or token.
 | `POST` | [`/auth/register`](#post-authregister) | Request an account (FR-12) | No |
 | `POST` | [`/auth/login`](#post-authlogin) | Log in and receive a token (FR-06) | No |
 | `GET` | [`/auth/me`](#get-authme) | The logged-in user's own account | Yes |
+| `PUT` | [`/auth/me/public-key`](#put-authmepublic-key) | Register this phone's device key (FR-02) | Yes, miner, transporter or buyer |
 | `GET` | [`/admin/users`](#get-adminusers) | List accounts by status (FR-10, FR-12) | Yes, admin only |
 | `POST` | [`/admin/users/{id}/approve`](#post-adminusersidapprove) | Approve an account request (FR-12) | Yes, admin only |
 | `POST` | [`/admin/users/{id}/reject`](#post-adminusersidreject) | Reject an account request, with a reason (FR-12) | Yes, admin only |
 | `POST` | [`/admin/users/{id}/suspend`](#post-adminusersidsuspend) | Suspend an active account, with a reason (FR-10) | Yes, admin only |
 | `POST` | [`/admin/users/{id}/reactivate`](#post-adminusersidreactivate) | Reactivate a suspended account (FR-10) | Yes, admin only |
+| `POST` | [`/admin/users/{id}/reset-key`](#post-adminusersidreset-key) | Remove a suspended account's device key, for a lost phone | Yes, admin only |
 
 ## Conventions
 
@@ -198,6 +200,7 @@ the endpoint sections below remain the source of truth for what exists.
 | Module (requirement) | Miner | Transporter | Buyer | Officer | Admin | Status |
 |---|:-:|:-:|:-:|:-:|:-:|---|
 | Own account: `GET /auth/me` | ✓ | ✓ | ✓ | ✓ | ✓ | **Built** |
+| Register a device key (FR-02): `PUT /auth/me/public-key` | ✓ | ✓ | ✓ | | | **Built** |
 | Register a consignment at extraction (FR-01, FR-02) | ✓ | | | | | Planned |
 | Record a handoff to a transporter (FR-02, FR-03) | | ✓ | | | | Planned |
 | Record a purchase (FR-02, FR-03) | | | ✓ | | | Planned |
@@ -210,6 +213,7 @@ the endpoint sections below remain the source of truth for what exists.
 | Download audit trails (FR-13) | | | | ✓ | | Planned |
 | Approve or reject account requests (FR-12): `/admin/users/{id}/approve`, `/reject` | | | | | ✓ | **Built** |
 | List accounts; suspend and reactivate them (FR-10): `GET /admin/users`, `/admin/users/{id}/suspend`, `/reactivate` | | | | | ✓ | **Built** |
+| Reset a lost phone's device key (FR-10, [signing spec](signing-spec.md) section 2): `/admin/users/{id}/reset-key` | | | | | ✓ | **Built** |
 | Create officer and admin accounts; change role (FR-10) | | | | | ✓ | Planned |
 | Manage licensed GPS extraction zones (FR-11) | | | | | ✓ | Planned |
 | Monitor system health: API errors, blockchain sync failures, database capacity (System Administrator use case) | | | | | ✓ | Planned |
@@ -315,7 +319,8 @@ password is refused if it:
     "licenceNumber": "ZM-ASM-0042",
     "role": "miner",
     "status": "pending",
-    "createdAt": "2026-11-05T09:00:00.000Z"
+    "createdAt": "2026-11-05T09:00:00.000Z",
+    "publicKeyFingerprint": null
   },
   "message": "Your account has been requested. An administrator must approve it before you can log in."
 }
@@ -395,7 +400,8 @@ Any other field is refused with `VALIDATION_FAILED`.
     "licenceNumber": "ZM-ASM-0042",
     "role": "miner",
     "status": "active",
-    "createdAt": "2026-11-05T09:00:00.000Z"
+    "createdAt": "2026-11-05T09:00:00.000Z",
+    "publicKeyFingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   }
 }
 ```
@@ -451,7 +457,8 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
     "licenceNumber": "ZM-ASM-0042",
     "role": "miner",
     "status": "active",
-    "createdAt": "2026-11-05T09:00:00.000Z"
+    "createdAt": "2026-11-05T09:00:00.000Z",
+    "publicKeyFingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   }
 }
 ```
@@ -471,15 +478,106 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
 
 See [Authentication](#authentication) for the `WWW-Authenticate` header on each 401.
 
+**`publicKeyFingerprint`** appears on the user in every response that returns one
+(`/auth/register`, `/auth/login`, `/auth/me`, `/auth/me/public-key`). It is the lower-case
+hex SHA-256 of the account's registered device key (SPKI DER), 64 characters, or `null` when
+no key is registered. The key itself is never returned. The app compares it with the
+fingerprint of the key in its own Keystore:
+
+| `publicKeyFingerprint` | What the app does |
+|---|---|
+| `null` | Register this phone's key with [`PUT /auth/me/public-key`](#put-authmepublic-key) |
+| the same as this phone's key | Nothing: this phone is the registered device |
+| different | Do not sign. This phone is not the registered device: ask an administrator to reset the key |
+
+The fingerprint in the examples is a placeholder pattern, not a real key's.
+
+---
+
+## PUT /auth/me/public-key
+
+Registers the device key of the logged-in user (FR-02, [signing spec](signing-spec.md)
+section 2). The app creates a P-256 key pair in the Android Keystore after the first login
+on a phone, and sends the public half here. The private key never leaves the phone. The
+server later checks every signed custody step against this key.
+
+| | |
+|---|---|
+| **Login needed** | Yes: miner, transporter or buyer (the roles that sign custody steps). Officers and administrators get 403 `FORBIDDEN` |
+| **Rate limits** | None yet. To be reviewed in the security review on Saturday 14 November |
+
+**Request body**
+
+| Field | Type | Required | Rules |
+|---|---|---|---|
+| `publicKey` | string | yes | The key as SubjectPublicKeyInfo DER, in standard base64 with padding: exactly 91 bytes, which is 124 characters. P-256 only, uncompressed. Not trimmed: spaces, line breaks, base64url and PEM text are refused |
+
+Any other field (for example `userId`) is refused with `VALIDATION_FAILED`. The key is always
+registered on the logged-in account, never one named in the body.
+
+```
+PUT /auth/me/public-key
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+Content-Type: application/json
+```
+
+```json
+{ "publicKey": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFA==" }
+```
+
+(The start of that value is how every P-256 key begins in base64; the rest is a placeholder.)
+
+**200 OK**, with `Cache-Control: no-store`, both the first time and when the same key is sent
+again:
+
+```json
+{
+  "user": {
+    "id": "3f2b6c1e-0000-4000-8000-000000000001",
+    "username": "mutale_banda",
+    "fullName": "Mutale Banda",
+    "licenceNumber": "ZM-ASM-0042",
+    "role": "miner",
+    "status": "active",
+    "createdAt": "2026-11-05T09:00:00.000Z",
+    "publicKeyFingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+}
+```
+
+- **A key is registered once.** Sending the **same** key again is safe and changes nothing:
+  a phone on a weak network may never receive the first answer and retry. Sending a
+  **different** key is refused. Replacing a key needs an administrator
+  ([reset-key](#post-adminusersidreset-key)), so a stolen password alone cannot install
+  someone else's key.
+- **One key, one account.** A key already registered to another account is refused.
+- The first registration is recorded in the audit log as `user.key_register`, with the key's
+  fingerprint, never the key itself. A repeat records nothing.
+
+**Errors**
+
+| Status | Code | When | Message |
+|---|---|---|---|
+| 400 | `VALIDATION_FAILED` | `publicKey` is missing, empty, not a string or over 200 characters, or another field was sent | Some fields are missing or invalid. |
+| 400 | `INVALID_PUBLIC_KEY` | Not strict standard base64, not 91 bytes, not a P-256 key, a point not on the curve, or not in canonical SPKI DER form | The device key must be a P-256 public key in SPKI DER form, sent as standard base64. |
+| 401 | `TOKEN_MISSING`, `TOKEN_INVALID`, `TOKEN_EXPIRED` | See [Authentication](#authentication) | |
+| 403 | `ACCOUNT_PENDING`, `ACCOUNT_SUSPENDED`, `ACCOUNT_REJECTED` | The account is not active | See [Authentication](#authentication) |
+| 403 | `FORBIDDEN` | An officer or administrator account, which never signs custody steps | You do not have permission to do this. |
+| 409 | `PUBLIC_KEY_ALREADY_REGISTERED` | This account already has a **different** key | This account already has a different device key. Ask an administrator to reset it. |
+| 409 | `PUBLIC_KEY_IN_USE` | Another account already has this key | This device key is already registered to another account. |
+| 500 | `INTERNAL_ERROR` | Unexpected server fault | Something went wrong |
+
+Every response, errors included, carries `Cache-Control: no-store`.
+
 ---
 
 ## Admin account management
 
-Five endpoints let an administrator review account requests (FR-12) and suspend or
-reactivate accounts (FR-10). Creating officer and administrator accounts and changing a
-role are planned for a later step.
+Six endpoints let an administrator review account requests (FR-12), suspend or reactivate
+accounts (FR-10), and remove a lost phone's device key. Creating officer and administrator
+accounts and changing a role are planned for a later step.
 
-**Rules shared by all five:**
+**Rules shared by all six:**
 
 - **Admin only.** Every request needs a token, and the account must be an active `admin`.
   Anyone else gets 401 or 403 (see [Roles and access](#roles-and-access)). This applies to
@@ -496,6 +594,7 @@ role are planned for a later step.
   | Reject | `pending` | `rejected` | `{ "reason": "…" }` | `miner`, `transporter`, `buyer` |
   | Suspend | `active` | `suspended` | `{ "reason": "…" }` | All roles, with two extra rules for administrators (below) |
   | Reactivate | `suspended` | `active` | none, or `{}` | All roles |
+  | Reset key | `suspended` | `suspended` (the device key is removed; the status does not change) | `{ "reason": "…" }` | Accounts with a device key: `miner`, `transporter`, `buyer` |
 
   **Rejected is final.** No action leads out of `rejected`. The person must request a new
   account under a different username.
@@ -504,18 +603,20 @@ role are planned for a later step.
 - **Every change is recorded** in the audit log, in the same database transaction, with the
   administrator as the actor, their IP address, and `{ from, to }` plus the reason where
   there is one. The actions are `user.approve`, `user.reject`, `user.suspend` and
-  `user.reactivate`.
+  `user.reactivate`. A key reset is recorded as `user.key_reset` with `{ reason,
+  keyFingerprint }`, naming the removed key by fingerprint.
 - **`{id}`** is the user's id, a UUID. Upper- or lower-case letters are both accepted.
 
-**Reasons.** Reject and suspend need a reason: 3 to 500 characters after surrounding spaces
+**Reasons.** Reject, suspend and reset key need a reason: 3 to 500 characters after surrounding spaces
 are trimmed. Line breaks are allowed. **A reason is kept permanently** in the append-only
 audit log, where it can never be edited or removed. Keep it short and factual, for example
 `Licence number could not be verified`, and do not add personal details that are not needed.
 The reason is shown to administrators only, never to the account's owner.
 
-**The admin view of a user.** All five endpoints return users in this form. Unlike
+**The admin view of a user.** All six endpoints return users in this form. Unlike
 [`GET /auth/me`](#get-authme), it includes the status reason and the approval. It never
-contains the password hash, the on-chain reference or the device's public key.
+contains the password hash, the on-chain reference or the device key itself, only the key's
+fingerprint.
 
 | Field | Meaning |
 |---|---|
@@ -525,6 +626,7 @@ contains the password hash, the on-chain reference or the device's public key.
 | `approvedBy` | The id of the administrator who approved the account; `null` if never approved through the API (for example a seeded account) |
 | `approvedAt` | When it was approved; `null` with `approvedBy` |
 | `createdAt`, `updatedAt` | When the account was requested, and when it last changed |
+| `publicKeyFingerprint` | The SHA-256 fingerprint of the registered device key, as in [`/auth/me`](#get-authme); `null` when there is none. Lets an administrator see whether there is a key to reset, and compare it with the one the user's phone shows |
 
 **Errors these endpoints can return**, on top of the [token errors](#authentication):
 
@@ -534,9 +636,10 @@ contains the password hash, the on-chain reference or the device's public key.
 | 403 | `FORBIDDEN` | Logged in and active, but not an administrator | You do not have permission to do this. |
 | 403 | `CANNOT_SUSPEND_SELF` | An administrator tried to suspend their own account | You cannot suspend your own account. |
 | 404 | `USER_NOT_FOUND` | No user has this id | No user has this id. |
-| 409 | `INVALID_STATUS_TRANSITION` | The account is not in the status this action starts from (for example approving an active account, or anything on a rejected one) | Only a pending account can be approved. This account is active. (The wording names the action and the actual status.) |
+| 409 | `INVALID_STATUS_TRANSITION` | The account is not in the status this action starts from (for example approving an active account, resetting the key of an account that is not suspended, or anything on a rejected one) | Only a pending account can be approved. This account is active. (The wording names the action and the actual status.) |
 | 409 | `ROLE_NOT_APPROVABLE` | Approve or reject on an officer or administrator account. Those are created by an administrator, never requested | Officer and administrator accounts are created by an administrator, not approved or rejected. |
 | 409 | `LAST_ACTIVE_ADMIN` | Suspending this administrator would leave no other active administrator | At least one other active administrator must remain, so this account cannot be suspended. |
+| 409 | `NO_PUBLIC_KEY` | Reset key on a suspended account that has no device key | This account has no device key to reset. |
 | 500 | `INTERNAL_ERROR` | Unexpected server fault | Something went wrong |
 
 ---
@@ -584,7 +687,8 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
       "approvedBy": null,
       "approvedAt": null,
       "createdAt": "2026-11-05T09:00:00.000Z",
-      "updatedAt": "2026-11-05T09:00:00.000Z"
+      "updatedAt": "2026-11-05T09:00:00.000Z",
+      "publicKeyFingerprint": null
     }
   ],
   "total": 1,
@@ -629,7 +733,8 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
     "approvedBy": "3f2b6c1e-0000-4000-8000-0000000000ad",
     "approvedAt": "2026-11-06T10:15:00.000Z",
     "createdAt": "2026-11-05T09:00:00.000Z",
-    "updatedAt": "2026-11-06T10:15:00.000Z"
+    "updatedAt": "2026-11-06T10:15:00.000Z",
+    "publicKeyFingerprint": null
   }
 }
 ```
@@ -724,3 +829,55 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
 **Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `USER_NOT_FOUND` and
 `INVALID_STATUS_TRANSITION` (the account is not suspended; a rejected account can never be
 reactivated).
+
+---
+
+## POST /admin/users/{id}/reset-key
+
+Removes the device key of a **suspended** account, so the user can register the key of a
+new phone. It is the third of the five steps for a lost, stolen or replaced phone
+([signing spec](signing-spec.md), section 2):
+
+1. The user tells an administrator.
+2. The administrator [suspends](#post-adminusersidsuspend) the account. Any token on the
+   lost phone stops working at once.
+3. The administrator resets the key with this endpoint.
+4. The administrator [reactivates](#post-adminusersidreactivate) the account, once the real
+   user is confirmed (ideally with the new phone in hand).
+5. The user logs in on the new phone, which registers its key with
+   [`PUT /auth/me/public-key`](#put-authmepublic-key).
+
+The account must be suspended first. If a key could be reset on an active account, whoever
+logged in next would register the new key, possibly the person holding the lost phone.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | None yet |
+
+**Request body**: `reason`, with the same rules as for [reject](#post-adminusersidreject).
+
+```
+POST /admin/users/3f2b6c1e-0000-4000-8000-000000000001/reset-key
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+Content-Type: application/json
+```
+
+```json
+{ "reason": "Lost device reported" }
+```
+
+**200 OK**: the user in the admin view, still `"status": "suspended"` with its suspension
+reason, and now `"publicKeyFingerprint": null`.
+
+- **The status does not change.** Reactivating is a separate, deliberate step.
+- **Steps already recorded keep verifying.** Each stored step keeps a copy of the key that
+  signed it, so a reset never invalidates past evidence. Records signed by the lost phone
+  that arrive after the reset no longer verify, which is the purpose of the reset.
+- **Recorded** in the audit log as `user.key_reset`, with the reason and the removed key's
+  fingerprint (never the key itself).
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `USER_NOT_FOUND`,
+`INVALID_STATUS_TRANSITION` (the account is not suspended: "Only a suspended account can
+have its device key reset. This account is active.") and `NO_PUBLIC_KEY` (the account has
+no key, so nothing was changed). See [the shared table](#admin-account-management).

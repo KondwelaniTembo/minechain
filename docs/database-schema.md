@@ -150,7 +150,12 @@ one database transaction, so every consignment has at least one step.
 - `role`: `miner`, `transporter`, `buyer`, `officer` or `admin`.
 - `status`: `pending` (the default), `active`, `suspended` or `rejected`. Suspended and
   rejected accounts need a non-blank `status_reason`.
-- `public_key`: NULL, or a 91-byte P-256 key as exported by the Android Keystore.
+- `public_key`: NULL, or a 91-byte P-256 key as exported by the Android Keystore. Unique
+  across accounts through the index `users_public_key_key` (migration
+  `users-public-key-unique`), so one device key belongs to one account. NULLs never clash,
+  so any number of accounts can have no key. Set once by the user; cleared only by an
+  administrator's key reset on a suspended account (see [signing-spec.md](signing-spec.md),
+  section 2).
 - `actor_ref`: 32 random bytes, unique, used as the on-chain actor reference. It is made
   with `crypto.randomBytes`, never derived from personal data.
 - `approved_by` and `approved_at` are set together. Nobody can approve their own account.

@@ -60,21 +60,49 @@ them.
   - has a point that is not on the curve;
   - does not re-encode to exactly the same bytes.
 
-**Registering a key (built in a later step).** After the first login on a device, the app
-creates a key pair in the Keystore and sends the public key to the server. A key can be
-registered **only while the account has none**. A user cannot replace their own key: if they
-could, a stolen password alone would let an attacker install their own key and sign records
-as the victim.
+**Registering a key** (`PUT /auth/me/public-key`, see `docs/api.md`). After the first login
+on a device, the app creates a key pair in the Keystore and sends the public key to the
+server. Only the roles that sign steps (miner, transporter, buyer) may register one.
+
+- A key can be registered **only while the account has none**. A user cannot replace their
+  own key: if they could, a stolen password alone would let an attacker install their own
+  key and sign records as the victim.
+- **Sending the same key again is a harmless repeat.** It gets the same 200 answer and
+  changes nothing, because a phone on a weak network may never receive the first answer and
+  retry. A **different** key is refused (409 `PUBLIC_KEY_ALREADY_REGISTERED`).
+- **One key, one account.** A key already on another account is refused
+  (409 `PUBLIC_KEY_IN_USE`), enforced by a unique index in the database.
+
+**The fingerprint.** The server names a key by its **fingerprint**: the lower-case hex
+SHA-256 of its SPKI DER bytes, 64 characters. The audit log records only the fingerprint,
+never the key. Every user the API returns carries `publicKeyFingerprint` (or `null` when no
+key is registered), and the app compares it with the fingerprint of its own Keystore key:
+
+- `null`: register this phone's key;
+- the same: this phone is the registered device;
+- different: this phone is **not** the registered device, so it must not sign, and the user
+  should contact an administrator.
+
+The app computes it as SHA-256 over the same 91 bytes it sends (the base64-decoded SPKI),
+written as lower-case hex: for example `sha256.convert(spkiBytes).toString()` with Dart's
+`crypto` package.
 
 **Lost device, new phone or reinstalled app:**
 
 1. The user tells an administrator.
 2. The administrator **suspends** the account. Any token on the lost phone stops working
    at once.
-3. The administrator **resets the device key** (sets it to none, audited as
-   `user.key_reset`; built in a later step).
-4. The administrator **reactivates** the account.
+3. The administrator **resets the device key** (`POST /admin/users/{id}/reset-key`, with a
+   reason, audited as `user.key_reset` with the removed key's fingerprint). **The account
+   must be suspended first**: on an active account, whoever logged in next would register the
+   new key, possibly the person holding the lost phone. A reset on an account with no key is
+   refused (409 `NO_PUBLIC_KEY`).
+4. The administrator **reactivates** the account, once the real user is confirmed, ideally
+   with the new phone in hand.
 5. The user logs in on the new device, which registers a new key.
+
+The user's password should also be changed after a lost phone, in case it was saved on the
+device. There is no password-change feature yet (section 10).
 
 Steps already stored keep verifying, because each one keeps a copy of the key that signed
 it. Records signed by the old phone that arrive after the reset no longer verify, which is
@@ -404,5 +432,10 @@ How each side uses them:
   Android key attestation is future work.
 - **Unsynced records are lost with a lost phone.** Steps signed but never sent cannot be
   recovered once the device is gone.
+- **A key can be reused after a reset.** Once an administrator resets a key, the old key is
+  free again and could in theory be registered on another account. Using it would need the
+  lost phone's private key and a second account.
+- **No password change yet.** After a lost phone, suspension and the administrator's
+  confirmed reactivation are the protection; a password-change feature is still to come.
 - **No contract-level verification.** The contract trusts the backend's recorders. P-256
   verification on-chain is future work (contract specification, section 9).
