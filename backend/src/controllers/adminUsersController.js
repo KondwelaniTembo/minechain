@@ -35,5 +35,10 @@ export function createAdminUsersController({ accounts }) {
       const user = await accounts.reactivate({ targetId: targetId(req), ...actor(req) });
       res.status(200).json({ user });
     },
+
+    async resetKey(req, res) {
+      const user = await accounts.resetKey({ targetId: targetId(req), reason: req.validated.body.reason, ...actor(req) });
+      res.status(200).json({ user });
+    },
   };
 }

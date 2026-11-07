@@ -66,6 +66,18 @@ const LOCK_ACTIVE_ADMINS = `
 
 const SELECT_STATE = 'SELECT role, status FROM users WHERE id = $1';
 
+// Key reset reads before it writes, unlike the four actions above: the audit entry must name
+// the key being removed, and an UPDATE's RETURNING gives only the new value (NULL). FOR UPDATE
+// locks the row until the transaction ends, so nothing can change status or key between this
+// read and the UPDATE: a lock-then-change, not an unguarded read-then-change.
+const LOCK_KEY_STATE = 'SELECT status, public_key FROM users WHERE id = $1 FOR UPDATE';
+
+const RESET_KEY = `
+  UPDATE users
+     SET public_key = NULL
+   WHERE id = $1
+  RETURNING ${ADMIN_COLUMNS}`;
+
 // For the 409 message: "Only a pending account can be approved."
 const ACTIONS = {
   approve: { from: 'pending', to: 'active', verb: 'approved', audit: 'user.approve' },
@@ -227,6 +239,48 @@ export function createAccountService({ db, audit }) {
         }
 
         return apply(tx, { action: 'suspend', sql: SUSPEND, params: [id, reason], id, actorId, reason, ipAddress });
+      });
+    },
+
+    // Removes a suspended account's device key, for a lost or replaced phone
+    // (signing-spec section 2: suspend, reset, reactivate, register the new key). The status
+    // does not change. Old steps keep verifying, because each stored step keeps a copy of
+    // the key that signed it (D5).
+    //
+    // Only while suspended: on an active account, whoever logged in first afterwards would
+    // register the next key, possibly the person holding the lost phone. The admin
+    // reactivates only once the real user is confirmed.
+    resetKey({ targetId, actorId, reason, ipAddress = null }) {
+      const id = normalizeId(targetId);
+      return db.transaction(async (tx) => {
+        const { rows } = await tx.query(LOCK_KEY_STATE, [id]);
+        const user = rows[0];
+        if (!user) throw userNotFound();
+        if (user.status !== 'suspended') {
+          throw new AppError(
+            409,
+            'INVALID_STATUS_TRANSITION',
+            `Only a suspended account can have its device key reset. This account is ${user.status}.`,
+          );
+        }
+        if (!user.public_key) {
+          // Refused rather than answered with a silent 200: an admin action with a reason
+          // that did nothing would suggest a key had been removed.
+          throw new AppError(409, 'NO_PUBLIC_KEY', 'This account has no device key to reset.');
+        }
+
+        // Named by fingerprint: the append-only log never holds the key itself.
+        const keyFingerprint = spkiFingerprint(user.public_key);
+        const { rows: updated } = await tx.query(RESET_KEY, [id]);
+        await audit.record(tx, {
+          action: 'user.key_reset',
+          actorId,
+          entityType: 'user',
+          entityId: id,
+          details: { reason, keyFingerprint },
+          ipAddress,
+        });
+        return toAdminUser(updated[0]);
       });
     },
 

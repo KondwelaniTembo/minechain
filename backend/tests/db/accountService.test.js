@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { describe, it, expect } from 'vitest';
 import { useTestDb } from './helpers.js';
 import { FAKE_CONFIG, MISSING_ID, insertUser } from './fixtures.js';
@@ -498,5 +498,141 @@ describe('reactivate', () => {
       status: 404,
       code: 'USER_NOT_FOUND',
     });
+  });
+});
+
+describe('resetKey', () => {
+  const REASON = 'Lost device reported';
+
+  // A key-sized value. The reset never validates it (it only removes it), and the unique
+  // index is satisfied because each one is random.
+  const withKey = () => randomBytes(91);
+  const fingerprintOf = (bytes) => createHash('sha256').update(bytes).digest('hex');
+
+  async function storedKey(id) {
+    const { rows } = await t.db.query('SELECT public_key FROM users WHERE id = $1', [id]);
+    return rows[0].public_key;
+  }
+
+  it('removes the key of a suspended account and keeps it suspended', async () => {
+    const admin = await activeAdmin();
+    const key = withKey();
+    const target = await suspendedUser({ public_key: key });
+
+    const user = await accounts().resetKey({ targetId: target.id, actorId: admin.id, reason: REASON, ipAddress: IP });
+
+    expect(user).toMatchObject({ id: target.id, status: 'suspended', statusReason: 'Lost device reported', publicKeyFingerprint: null });
+    expect(await storedKey(target.id)).toBeNull();
+    // Status and reason are untouched: the reset is not a status change.
+    expect(await row(target.id)).toMatchObject({ status: 'suspended', status_reason: 'Lost device reported' });
+  });
+
+  it('writes one user.key_reset entry naming the removed key by fingerprint', async () => {
+    const admin = await activeAdmin();
+    const key = withKey();
+    const target = await suspendedUser({ public_key: key });
+
+    await accounts().resetKey({ targetId: target.id, actorId: admin.id, reason: REASON, ipAddress: IP });
+
+    const entries = await auditFor(target.id);
+    expect(entries).toEqual([
+      {
+        actor_id: admin.id,
+        action: 'user.key_reset',
+        entity_type: 'user',
+        entity_id: target.id,
+        details: { reason: REASON, keyFingerprint: fingerprintOf(key) },
+        ip_address: IP,
+      },
+    ]);
+    const text = JSON.stringify(entries);
+    expect(text).not.toContain(key.toString('base64'));
+    expect(text).not.toContain(key.toString('hex'));
+  });
+
+  it.each([
+    ['active', activeUser],
+    ['pending', pendingUser],
+    ['rejected', rejectedUser],
+  ])('refuses an account that is %s with 409, and keeps its key', async (status, make) => {
+    const admin = await activeAdmin();
+    const key = withKey();
+    const target = await make({ public_key: key });
+
+    await expectRefused(
+      () => accounts().resetKey({ targetId: target.id, actorId: admin.id, reason: REASON }),
+      { status: 409, code: 'INVALID_STATUS_TRANSITION' },
+      target,
+    );
+    expect((await storedKey(target.id)).equals(key)).toBe(true);
+  });
+
+  it('names the actual status in the refusal', async () => {
+    const admin = await activeAdmin();
+    const target = await activeUser({ public_key: withKey() });
+
+    await expect(accounts().resetKey({ targetId: target.id, actorId: admin.id, reason: REASON })).rejects.toThrow(
+      'Only a suspended account can have its device key reset. This account is active.',
+    );
+  });
+
+  it('refuses a suspended account with no key with 409 NO_PUBLIC_KEY', async () => {
+    const admin = await activeAdmin();
+    const target = await suspendedUser();
+
+    await expectRefused(
+      () => accounts().resetKey({ targetId: target.id, actorId: admin.id, reason: REASON }),
+      { status: 409, code: 'NO_PUBLIC_KEY' },
+      target,
+    );
+  });
+
+  it('checks the status before the key: an active account with no key gets the status answer', async () => {
+    const admin = await activeAdmin();
+    const target = await activeUser();
+
+    await expectRefused(
+      () => accounts().resetKey({ targetId: target.id, actorId: admin.id, reason: REASON }),
+      { status: 409, code: 'INVALID_STATUS_TRANSITION' },
+      target,
+    );
+  });
+
+  it('refuses an id that matches no user with 404', async () => {
+    const admin = await activeAdmin();
+
+    await expect(accounts().resetKey({ targetId: MISSING_ID, actorId: admin.id, reason: REASON })).rejects.toMatchObject({
+      status: 404,
+      code: 'USER_NOT_FOUND',
+    });
+  });
+
+  it('accepts the id in capitals', async () => {
+    const admin = await activeAdmin();
+    const target = await suspendedUser({ public_key: withKey() });
+
+    await accounts().resetKey({ targetId: target.id.toUpperCase(), actorId: admin.id, reason: REASON });
+
+    expect(await storedKey(target.id)).toBeNull();
+    expect((await auditFor(target.id))[0].entity_id).toBe(target.id);
+  });
+
+  it('saves nothing when the audit entry cannot be written', async () => {
+    const admin = await activeAdmin();
+    const key = withKey();
+    const target = await suspendedUser({ public_key: key });
+    const failingAudit = {
+      record: async () => {
+        throw new Error('audit unavailable');
+      },
+    };
+    const service = createAccountService({ db: t.db, audit: failingAudit });
+
+    await expect(service.resetKey({ targetId: target.id, actorId: admin.id, reason: REASON })).rejects.toThrow(
+      'audit unavailable',
+    );
+
+    // The UPDATE ran, but it was rolled back with the failed entry.
+    expect((await storedKey(target.id)).equals(key)).toBe(true);
   });
 });

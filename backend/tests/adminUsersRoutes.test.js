@@ -38,6 +38,7 @@ function setup() {
     reject: vi.fn().mockResolvedValue({ ...SAMPLE_USER, status: 'rejected', statusReason: 'Duplicate request' }),
     suspend: vi.fn().mockResolvedValue({ ...SAMPLE_USER, status: 'suspended', statusReason: 'Lost device reported' }),
     reactivate: vi.fn().mockResolvedValue(SAMPLE_USER),
+    resetKey: vi.fn().mockResolvedValue({ ...SAMPLE_USER, status: 'suspended', statusReason: 'Lost device reported' }),
   };
   const app = createApp({ db: { query: vi.fn() }, services: { users, tokens, accounts } });
   const tokenFor = async (role, userId = role === 'admin' ? ADMIN_ID : TARGET_ID) =>
@@ -53,6 +54,8 @@ const ROUTES = [
   { name: 'reject', method: 'post', path: `/admin/users/${TARGET_ID}/reject`, body: { reason: 'Duplicate request' } },
   { name: 'suspend', method: 'post', path: `/admin/users/${TARGET_ID}/suspend`, body: { reason: 'Lost device reported' } },
   { name: 'reactivate', method: 'post', path: `/admin/users/${TARGET_ID}/reactivate` },
+  // In this table, so the 401, 4-role 403, no-store and malformed-id rows all cover it.
+  { name: 'resetKey', method: 'post', path: `/admin/users/${TARGET_ID}/reset-key`, body: { reason: 'Lost device reported' } },
 ];
 const POST_ROUTES = ROUTES.filter((r) => r.method === 'post');
 
@@ -162,7 +165,7 @@ describe('admin user routes: what reaches the service', () => {
     });
   });
 
-  it.each(['reject', 'suspend'])('%s also passes the trimmed reason', async (name) => {
+  it.each(['reject', 'suspend', 'resetKey'])('%s also passes the trimmed reason', async (name) => {
     const { app, accounts, tokenFor } = setup();
     const route = { ...ROUTES.find((r) => r.name === name), body: { reason: '  Under investigation  ' } };
 
@@ -202,7 +205,7 @@ describe('admin user routes: validation', () => {
     noServiceCalled(accounts);
   });
 
-  it.each(['reject', 'suspend'])('%s refuses a missing reason', async (name) => {
+  it.each(['reject', 'suspend', 'resetKey'])('%s refuses a missing reason', async (name) => {
     const { app, accounts, tokenFor } = setup();
 
     const res = await send(app, { ...ROUTES.find((r) => r.name === name), body: {} }, await tokenFor('admin'));
@@ -212,7 +215,7 @@ describe('admin user routes: validation', () => {
     expect(accounts[name]).not.toHaveBeenCalled();
   });
 
-  it.each(['reject', 'suspend'])('%s refuses a request with no body at all', async (name) => {
+  it.each(['reject', 'suspend', 'resetKey'])('%s refuses a request with no body at all', async (name) => {
     const { app, tokenFor } = setup();
 
     const res = await send(app, { ...ROUTES.find((r) => r.name === name), body: undefined }, await tokenFor('admin'));
@@ -258,6 +261,20 @@ describe('admin user routes: service refusals', () => {
     accounts.approve.mockRejectedValue(new AppError(status, code, message));
 
     const res = await send(app, ROUTES.find((r) => r.name === 'approve'), await tokenFor('admin'));
+
+    expect(res.status).toBe(status);
+    expect(res.body).toEqual({ error: { code, message } });
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+
+  it.each([
+    [409, 'NO_PUBLIC_KEY', 'This account has no device key to reset.'],
+    [409, 'INVALID_STATUS_TRANSITION', 'Only a suspended account can have its device key reset. This account is active.'],
+  ])('passes a reset-key %i %s through unchanged', async (status, code, message) => {
+    const { app, accounts, tokenFor } = setup();
+    accounts.resetKey.mockRejectedValue(new AppError(status, code, message));
+
+    const res = await send(app, ROUTES.find((r) => r.name === 'resetKey'), await tokenFor('admin'));
 
     expect(res.status).toBe(status);
     expect(res.body).toEqual({ error: { code, message } });
