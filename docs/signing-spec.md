@@ -355,8 +355,10 @@ data_hash = SHA-256(
 ## 9. Test vectors
 
 The vectors are kept in [`signing-vectors.json`](signing-vectors.json), read by the backend
-tests and the Flutter tests alike. They are produced once by a script the developer runs
-(`backend/scripts/make-signing-vectors.js`, in a later step), and then never changed.
+tests and the Flutter tests alike. They are produced once by a script the developer runs,
+and then never changed. From `backend/`, run `npm run make:signing-vectors` once and commit
+the file. The script refuses to overwrite an existing file; `-- --force` exists only for a
+file that was never committed.
 
 Each vector holds:
 
