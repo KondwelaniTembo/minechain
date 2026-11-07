@@ -162,8 +162,17 @@ export function anchorHash({ payload, signature, publicKey }) {
     .digest();
 }
 
+// A short, exact name for a public key: the lower-case hex SHA-256 of its SPKI DER bytes
+// (64 characters). Used in audit entries instead of the key itself, and shown to the app so
+// it can tell whether the registered key is the one in its own Keystore. The key is
+// validated first, so a fingerprint always names a real P-256 key in canonical form.
+export function publicKeyFingerprint(input) {
+  const { bytes } = parseKey(input);
+  return createHash('sha256').update(bytes).digest('hex');
+}
+
 // The same functions as one object, the shape the other services are built in. Nothing to
 // configure yet; the factory leaves room for, say, a list of accepted hash versions.
 export function createSignatureService() {
-  return { parsePublicKey, decodeSignature, verify, anchorHash };
+  return { parsePublicKey, publicKeyFingerprint, decodeSignature, verify, anchorHash };
 }

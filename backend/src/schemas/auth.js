@@ -31,6 +31,17 @@ export const registerSchema = z
   })
   .strict();
 
+// PUT /auth/me/public-key. Shape only: the key itself (strict base64, 91 bytes, P-256,
+// canonical) is checked by signatureService.parsePublicKey, which knows the real rules.
+// Not trimmed: strict base64 refuses whitespace, and quietly trimming would accept text
+// that is not exactly what the app produced. 200 is well above the 124 characters a
+// 91-byte key takes in base64, and stops a huge string before any decoding.
+export const publicKeyBodySchema = z
+  .object({
+    publicKey: z.string().min(1, 'is required').max(200, 'must be at most 200 characters'),
+  })
+  .strict();
+
 // Login only checks that both values are present and of a sane size. The password policy
 // is not applied: it is for choosing a new password, and applying it here would lock out
 // anyone whose password met an older rule.

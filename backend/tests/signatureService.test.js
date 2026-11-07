@@ -5,6 +5,7 @@ import {
   decodeSignature,
   verify,
   anchorHash,
+  publicKeyFingerprint,
   createSignatureService,
 } from '../src/services/signatureService.js';
 import { canonicalise } from '../src/services/stepPayload.js';
@@ -455,5 +456,39 @@ describe('anchorHash, version 1', () => {
     expect(refusal(() => anchorHash({ payload: Buffer.from(PAYLOAD), signature: SIGNATURE, publicKey: SPKI })).code).toBe(
       'PAYLOAD_MALFORMED',
     );
+  });
+});
+
+describe('publicKeyFingerprint', () => {
+  it('is the lower-case hex SHA-256 of the SPKI DER bytes', () => {
+    // Computed here directly, not with the service's code.
+    const expected = createHash('sha256').update(SPKI).digest('hex');
+
+    expect(publicKeyFingerprint(SPKI)).toBe(expected);
+    expect(publicKeyFingerprint(SPKI)).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('is the same for the key as base64 and as a Buffer', () => {
+    expect(publicKeyFingerprint(SPKI_B64)).toBe(publicKeyFingerprint(SPKI));
+  });
+
+  it('differs between two keys', () => {
+    expect(publicKeyFingerprint(spki(otherP256))).not.toBe(publicKeyFingerprint(SPKI));
+  });
+
+  it.each([
+    ['secp256k1', spki(secp256k1)],
+    ['91 random bytes', randomBytes(91)],
+    ['base64 without padding', SPKI_B64.replace(/=+$/, '')],
+    ['undefined', undefined],
+  ])('refuses %s, so a fingerprint always names a real P-256 key', (_label, input) => {
+    const err = refusal(() => publicKeyFingerprint(input));
+
+    expect(err).toBeInstanceOf(SigningError);
+    expect(err.code).toBe('KEY_INVALID');
+  });
+
+  it('is part of createSignatureService', () => {
+    expect(createSignatureService().publicKeyFingerprint(SPKI)).toBe(publicKeyFingerprint(SPKI));
   });
 });

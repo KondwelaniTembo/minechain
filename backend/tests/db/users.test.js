@@ -49,6 +49,42 @@ describe('users table', () => {
       const err = await expectInsertRejected({ actor_ref: actorRef }, PG_ERROR.UNIQUE_VIOLATION);
       expect(err.constraint).toBe('users_actor_ref_unique');
     });
+
+    it('rejects a second user with the same public key', async () => {
+      const key = randomBytes(91);
+      await insertUser({ public_key: key });
+
+      const err = await expectInsertRejected({ public_key: key }, PG_ERROR.UNIQUE_VIOLATION);
+      // The name the service will map to 409 PUBLIC_KEY_IN_USE.
+      expect(err.constraint).toBe('users_public_key_key');
+    });
+
+    it('rejects giving an existing user a key another user already has', async () => {
+      const key = randomBytes(91);
+      await insertUser({ public_key: key });
+      const other = await insertUser();
+
+      const err = await expectPgError(
+        t.db,
+        'UPDATE users SET public_key = $1 WHERE id = $2',
+        [key, other.id],
+        PG_ERROR.UNIQUE_VIOLATION,
+      );
+      expect(err.constraint).toBe('users_public_key_key');
+    });
+
+    it('allows any number of users with no key', async () => {
+      for (let i = 0; i < 3; i += 1) await insertUser({ public_key: null });
+
+      const { rows } = await t.db.query('SELECT count(*)::int AS n FROM users WHERE public_key IS NULL');
+      expect(rows[0].n).toBeGreaterThanOrEqual(3);
+    });
+
+    it('allows different keys on different users', async () => {
+      await insertUser({ public_key: randomBytes(91) });
+
+      await expect(insertUser({ public_key: randomBytes(91) })).resolves.toBeDefined();
+    });
   });
 
   describe('CHECK rules', () => {
