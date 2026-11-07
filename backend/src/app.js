@@ -3,7 +3,13 @@ import helmet from 'helmet';
 import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
 import { adminUserRoutes } from './routes/adminUsers.js';
-import { createRegisterLimiter, createLoginIpLimiter, createLoginUsernameLimiter } from './middleware/rateLimits.js';
+import { syncRoutes } from './routes/sync.js';
+import {
+  createRegisterLimiter,
+  createLoginIpLimiter,
+  createLoginUsernameLimiter,
+  createSyncLimiter,
+} from './middleware/rateLimits.js';
 import { createRequireAuth } from './middleware/requireAuth.js';
 import { notFound } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -12,8 +18,8 @@ import { errorHandler } from './middleware/errorHandler.js';
 // listens on a port. Tests pass fakes and hand the app straight to Supertest.
 //
 //   trustProxyHops: how many proxies sit in front of the app (config TRUST_PROXY)
-//   rateLimits:     { registerPerHour, loginPerIp, loginPerUsername } to override the
-//                   limits, for tests
+//   rateLimits:     { registerPerHour, loginPerIp, loginPerUsername, syncPerUser } to
+//                   override the limits, for tests
 export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } = {}) {
   if (!db || typeof db.query !== 'function') {
     throw new TypeError('createApp needs a db object with a query() method');
@@ -49,6 +55,7 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   const registerLimiter = createRegisterLimiter({ limit: rateLimits.registerPerHour });
   const loginIpLimiter = createLoginIpLimiter({ limit: rateLimits.loginPerIp });
   const loginUsernameLimiter = createLoginUsernameLimiter({ limit: rateLimits.loginPerUsername });
+  const syncLimiter = createSyncLimiter({ limit: rateLimits.syncPerUser });
 
   app.use('/health', healthRoutes({ db }));
   const requireAuth = createRequireAuth({ tokens: services.tokens, users: services.users });
@@ -59,6 +66,11 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   // existing tests that build the app with only users and tokens keep working. If it were
   // ever missing, these routes would fail closed: a logged 500, never an open route.
   app.use('/admin/users', adminUserRoutes({ accounts: services.accounts, requireAuth }));
+
+  // Signed custody steps from the phone's offline queue (FR-03, FR-07). Like accounts,
+  // services.sync is not in the checks above; if it were missing, the route would fail
+  // closed with a logged 500.
+  app.use('/sync', syncRoutes({ sync: services.sync, requireAuth, syncLimiter }));
 
   // Order matters: these two must come after every route.
   app.use(notFound);
