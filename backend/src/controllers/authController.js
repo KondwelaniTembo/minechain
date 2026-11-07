@@ -32,5 +32,15 @@ export function createAuthController({ users }) {
       res.set('Cache-Control', 'no-store');
       res.status(200).json({ user: req.user });
     },
+
+    // By the time this runs, requireAuth, requireRole and validate(publicKeyBodySchema)
+    // have passed. The account is always the logged-in user (req.user.id, loaded from the
+    // database), never an id from the body, which the strict schema would refuse anyway.
+    // 200 for both a first registration and a repeat of the same key, so a retry after a
+    // lost response looks exactly like success. Errors (400, 409) go to errorHandler.
+    async registerPublicKey(req, res) {
+      const user = await users.registerPublicKey(req.user.id, req.validated.body.publicKey, { ipAddress: req.ip });
+      res.status(200).json({ user });
+    },
   };
 }
