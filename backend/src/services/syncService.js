@@ -103,8 +103,15 @@ const UPDATE_STAGE = 'UPDATE consignments SET stage = $2 WHERE id = $1';
 //   - weight_mg, latitude, longitude and captured_at go in as the payload's text, so
 //     PostgreSQL reads them into bigint, numeric(9,6) and timestamptz exactly, with no
 //     JavaScript number in between;
-//   - received_at is not listed, so the database sets it: the server's own receipt time is
-//     never taken from the request;
+//   - received_at is clock_timestamp(), the database's time at this INSERT, never a value
+//     from the request. Not the column's default now(): that is when the *transaction*
+//     started, so a handoff whose transaction began just before its registration's
+//     committed could get the earlier time, and the anchoring worker, which sends a
+//     consignment's steps in received_at order, would wait forever or send a purchase
+//     before its handoff. The time at INSERT follows custody order within one consignment:
+//     a handoff is inserted only after this transaction has seen the registration's
+//     committed consignment, and a purchase only after taking the consignment lock that
+//     the handoff held until it committed. (decisions.md, 9 Nov)
 //   - zone_id is NULL until the GPS zone check exists (a known gap until then: NULL is
 //     meant to say "outside every zone");
 //   - anchor_status takes its default ('pending'); a flagged step can never leave it
@@ -115,8 +122,8 @@ const INSERT_STEP = `
   INSERT INTO transactions (
     consignment_id, actor_id, type, idempotency_key, weight_mg, latitude, longitude, zone_id,
     captured_at, signed_payload, signature, signer_public_key, data_hash, hash_version,
-    review_status)
-  VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, $10, $11, $12, $13, $14)
+    review_status, received_at)
+  VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, $10, $11, $12, $13, $14, clock_timestamp())
   ON CONFLICT ON CONSTRAINT transactions_idempotency_key_unique DO NOTHING
   RETURNING id`;
 

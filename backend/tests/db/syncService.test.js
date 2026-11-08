@@ -125,9 +125,27 @@ describe('syncSteps: a valid registration', () => {
 
     const { transactionId } = await syncOne(user, itemFor(phone, registrationFor(user)));
 
-    // Inside one transaction now() is fixed, so the column's default equals it exactly.
-    const { rows } = await t.db.query('SELECT received_at = now() AS from_db FROM transactions WHERE id = $1', [transactionId]);
+    // The whole test is one transaction, started before this step was synced. now() is
+    // that start and clock_timestamp() is the time of this query, so a time the database
+    // set during the test lies between the two. A time taken from the request (the phone's
+    // capturedAt, 2026-11-01) would not.
+    const { rows } = await t.db.query(
+      'SELECT received_at >= now() AND received_at <= clock_timestamp() AS from_db FROM transactions WHERE id = $1',
+      [transactionId],
+    );
     expect(rows[0].from_db).toBe(true);
+  });
+
+  it("sets received_at at the INSERT, later than its transaction's start", async () => {
+    const { user, phone } = await userWithPhone();
+
+    const { transactionId } = await syncOne(user, itemFor(phone, registrationFor(user)));
+
+    // Strictly later: the user and phone were created inside this transaction before the
+    // sync, so time has passed since it started. The column's default, now(), would be
+    // equal (the bug fixed on 9 Nov).
+    const { rows } = await t.db.query('SELECT received_at > now() AS after_start FROM transactions WHERE id = $1', [transactionId]);
+    expect(rows[0].after_start).toBe(true);
   });
 
   it('writes one transaction.create audit entry with the type and review status', async () => {
@@ -481,8 +499,8 @@ async function stageOf(qrCode) {
   return rows[0]?.stage;
 }
 
-// In custody order. Not by received_at: inside one test transaction now() never moves, so
-// every step has the same received_at.
+// In custody order, by type rather than by received_at, so a test's expected list never
+// depends on timing.
 async function stepsOf(qrCode) {
   const { rows } = await t.db.query(
     `SELECT s.type, s.review_status, s.anchor_status
@@ -518,6 +536,27 @@ describe('syncSteps: handoffs', () => {
       [res.transactionId],
     );
     expect(rows[0]).toEqual({ type: 'handoff', actor_id: user.id, weight_mg: '1495000', qr_code: qrCode });
+  });
+
+  it('gives registration, handoff and purchase increasing received_at, in custody order', async () => {
+    // What the anchoring worker's ordering relies on. With now() all three were equal
+    // inside one test transaction, and the order was left to the uuid tie-break.
+    const { qrCode } = await registered();
+    await handoff(qrCode);
+    await purchase(qrCode);
+
+    const { rows } = await t.db.query(
+      `SELECT s.type FROM transactions s JOIN consignments c ON c.id = s.consignment_id
+        WHERE c.qr_code = $1 ORDER BY s.received_at`,
+      [qrCode],
+    );
+    expect(rows.map((r) => r.type)).toEqual(['registration', 'handoff', 'purchase']);
+    const { rows: [distinct] } = await t.db.query(
+      `SELECT count(DISTINCT s.received_at)::int AS n FROM transactions s
+         JOIN consignments c ON c.id = s.consignment_id WHERE c.qr_code = $1`,
+      [qrCode],
+    );
+    expect(distinct.n).toBe(3);
   });
 
   it('allows a second handoff at in_transit (a relay), and the stage stays in_transit', async () => {

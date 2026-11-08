@@ -272,7 +272,9 @@ stage where it was; a step on a consignment that is already held is stored norma
 anchoring worker skips held consignments.
 
 **Values.** Weight, coordinates and capture time are stored from the signed text, with no
-floating-point step. `received_at` is always set by the database. `zone_id` is NULL until
+floating-point step. `received_at` is always set by the database, as `clock_timestamp()` at the
+insert rather than the column default `now()` (the transaction's start), so that within a
+consignment it follows custody order (decisions log, 9 Nov). `zone_id` is NULL until
 the GPS zone check is built.
 
 One row means one anchoring job. If the server stops after sending to Sepolia, the row
