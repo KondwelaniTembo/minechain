@@ -138,18 +138,18 @@ const INSERT_TRANSACTION = `
     consignment_id, actor_id, type, idempotency_key, weight_mg, latitude, longitude, zone_id,
     captured_at, signed_payload, signature, signer_public_key, data_hash, hash_version,
     review_status, anchor_status, chain_tx_hash, block_number, anchor_attempts, anchor_error,
-    anchored_at)
+    anchored_at, anchor_nonce, anchor_submitted_at)
   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-          $19, $20, $21)
+          $19, $20, $21, $22, $23)
   RETURNING *`;
 const INSERT_TRANSACTION_IDEMPOTENT = `
   INSERT INTO transactions (
     consignment_id, actor_id, type, idempotency_key, weight_mg, latitude, longitude, zone_id,
     captured_at, signed_payload, signature, signer_public_key, data_hash, hash_version,
     review_status, anchor_status, chain_tx_hash, block_number, anchor_attempts, anchor_error,
-    anchored_at)
+    anchored_at, anchor_nonce, anchor_submitted_at)
   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-          $19, $20, $21)
+          $19, $20, $21, $22, $23)
   ON CONFLICT ON CONSTRAINT transactions_idempotency_key_unique DO NOTHING
   RETURNING *`;
 
@@ -176,6 +176,8 @@ export function transactionInsert(overrides, { onConflictDoNothing = false } = {
     anchor_attempts: 0,
     anchor_error: null,
     anchored_at: null,
+    anchor_nonce: null,
+    anchor_submitted_at: null,
     ...overrides,
     idempotency_key: idempotencyKey,
   };
@@ -186,6 +188,7 @@ export function transactionInsert(overrides, { onConflictDoNothing = false } = {
       tx.longitude, tx.zone_id, tx.captured_at, tx.signed_payload, tx.signature,
       tx.signer_public_key, tx.data_hash, tx.hash_version, tx.review_status, tx.anchor_status,
       tx.chain_tx_hash, tx.block_number, tx.anchor_attempts, tx.anchor_error, tx.anchored_at,
+      tx.anchor_nonce, tx.anchor_submitted_at,
     ],
   };
 }

@@ -28,7 +28,13 @@ async function expectCheckFails(overrides, constraint) {
 }
 
 // Anchoring states that satisfy every rule, used as starting points.
-const submitted = () => ({ anchor_status: 'submitted', chain_tx_hash: randomBytes(32), anchor_attempts: 1 });
+const submitted = () => ({
+  anchor_status: 'submitted',
+  chain_tx_hash: randomBytes(32),
+  anchor_attempts: 1,
+  anchor_nonce: '0',
+  anchor_submitted_at: new Date(),
+});
 const confirmed = () => ({
   ...submitted(),
   anchor_status: 'confirmed',
@@ -264,7 +270,8 @@ describe('transactions table', () => {
 
     it.each([
       ['an unknown status', () => ({ anchor_status: 'mined' }), 'transactions_anchor_status_valid'],
-      ['submitted without a chain hash', () => ({ anchor_status: 'submitted' }), 'transactions_sent_needs_tx_hash'],
+      // Nonce and time given, so only the missing hash breaks a rule.
+      ['submitted without a chain hash', () => ({ ...submitted(), chain_tx_hash: null }), 'transactions_sent_needs_tx_hash'],
       ['confirmed without a block number', () => ({ ...confirmed(), block_number: null }), 'transactions_confirmed_needs_block'],
       ['confirmed without anchored_at', () => ({ ...confirmed(), anchored_at: null }), 'transactions_confirmed_needs_block'],
       ['failed without an error', () => ({ anchor_status: 'failed' }), 'transactions_failed_needs_error'],
@@ -285,6 +292,103 @@ describe('transactions table', () => {
         PG_ERROR.CHECK_VIOLATION,
       );
       expect(err.constraint).toBe('transactions_anchor_only_if_approved');
+    });
+  });
+
+  describe('anchor_nonce and anchor_submitted_at', () => {
+    it('are NULL on a new pending step', async () => {
+      const row = await tx();
+
+      expect(row.anchor_nonce).toBeNull();
+      expect(row.anchor_submitted_at).toBeNull();
+    });
+
+    it.each([
+      ['submitted with both', () => submitted()],
+      ['submitted with nonce 0, the first transaction of a wallet', () => ({ ...submitted(), anchor_nonce: '0' })],
+      ['confirmed, keeping both as a record of how it was sent', () => confirmed()],
+      // Found through the event logs after a crash: the row may never have recorded the
+      // transaction that actually anchored it.
+      ['confirmed without either', () => ({ ...confirmed(), anchor_nonce: null, anchor_submitted_at: null })],
+      ['failed, keeping both', () => ({ ...submitted(), anchor_status: 'failed', anchor_error: 'INVALID_INPUT:id: refused' })],
+      ['failed before any send, without either', () => ({ anchor_status: 'failed', anchor_error: 'INVALID_INPUT:id: refused' })],
+    ])('accepts %s', async (_label, state) => {
+      const values = state();
+
+      expect((await tx(values)).anchor_status).toBe(values.anchor_status);
+    });
+
+    it('keeps a nonce beyond 2^53 exact, returned as text', async () => {
+      // As a JavaScript number this would become 9007199254740992.
+      const row = await tx({ ...submitted(), anchor_nonce: '9007199254740993' });
+
+      expect(row.anchor_nonce).toBe('9007199254740993');
+    });
+
+    it.each([
+      ['submitted without a nonce', () => ({ ...submitted(), anchor_nonce: null })],
+      ['submitted without anchor_submitted_at', () => ({ ...submitted(), anchor_submitted_at: null })],
+      ['submitted without either', () => ({ ...submitted(), anchor_nonce: null, anchor_submitted_at: null })],
+    ])('rejects %s', async (_label, state) => {
+      await expectCheckFails(state(), 'transactions_submitted_needs_nonce');
+    });
+
+    it.each([
+      ['on a pending step', () => ({ anchor_nonce: '-1' })],
+      ['on a submitted step', () => ({ ...submitted(), anchor_nonce: '-1' })],
+    ])('rejects a negative nonce %s', async (_label, state) => {
+      await expectCheckFails(state(), 'transactions_anchor_nonce_non_negative');
+    });
+
+    it('refuses the worker moving a step to submitted without recording its nonce', async () => {
+      // The real write path is an UPDATE from pending, not an INSERT.
+      const row = await tx();
+
+      const err = await expectPgError(
+        t.db,
+        "UPDATE transactions SET anchor_status = 'submitted', chain_tx_hash = $2, anchor_submitted_at = now() WHERE id = $1",
+        [row.id, randomBytes(32)],
+        PG_ERROR.CHECK_VIOLATION,
+      );
+      expect(err.constraint).toBe('transactions_submitted_needs_nonce');
+    });
+
+    it('accepts the worker moving a step to submitted with all three, then to confirmed', async () => {
+      const row = await tx();
+
+      await t.db.query(
+        `UPDATE transactions
+            SET anchor_status = 'submitted', chain_tx_hash = $2, anchor_nonce = $3,
+                anchor_submitted_at = now(), anchor_attempts = anchor_attempts + 1
+          WHERE id = $1`,
+        [row.id, randomBytes(32), '7'],
+      );
+      const { rows } = await t.db.query(
+        `UPDATE transactions
+            SET anchor_status = 'confirmed', block_number = $2, anchored_at = now()
+          WHERE id = $1
+          RETURNING anchor_status, anchor_nonce, anchor_submitted_at`,
+        [row.id, '12050000'],
+      );
+
+      expect(rows[0].anchor_status).toBe('confirmed');
+      expect(rows[0].anchor_nonce).toBe('7');
+      expect(rows[0].anchor_submitted_at).toBeInstanceOf(Date);
+    });
+
+    it('accepts putting a dropped transaction back to pending with everything cleared', async () => {
+      const row = await tx(submitted());
+
+      const { rows } = await t.db.query(
+        `UPDATE transactions
+            SET anchor_status = 'pending', chain_tx_hash = NULL, anchor_nonce = NULL,
+                anchor_submitted_at = NULL
+          WHERE id = $1
+          RETURNING anchor_status, anchor_nonce`,
+        [row.id],
+      );
+
+      expect(rows[0]).toEqual({ anchor_status: 'pending', anchor_nonce: null });
     });
   });
 
