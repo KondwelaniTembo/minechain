@@ -543,3 +543,49 @@ describe('loadConfig', () => {
     });
   });
 });
+
+describe('loadConfig with requireChain (scripts such as anchor:once)', () => {
+  const disabledWithChain = withEnv({ ...anchorEnv, ANCHOR_ENABLED: 'false' });
+
+  it('requires the three chain settings even with ANCHOR_ENABLED false, naming them only', () => {
+    let message;
+    try {
+      loadConfig(withEnv({ ANCHOR_ENABLED: 'false' }), { requireChain: true });
+    } catch (err) {
+      message = err.message;
+    }
+    for (const key of ['SEPOLIA_RPC_URL', 'MINECHAIN_CONTRACT_ADDRESS', 'RECORDER_PRIVATE_KEY']) {
+      expect(message).toContain(`${key}: is required by this command, which talks to the chain even with ANCHOR_ENABLED false`);
+    }
+  });
+
+  it('loads the chain settings and still reports anchoring as disabled', () => {
+    const config = loadConfig(disabledWithChain, { requireChain: true });
+
+    expect(config.anchor.enabled).toBe(false);
+    expect(config.anchor.rpcUrl).toBe(FAKE_RPC_URL);
+    expect(config.anchor.recorderPrivateKey).toBe(FAKE_PRIVATE_KEY);
+  });
+
+  it('refuses .env.example placeholders instead of quietly dropping them', () => {
+    expect(() => loadConfig(withEnv({ ANCHOR_ENABLED: 'false', ...PLACEHOLDERS, MINECHAIN_CONTRACT_ADDRESS: CONTRACT_ADDRESS }), { requireChain: true })).toThrow(
+      /RECORDER_PRIVATE_KEY: still holds the \.env\.example placeholder/,
+    );
+  });
+
+  it('never shows a secret in its error', () => {
+    let message;
+    try {
+      loadConfig(withEnv({ ...anchorEnv, ANCHOR_ENABLED: 'false', SEPOLIA_RPC_URL: 'http://plain.example/v2/fake-primary-api-key-1234' }), { requireChain: true });
+    } catch (err) {
+      message = err.message;
+    }
+    expect(message).toContain('SEPOLIA_RPC_URL: must start with https://');
+    expect(message).not.toContain('fake-primary-api-key-1234');
+    expect(message).not.toContain(FAKE_PRIVATE_KEY);
+  });
+
+  it('changes nothing for the server: without the option, missing chain settings are fine while disabled', () => {
+    expect(() => loadConfig(withEnv({ ANCHOR_ENABLED: 'false' }))).not.toThrow();
+  });
+});

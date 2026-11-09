@@ -135,9 +135,11 @@ const wholeNumber = (min, max, fallback) => z.coerce.number().int().min(min).max
 // means "not set", and so does an untouched placeholder while anchoring is off, so a
 // copied .env.example still starts the API. With anchoring on, a placeholder is kept and
 // refused by its rule, because it would mean the setup was not finished.
-function withoutUnsetAnchorValues(env) {
+// requireChain: a script that talks to the chain needs the settings even with anchoring
+// off, so its placeholders are kept and refused, as with anchoring on.
+function withoutUnsetAnchorValues(env, { requireChain = false } = {}) {
   const cleaned = { ...env };
-  const enabled = env.ANCHOR_ENABLED === 'true';
+  const enabled = env.ANCHOR_ENABLED === 'true' || requireChain;
   for (const key of ANCHOR_KEYS) {
     const value = cleaned[key];
     if (value === '') delete cleaned[key];
@@ -148,7 +150,8 @@ function withoutUnsetAnchorValues(env) {
   return cleaned;
 }
 
-const envSchema = z
+// Built per call because one rule depends on how the caller loads config (requireChain).
+const envSchemaFor = ({ requireChain }) => z
   .object({
     NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
     // Environment variables are always strings, so coerce turns "3000" into 3000.
@@ -219,10 +222,13 @@ const envSchema = z
       }
     }
 
-    if (env.ANCHOR_ENABLED) {
+    if (env.ANCHOR_ENABLED || requireChain) {
+      const message = env.ANCHOR_ENABLED
+        ? 'is required when ANCHOR_ENABLED is true'
+        : 'is required by this command, which talks to the chain even with ANCHOR_ENABLED false';
       for (const key of REQUIRED_WHEN_ENABLED) {
         if (env[key] === undefined) {
-          ctx.addIssue({ code: 'custom', path: [key], message: 'is required when ANCHOR_ENABLED is true' });
+          ctx.addIssue({ code: 'custom', path: [key], message });
         }
       }
     }
@@ -266,8 +272,11 @@ function createAnchorConfig(parsed) {
   return Object.freeze(anchor);
 }
 
-export function loadConfig(env) {
-  const result = envSchema.safeParse(withoutUnsetAnchorValues(env));
+// options.requireChain: for scripts such as anchor:once, which need the chain settings
+// (RPC URL, contract address, recorder key) whether or not the server's worker is enabled.
+// config.anchor.enabled still reports ANCHOR_ENABLED itself.
+export function loadConfig(env, { requireChain = false } = {}) {
+  const result = envSchemaFor({ requireChain }).safeParse(withoutUnsetAnchorValues(env, { requireChain }));
 
   if (!result.success) {
     // Only variable names and rule messages are reported, never the values, because the

@@ -124,7 +124,10 @@ describe('runOnce: the happy path', () => {
     fake.control.mine(2);
     expect(await tick()).toMatchObject({ outcome: 'idle', reconciled: { confirmed: 1 } });
 
-    const rows = await Promise.all(steps.map((s) => load(s.id)));
+    // One after another: the test has a single connection, and pg warns (and will later
+    // refuse) when a second query is sent on a client that is still running one.
+    const rows = [];
+    for (const s of steps) rows.push(await load(s.id));
     const mined = fake.control.records.mined;
     for (const [i, row] of rows.entries()) {
       expect(row).toMatchObject({ anchor_status: 'confirmed', anchor_attempts: 1, anchor_error: null, anchor_nonce: String(i) });
