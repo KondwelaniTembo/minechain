@@ -33,8 +33,11 @@ const ARTIFACT_PATH = join(
 );
 export const MINECHAIN_RUNTIME_CODE = JSON.parse(readFileSync(ARTIFACT_PATH, 'utf8')).deployedBytecode;
 
-// Roughly what the plan estimates, so balances fall at a believable rate.
-export const FAKE_GAS = Object.freeze({ registerConsignment: 95_000n, recordHandoff: 48_000n, recordPurchase: 48_000n });
+// The live run's measurements on Sepolia (9 Nov 2026), rounded up, so balances fall at the
+// real rate: registration 352,951, handoff 59,299, purchase 59,182. A registration costs
+// about six handoffs because Glamsterdam's EIP-8037 charges 97,920 state gas for each of the
+// 3 storage slots it creates (see MAX_GAS_PER_STEP in src/chain/preflight.js).
+export const FAKE_GAS = Object.freeze({ registerConsignment: 353_000n, recordHandoff: 60_000n, recordPurchase: 60_000n });
 
 const GWEI = 1_000_000_000n;
 const ZERO_BYTES32 = `0x${'00'.repeat(32)}`;

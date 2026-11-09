@@ -88,7 +88,9 @@ async function load(id) {
 }
 
 const hex = (bytes) => `0x${bytes.toString('hex')}`;
-const FEES = { gasLimit: 120_000n, maxFeePerGas: 2n * GWEI, maxPriorityFeePerGas: 1n * GWEI };
+// Enough gas for a registration, which used 352,951 in the live run (the fake does not
+// enforce the limit, but a real chain would run out of gas below it).
+const FEES = { gasLimit: 450_000n, maxFeePerGas: 2n * GWEI, maxPriorityFeePerGas: 1n * GWEI };
 
 // Anchors a step on the fake chain directly, as if by a transaction this database never
 // recorded.

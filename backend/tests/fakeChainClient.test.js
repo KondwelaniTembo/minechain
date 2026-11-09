@@ -7,7 +7,8 @@ import { buildAnchorCall, receiptEventMismatches } from '../src/services/anchorC
 // real client's interface, and that it follows the contract's rules.
 
 const GWEI = 1_000_000_000n;
-const FEES = { gasLimit: 120_000n, maxFeePerGas: 2n * GWEI, maxPriorityFeePerGas: 1n * GWEI };
+// Enough gas for a registration (352,951 in the live run); the fake does not enforce it.
+const FEES = { gasLimit: 450_000n, maxFeePerGas: 2n * GWEI, maxPriorityFeePerGas: 1n * GWEI };
 
 // One consignment's three steps, as the worker's query will return them.
 const CHAIN_ID = Buffer.concat([Buffer.alloc(16), Buffer.from('6f1d2c3a00004000800000000000a101', 'hex')]);

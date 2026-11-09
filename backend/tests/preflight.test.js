@@ -215,7 +215,12 @@ describe('runPreflight: warnings', () => {
   });
 
   it('warns when the network fee is above the maximum, and costs a transaction at the maximum', async () => {
-    const { result } = await preflightWith((c) => c.setFeeData({ maxFeePerGas: 60n * GWEI }));
+    // 1 ETH, so this tests only the fee: at the 50 gwei cap one transaction costs
+    // 450,000 x 50 gwei = 0.0225 ETH, more than the fake's usual 0.01 ETH.
+    const { result } = await preflightWith((c) => {
+      c.setBalance(ETH);
+      c.setFeeData({ maxFeePerGas: 60n * GWEI });
+    });
 
     expect(warningNames(result)).toEqual(['feeAboveMaximum']);
     expect(result.facts.oneTransactionWei).toBe(MAX_GAS_PER_STEP * 50n * GWEI);

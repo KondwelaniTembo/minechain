@@ -14,10 +14,16 @@ import { EXPECTED_CODE_HASH } from './mineChainAbi.js';
 
 export const EXPECTED_RECORDER_ROLE = id('RECORDER_ROLE');
 
-// Gas for the most expensive step: the plan estimates about 95,000 for a registration
-// (handoff and purchase about 45,000 to 50,000). The headroom covers the estimate being low.
-// Used only to judge whether the balance can pay for one more transaction.
-export const MAX_GAS_PER_STEP = 120_000n;
+// Gas for the most expensive step, used only to judge whether the balance can pay for one
+// more transaction (sending itself checks the balance against the real estimate).
+// Measured in the live run on 9 Nov 2026 (docs/live-run-2026-11-09.md): registerConsignment
+// used 352,951 gas, handoff 59,299 and purchase 59,182. Registration is that much dearer
+// because Sepolia runs Glamsterdam, whose EIP-8037 charges state gas for creating storage:
+// each 0 -> non-zero SSTORE costs 64 state bytes x 1,530 = 97,920 extra, and a registration
+// creates 3 slots (352,951 - 3 x 97,920 = 59,191, the cost of a handoff). Under the older
+// Osaka rules it was 96,645 (npx hardhat test --gas-stats). EIP-8037 is still in Review, so
+// the price per state byte may change; 450,000 leaves about a quarter in hand.
+export const MAX_GAS_PER_STEP = 450_000n;
 
 function passed(name) {
   return Object.freeze({ name, status: 'passed' });
