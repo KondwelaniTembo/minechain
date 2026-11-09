@@ -3,7 +3,13 @@ import { randomBytes } from 'node:crypto';
 import { useTestDb, testDatabaseUrl } from './helpers.js';
 import { insertUser, insertConsignment, insertTransaction, insertAlert } from './fixtures.js';
 import { createPool, createDb } from '../../src/db.js';
-import { nextEligibleStep, submittedSteps, tryAnchorLock, ANCHOR_LOCK_KEY } from '../../src/services/anchorQueue.js';
+import {
+  nextEligibleStep,
+  submittedSteps,
+  tryAnchorLock,
+  isConsignmentHeld,
+  ANCHOR_LOCK_KEY,
+} from '../../src/services/anchorQueue.js';
 import { buildAnchorCall } from '../../src/services/anchorCall.js';
 
 // Inside one test transaction now() is frozen, so every step would get the same
@@ -292,6 +298,146 @@ describe('nextEligibleStep', () => {
     });
   });
 
+});
+
+// The duplicate exception to D3 (decisions.md, 9 Nov): a flagged duplicate of an accepted
+// registration must not stop the original consignment, through the hold or the gate.
+describe('duplicates of an accepted registration', () => {
+  const t = useTestDb();
+
+  // A flagged registration on the same consignment with its open duplicate_consignment alert,
+  // as sync stores one.
+  async function duplicateOf(j, receivedAt) {
+    const duplicate = await j.registration({ review_status: 'flagged' }, receivedAt);
+    await insertAlert(t.db, { transaction_id: duplicate.id, type: 'duplicate_consignment', severity: 'high', details: {} });
+    return duplicate;
+  }
+
+  it('lets the original registration, handoff and purchase anchor in order, the duplicate received before the handoff', async () => {
+    const j = await journey(t.db);
+    const registration = await j.registration();
+    const duplicate = await duplicateOf(j); // received after the registration...
+    const handoff = await j.handoff(); // ...and before the handoff, so the gate meets it
+    const purchase = await j.purchase();
+
+    expect(await isConsignmentHeld(t.db, j.consignment.id)).toBe(false);
+    expect((await nextEligibleStep(t.db)).id).toBe(registration.id);
+    await confirm(t.db, registration);
+    expect((await nextEligibleStep(t.db)).id).toBe(handoff.id);
+    await confirm(t.db, handoff);
+    expect((await nextEligibleStep(t.db)).id).toBe(purchase.id);
+    await confirm(t.db, purchase);
+
+    // The duplicate itself is never offered, before or after.
+    expect(await nextEligibleStep(t.db)).toBeNull();
+    const { rows } = await t.db.query('SELECT review_status, anchor_status FROM transactions WHERE id = $1', [duplicate.id]);
+    expect(rows[0]).toEqual({ review_status: 'flagged', anchor_status: 'pending' });
+  });
+
+  it('also lets the original anchor when the duplicate arrives after its handoff', async () => {
+    const j = await journey(t.db);
+    await j.registration({ anchor_status: 'confirmed', chain_tx_hash: randomBytes(32), block_number: '12047700', anchored_at: new Date() });
+    const handoff = await j.handoff();
+    await duplicateOf(j);
+
+    expect((await nextEligibleStep(t.db)).id).toBe(handoff.id);
+  });
+
+  it('never offers the duplicate, even when it is the only pending step', async () => {
+    const j = await journey(t.db);
+    await j.registration({ anchor_status: 'confirmed', chain_tx_hash: randomBytes(32), block_number: '12047700', anchored_at: new Date() });
+    await duplicateOf(j);
+
+    expect(await nextEligibleStep(t.db)).toBeNull();
+  });
+
+  it('still holds when the original registration is not accepted itself', async () => {
+    // The original was flagged for a bad signature, and an officer has rejected it. With no
+    // accepted registration there is no genuine consignment to protect.
+    const j = await journey(t.db);
+    await j.registration({ review_status: 'rejected' });
+    await duplicateOf(j);
+
+    expect(await isConsignmentHeld(t.db, j.consignment.id)).toBe(true);
+  });
+
+  it('still holds while the original is flagged too, and stops holding once the original is cleared', async () => {
+    const j = await journey(t.db);
+    const original = await j.registration({ review_status: 'flagged' });
+    const signatureAlert = await insertAlert(t.db, { transaction_id: original.id, type: 'invalid_signature', severity: 'high', details: {} });
+    await duplicateOf(j);
+    expect(await isConsignmentHeld(t.db, j.consignment.id)).toBe(true);
+
+    // The officer dismisses the original's alert, which clears it (as the review service will).
+    await closeAlert(t.db, signatureAlert, 'dismissed');
+    await t.db.query("UPDATE transactions SET review_status = 'cleared' WHERE id = $1", [original.id]);
+
+    expect(await isConsignmentHeld(t.db, j.consignment.id)).toBe(false);
+    expect((await nextEligibleStep(t.db)).id).toBe(original.id);
+  });
+
+  it('still holds for a quantity alert on the consignment', async () => {
+    const j = await journey(t.db);
+    await j.registration({ anchor_status: 'confirmed', chain_tx_hash: randomBytes(32), block_number: '12047700', anchored_at: new Date() });
+    await j.handoff();
+    // A later, flagged handoff: being later, it is not in the gate's way, so only the hold
+    // can stop the first handoff.
+    const flagged = await j.handoff({ review_status: 'flagged' });
+    await insertAlert(t.db, { transaction_id: flagged.id, type: 'quantity_discrepancy' });
+
+    expect(await isConsignmentHeld(t.db, j.consignment.id)).toBe(true);
+    expect(await nextEligibleStep(t.db)).toBeNull();
+  });
+
+  it('excuses every alert on the duplicate step: an off-site copy with a bad signature does not hold the original', async () => {
+    // Sync runs every check on the copy, so it can carry gps_zone and invalid_signature
+    // alerts as well as duplicate_consignment. None of them may freeze the original.
+    const j = await journey(t.db);
+    const registration = await j.registration();
+    const duplicate = await duplicateOf(j);
+    await insertAlert(t.db, { transaction_id: duplicate.id, type: 'gps_zone', details: {} });
+    await insertAlert(t.db, { transaction_id: duplicate.id, type: 'invalid_signature', severity: 'high', details: {} });
+    const handoff = await j.handoff();
+
+    expect(await isConsignmentHeld(t.db, j.consignment.id)).toBe(false);
+    expect((await nextEligibleStep(t.db)).id).toBe(registration.id);
+    await confirm(t.db, registration);
+    expect((await nextEligibleStep(t.db)).id).toBe(handoff.id);
+  });
+
+  it("still holds for a GPS alert on the original consignment's own later step", async () => {
+    const j = await journey(t.db);
+    // Pending, so it would be offered if the consignment were not held.
+    await j.registration();
+    await duplicateOf(j);
+    // Not the duplicate: a step of the consignment's genuine custody chain, received later,
+    // so only the hold (not the gate) can stop the registration.
+    const handoff = await j.handoff({ review_status: 'flagged' });
+    await insertAlert(t.db, { transaction_id: handoff.id, type: 'gps_zone', details: {} });
+
+    expect(await isConsignmentHeld(t.db, j.consignment.id)).toBe(true);
+    expect(await nextEligibleStep(t.db)).toBeNull();
+  });
+
+  it('still holds for a duplicate_consignment alert on anything but a flagged registration', async () => {
+    const j = await journey(t.db);
+    await j.registration();
+    const handoff = await j.handoff({ review_status: 'flagged' });
+    await insertAlert(t.db, { transaction_id: handoff.id, type: 'duplicate_consignment', details: {} });
+
+    expect(await isConsignmentHeld(t.db, j.consignment.id)).toBe(true);
+  });
+
+  it('is released for good once the duplicate alert is closed, as any alert is', async () => {
+    const j = await journey(t.db);
+    await j.registration({ review_status: 'rejected' });
+    const duplicate = await j.registration({ review_status: 'flagged' });
+    const alert = await insertAlert(t.db, { transaction_id: duplicate.id, type: 'duplicate_consignment', details: {} });
+
+    await closeAlert(t.db, alert, 'reviewed');
+
+    expect(await isConsignmentHeld(t.db, j.consignment.id)).toBe(false);
+  });
 });
 
 describe('submittedSteps', () => {

@@ -15,16 +15,56 @@ const STEP_COLUMNS = `
   t.id, t.consignment_id, t.actor_id, t.type, t.weight_mg, t.data_hash, t.received_at,
   t.anchor_attempts, c.chain_id, u.actor_ref`;
 
+// "This step is a flagged duplicate of a registration that was accepted": a flagged
+// registration on a consignment that has another, accepted registration. Written once and
+// used by rules 1 and 2 below. step is the SQL alias of the step being tested; it is one of
+// two fixed names in this file, never input, so this is not SQL built from user values.
+// The accepted registration can never be the same row: it is passed or cleared, this one is
+// flagged. The partial unique index on accepted registrations makes the lookup an index hit.
+const DUPLICATE_OF_ACCEPTED = (step) => `(
+          ${step}.type = 'registration'
+          AND ${step}.review_status = 'flagged'
+          AND EXISTS (
+            SELECT 1
+            FROM transactions accepted
+            WHERE accepted.consignment_id = ${step}.consignment_id
+              AND accepted.type = 'registration'
+              AND accepted.review_status IN ('passed', 'cleared')))`;
+
+// D3, "held", written once: an open alert, of any type, on any step of the consignment,
+// except a step that is a flagged duplicate of an accepted registration (rule 1 below).
+// consignment is a fixed SQL expression from this file, never input.
+const HELD = (consignment) => `EXISTS (
+      SELECT 1
+      FROM alerts a
+      JOIN transactions held ON held.id = a.transaction_id
+      WHERE held.consignment_id = ${consignment}
+        AND a.status = 'open'
+        AND NOT ${DUPLICATE_OF_ACCEPTED('held')})`;
+
 // One pending step that may be sent now. Each NOT EXISTS / EXISTS is one rule:
 //
 // 1. Not held: no open alert on any step of the same consignment (D3). An officer's
 //    decision, either way, closes the alert and releases the hold.
+//    One exception (decisions.md, 9 Nov): alerts on a flagged registration do not hold the
+//    consignment while it has a DIFFERENT accepted registration, that is, alerts on a
+//    duplicate. Otherwise anyone with an approved account who has seen a QR code could
+//    freeze another miner's consignment by registering it again. ALL of the duplicate's
+//    alerts are excused, not only duplicate_consignment: sync runs every check on it, so
+//    registering the copy from off-site (gps_zone) or with a bad signature
+//    (invalid_signature) would otherwise bring the same blocking attack back. The officer
+//    still gets every alert. Alerts on any other step still hold, and so does a duplicate
+//    when the consignment has no accepted registration (the original was flagged too, say
+//    for a bad signature): then there is no genuine consignment to protect.
 // 2. In order: no earlier step of the same consignment that is still on its way to the
 //    chain. Earlier means (received_at, id): received_at alone can tie, and id breaks the
 //    tie the same way every time. Passed, cleared and flagged steps count (a flagged one
 //    may yet be cleared and then must go first); rejected steps never reach the chain, so
 //    they are ignored. A failed earlier step blocks everything after it, because the
 //    contract would refuse the later steps or record them out of order.
+//    Same exception: a flagged registration is ignored while the consignment has a
+//    different accepted registration. It is a duplicate, and can never be anchored (only
+//    one registration per consignment can be accepted), so waiting for it would never end.
 // 3. A handoff or purchase also needs the consignment's accepted registration confirmed.
 //    Rule 2 ignores a rejected registration, so without this a handoff could be sent for
 //    a consignment the chain has never heard of. Known limit: such a handoff stays pending
@@ -42,19 +82,15 @@ const NEXT_ELIGIBLE_STEP = `
   JOIN users u ON u.id = t.actor_id
   WHERE ${QUEUE_INDEX_PREDICATE}
     AND t.anchor_status = 'pending'
-    AND NOT EXISTS (
-      SELECT 1
-      FROM alerts a
-      JOIN transactions held ON held.id = a.transaction_id
-      WHERE held.consignment_id = t.consignment_id
-        AND a.status = 'open')
+    AND NOT ${HELD('t.consignment_id')}
     AND NOT EXISTS (
       SELECT 1
       FROM transactions earlier
       WHERE earlier.consignment_id = t.consignment_id
         AND (earlier.received_at, earlier.id) < (t.received_at, t.id)
         AND earlier.review_status IN ('passed', 'cleared', 'flagged')
-        AND earlier.anchor_status <> 'confirmed')
+        AND earlier.anchor_status <> 'confirmed'
+        AND NOT ${DUPLICATE_OF_ACCEPTED('earlier')})
     AND (t.type = 'registration' OR EXISTS (
       SELECT 1
       FROM transactions reg
@@ -72,6 +108,15 @@ const NEXT_ELIGIBLE_STEP = `
 export async function nextEligibleStep(tx) {
   const { rows } = await tx.query(NEXT_ELIGIBLE_STEP);
   return rows[0] ?? null;
+}
+
+const IS_HELD = `SELECT ${HELD('$1::uuid')} AS held`;
+
+// Whether a consignment is held, by exactly the rule the queue uses. For tests and, later,
+// for showing officers which consignments are waiting on them.
+export async function isConsignmentHeld(db, consignmentId) {
+  const { rows } = await db.query(IS_HELD, [consignmentId]);
+  return rows[0].held;
 }
 
 // Steps already sent but not yet confirmed or failed. The worker reconciles these before

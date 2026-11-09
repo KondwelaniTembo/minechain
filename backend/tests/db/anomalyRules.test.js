@@ -389,11 +389,32 @@ describe('two registrations of a new QR code at the same moment', () => {
     await db.close();
   });
 
+  // A db object on one fixed connection, so the test knows B's backend pid. It looks like a
+  // pool to createDb: transaction() "borrows" the same connection and gives nothing back.
+  const singleConnection = (client) => ({
+    query: (text, params) => client.query(text, params),
+    connect: async () => ({ query: (text, params) => client.query(text, params), release: () => {} }),
+  });
+
+  // Polls until the backend pid has a lock it is waiting for (pg_locks.granted = false).
+  // Fails the test if that never happens, so "B waited on A" is proven, not assumed.
+  async function waitUntilBlocked(pid, timeoutMs = 5000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const { rows } = await db.query('SELECT count(*)::int AS waiting FROM pg_locks WHERE pid = $1 AND NOT granted', [pid]);
+      if (rows[0].waiting > 0) return;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    throw new Error(`backend ${pid} never waited on a lock within ${timeoutMs} ms`);
+  }
+
   it('makes the one that loses the consignment insert a flagged duplicate, not an error', async () => {
     const suffix = randomBytes(4).toString('hex');
     const qr = `MC-RACE-${suffix}`;
     const created = { users: [], zones: [] };
     let clientA;
+    let clientB;
+    let pendingB;
     try {
       // Committed set-up: two miners with keys, and an active zone.
       const minerA = await party(db, 'miner');
@@ -410,11 +431,15 @@ describe('two registrations of a new QR code at the same moment', () => {
       const [resA] = await serviceA.syncSteps(minerA.user, [itemFor(minerA.phone, fieldsFor(minerA.user, 'registration', qr))]);
       expect(resA.outcome).toBe('created');
 
-      // B registers the same code on its own connection. Its consignment insert waits on
-      // A's uncommitted row in the unique index.
-      const serviceB = createSyncService({ db, signatures: createSignatureService(), audit: noAudit });
-      const pendingB = serviceB.syncSteps(minerB.user, [itemFor(minerB.phone, fieldsFor(minerB.user, 'registration', qr))]);
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      // B registers the same code on a connection of its own. Its consignment insert must
+      // wait on A's uncommitted row in the unique index.
+      clientB = await pool.connect();
+      const { rows: pidRows } = await clientB.query('SELECT pg_backend_pid() AS pid');
+      const serviceB = createSyncService({ db: createDb(singleConnection(clientB)), signatures: createSignatureService(), audit: noAudit });
+      pendingB = serviceB.syncSteps(minerB.user, [itemFor(minerB.phone, fieldsFor(minerB.user, 'registration', qr))]);
+      await waitUntilBlocked(pidRows[0].pid);
+
+      // Only now, with B provably waiting, does A commit.
       await clientA.query('COMMIT');
 
       const [resB] = await pendingB;
@@ -432,10 +457,13 @@ describe('two registrations of a new QR code at the same moment', () => {
     } finally {
       if (clientA) {
         // Harmless after the COMMIT ("no transaction in progress"); undoes A if a check
-        // failed before it.
+        // failed before it, which also lets a waiting B go on.
         await clientA.query('ROLLBACK').catch(() => {});
         clientA.release();
       }
+      // B must have finished before its rows are deleted, whatever it answered.
+      if (pendingB) await pendingB.catch(() => {});
+      if (clientB) clientB.release();
       // Children first: every foreign key here is ON DELETE RESTRICT.
       await db.query(
         'DELETE FROM alerts WHERE transaction_id IN (SELECT t.id FROM transactions t JOIN consignments c ON c.id = t.consignment_id WHERE c.qr_code = $1)',
