@@ -126,6 +126,54 @@ The `--` is required. Without it, npm takes the flag as its own option, the scri
 sees it, and the seed refuses to run. The seed also refuses `NODE_ENV=test`, because the
 database tests call it directly.
 
+**On PowerShell**, npm's shim can drop the `--` itself (seen with `anchor:once`; see the
+decisions log, 9 Nov). Calling the script directly always passes the flag:
+
+```powershell
+node scripts/seed.js --production-admin-only
+```
+
+## Anchoring
+
+The anchoring worker writes each accepted step to the MineChain contract on Sepolia. How it
+decides what to send, and how it recovers from crashes, is in
+[docs/database-schema.md](../docs/database-schema.md#anchoring). The first live run is
+recorded in [docs/live-run-2026-11-09.md](../docs/live-run-2026-11-09.md).
+
+**Settings** (in `.env`; see `.env.example` for every one, with fake values):
+
+- `SEPOLIA_RPC_URL`, `SEPOLIA_RPC_URL_FALLBACK` (optional) and `RECORDER_PRIVATE_KEY` are
+  **secrets**: the URLs carry the provider's API key. The key must be the throwaway recorder
+  wallet's, never the deployer's or the admin's. Never use the recorder wallet by hand: the
+  worker owns its nonces.
+- `MINECHAIN_CONTRACT_ADDRESS`, `CHAIN_ID` (only 11155111 is accepted), and the tuning
+  values `ANCHOR_INTERVAL_SECONDS`, `ANCHOR_CONFIRMATIONS`, `ANCHOR_MAX_ATTEMPTS`,
+  `ANCHOR_LOW_BALANCE_ETH` and `ANCHOR_MAX_FEE_GWEI`.
+- `ANCHOR_ENABLED=true` starts the worker inside the API (`npm run dev` or `npm start`). It
+  checks the chain once at startup (right chain, right contract code, recorder role) and
+  logs one line. If a check fails, the worker does not start, but the API still does.
+
+**Scripts.** Use `node scripts/...` on PowerShell, so that flags reach the script:
+
+| Command | What it does |
+|---|---|
+| `node scripts/anchor-once.js` | Runs the startup checks and prints them (recorder address, balance, warnings), then one anchoring tick, with an Etherscan link for anything sent or confirmed. Needs the chain settings even while `ANCHOR_ENABLED=false` |
+| `node scripts/anchor-once.js --until-idle` | Keeps ticking, 15 s apart and for at most 10 minutes, until nothing is left to anchor. It stops early, and says why, if the wallet lost its role, sending is paused, another process holds the anchoring lock, or a submitted step is stuck |
+| `node scripts/demo-journey.js` | Development only (refuses `production` and `test`). Creates three fresh demo users with in-memory keys, then signs and syncs a registration, handoff and purchase for a new QR code through the real sync pipeline, so there is something to anchor. Never touches the `seed_*` users. Marked `DEV-SHORTCUT` |
+
+`anchor:once` exit codes: `0` idle; `1` a problem (the last line says which); `2` an unknown
+argument or invalid settings; `3` one tick ran normally but work remains.
+
+A typical demo, from `backend/`:
+
+```powershell
+node scripts/demo-journey.js
+node scripts/anchor-once.js --until-idle
+```
+
+If the server's worker is running at the same time, `anchor-once` answers "busy": only one
+process anchors at a time.
+
 ## Scripts
 
 | Script | What it does |
@@ -140,6 +188,8 @@ database tests call it directly.
 | `npm run migrate:down` | Rolls back the latest migration on `DATABASE_URL` (add `-- 2` for two) |
 | `npm run migrate:create -- <name>` | Creates a new SQL migration file in `migrations/` |
 | `npm run seed` | Creates the first admin, the demo zone and demo users (see [Seeding](#seeding)). Add `-- --production-admin-only` in production |
+| `npm run anchor:once` | One anchoring tick, with the startup checks printed. On PowerShell use `node scripts/anchor-once.js [--until-idle]` (see [Anchoring](#anchoring)) |
+| `npm run demo:journey` | Development only: a demo custody chain to anchor (see [Anchoring](#anchoring)) |
 
 ## Documentation
 
@@ -149,7 +199,11 @@ database tests call it directly.
 - [docs/database-schema.md](../docs/database-schema.md): the schema, its rules and the
   reasons behind them.
 - [docs/decisions.md](../docs/decisions.md): the decisions log, including the known
-  limitations of the current authentication.
+  limitations of the current authentication and of anchoring.
+- [docs/contract-spec.md](../docs/contract-spec.md): the MineChain contract, including the
+  measured gas per write.
+- [docs/live-run-2026-11-09.md](../docs/live-run-2026-11-09.md): the first anchoring run on
+  Sepolia, with its Etherscan links.
 
 `GET /health` needs no login, so Render's health checks will be able to reach it once
 hosting is set up (planned). It returns only `up` or `down`.

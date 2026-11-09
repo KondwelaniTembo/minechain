@@ -94,6 +94,8 @@ erDiagram
     integer anchor_attempts
     text anchor_error
     timestamptz anchored_at
+    bigint anchor_nonce
+    timestamptz anchor_submitted_at
     timestamptz updated_at
   }
   alerts {
@@ -196,7 +198,10 @@ one database transaction, so every consignment has at least one step.
   - `submitted` and `confirmed` need a `chain_tx_hash`.
   - `confirmed` also needs `block_number` and `anchored_at`.
   - `failed` needs a non-blank `anchor_error`.
+  - `submitted` also needs `anchor_nonce` and `anchor_submitted_at`, and `anchor_nonce` is
+    0 or more.
   - Only `passed` or `cleared` steps can move past `pending`.
+  - See [Anchoring](#anchoring) for what each state means and how a step moves between them.
 - `chain_tx_hash`: 32 bytes and unique. One Sepolia transaction anchors one step.
 - **Partial unique indexes:** at most one accepted (`passed` or `cleared`) registration and
   one accepted purchase per consignment. Flagged and rejected duplicates are kept as
@@ -277,10 +282,108 @@ insert rather than the column default `now()` (the transaction's start), so that
 consignment it follows custody order (decisions log, 9 Nov). `zone_id` is NULL until
 the GPS zone check is built.
 
-One row means one anchoring job. If the server stops after sending to Sepolia, the row
-stays `submitted` with its `chain_tx_hash`, and the anchoring worker checks that hash
-on-chain before sending again. Together these cover the contract's non-idempotent
-`recordHandoff`.
+One row means one anchoring job: see [Anchoring](#anchoring).
+
+## Anchoring
+
+The anchoring worker writes each accepted step to the MineChain contract on Sepolia
+(`backend/src/services/anchorService.js`). It runs on a timer inside the API when
+`ANCHOR_ENABLED=true`, or one tick at a time through the `anchor:once` script. All of its
+state is kept on the step's own `transactions` row; there is no separate job table.
+
+### States
+
+| `anchor_status` | Meaning | Columns set |
+|---|---|---|
+| `pending` | Not on-chain yet; may be sent when the queue rules allow | `anchor_error` may hold the last refusal |
+| `submitted` | Signed and sent (or about to be); waiting to be mined and confirmed | `chain_tx_hash`, `anchor_nonce`, `anchor_submitted_at` |
+| `confirmed` | Mined, with enough confirmations, and its event matches the step | `chain_tx_hash`, `block_number`, `anchored_at` |
+| `failed` | Will not be sent again without a person (a manual reset is future work) | `anchor_error` |
+
+How a step moves:
+
+- **`pending` → `submitted`.** The transaction is signed locally first, so its hash and the
+  wallet nonce are known. They are saved, with `anchor_submitted_at` and one more
+  `anchor_attempts`, **before** the broadcast. After a crash the worker therefore always
+  knows what it may have sent.
+- **`submitted` → `confirmed`.** The receipt is found, has at least `ANCHOR_CONFIRMATIONS`
+  confirmations, and contains the matching event. `anchored_at` is the block's timestamp,
+  not the server's clock. If the step turns out to be on-chain through another transaction
+  (found through the logs), that transaction's hash replaces the stored one.
+- **`submitted` stays `submitted`.** When no receipt has appeared after a two-minute grace
+  period, the worker first reads the contract's record for the consignment. If the step is
+  not there and the nonce is still unused, the transaction was dropped or never broadcast,
+  so it is signed again with the **same nonce** and sent again. Two copies with one nonce can
+  never both be mined, so a handoff can never be anchored twice. A row whose nonce is unused
+  is never marked failed.
+- **`submitted` → `pending`.** Only when the transaction can never be mined: another
+  transaction used its nonce, it was mined but reverted, or the node refused the broadcast
+  outright (funds, fee, nonce). `chain_tx_hash`, `anchor_nonce` and `anchor_submitted_at`
+  are cleared.
+- **`pending` → `failed`.** The contract would refuse the step (`InvalidInput`, a wrong
+  stage, an id already registered with another hash, or stored data it cannot accept), or
+  a retryable refusal has used up `ANCHOR_MAX_ATTEMPTS`.
+- **`submitted` → `failed`.** A mined revert on the last attempt, or a receipt whose event
+  does not match the step. The hash is kept as evidence.
+- **`pending` → `confirmed`.** A registration refused with `ConsignmentAlreadyExists` whose
+  on-chain event matches the step: an earlier send succeeded without being recorded.
+
+### Columns
+
+- `anchor_nonce` (`bigint`, returned as text): the recorder wallet's nonce for the step's
+  transaction. Without it, a resend would need a new nonce, and both copies could be mined.
+- `anchor_submitted_at`: when the row became `submitted`, by the server's clock. Used only
+  for the grace period, and never compared with `anchored_at`, which comes from another
+  clock.
+- Both stay set after `confirmed` and `failed`, as a record of how the step was sent, and are
+  cleared only when the row goes back to `pending`.
+- `anchor_attempts`: counts tries that are the step's own fault. It goes up at each send and
+  each retryable refusal, and is given back when the cause was not the step (the wallet's
+  funds, the fee, a nonce taken by someone else). Same-nonce resends and RPC outages never
+  count.
+- `anchor_error`: our own code and a fixed reason only, for example
+  `INVALID_STAGE:None: the step is not allowed from the consignment stage on-chain`. Never
+  text from the RPC provider, whose messages can contain the API key.
+
+### Which step goes next
+
+Each tick first reconciles every `submitted` row, in nonce order, which is the order the
+chain mines them in. Holds are ignored there: a sent transaction may be mined whatever an
+alert says now. A new step is sent only when nothing is in flight, so there is **at most one
+anchoring transaction at a time**.
+
+The next step is the oldest row, by `(received_at, id)`, that meets all of these:
+
+- `anchor_status = 'pending'` and `review_status` is `passed` or `cleared`. The query repeats
+  the condition of `transactions_anchor_queue_idx` so PostgreSQL can use it;
+- its consignment is **not held**: no open alert on any of its steps;
+- **no earlier step** of the same consignment, by `(received_at, id)`, is `passed`, `cleared`
+  or `flagged` and not yet `confirmed`. Rejected steps are ignored, a failed one blocks
+  everything after it, and a flagged one blocks because it may still be cleared;
+- a handoff or purchase also needs the consignment's accepted registration to be
+  `confirmed`.
+
+The row is read with `FOR UPDATE OF t SKIP LOCKED`, and read again inside the short database
+transaction that marks it `submitted`, so a hold that arrives while the worker is on the
+network still stops it. No database transaction is held open across a network call.
+
+**`received_at` follows custody order.** Sync sets it with `clock_timestamp()` at the insert,
+not the column default `now()`, which is when the transaction started. Within one
+consignment, a handoff is inserted only after its transaction has seen the registration's
+committed consignment, and a purchase only after taking the consignment lock the handoff
+held until it committed, so insert times follow custody order. With `now()`, a handoff could
+get the earlier time, and the queue would wait for ever or send the purchase first
+(decisions log, 9 Nov).
+
+### One worker at a time
+
+A tick starts by taking a session advisory lock, `pg_try_advisory_lock(5567365368752131922)`
+(the bytes of "MCANCHOR"), on a connection of its own. A second process, such as
+`anchor:once` while the server's worker runs, gets "busy" and does nothing. The lock ends
+with its connection, so a crashed worker can never leave it held.
+
+Known limitations of anchoring (a stuck row blocks the queue, the one-in-flight throughput,
+Render's spin-down) are listed in [decisions.md](decisions.md).
 
 ## Rules enforced by the service, not the database
 

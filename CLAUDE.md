@@ -36,10 +36,12 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 8 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
+Updated 9 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
 
-- **Branch:** `feature/backend-logic`, last commit `bd35d11`. `main` has Days 1–3 (PR #4).
-- **Last test totals the developer ran:** `npm test` 868, `npm run test:db` 458, contract 37.
+- **Branch:** `feature/backend-logic`, last code commit `f149839` (the gas-sizing fix after
+  8.8); the 8.9 docs are the next commit. `main` has Days 1–3 (PR #4).
+- **Last test totals the developer ran** (9 Nov, after all Step 8 fixes, both clean):
+  `npm test` 1269, `npm run test:db` 545, contract 37 (with `--gas-stats`).
 
 **Done on this branch** (docs updated for all of it):
 
@@ -52,16 +54,24 @@ Updated 8 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
 - Sync (`POST /sync/steps`): registration, handoff and purchase; stage rules; deferral of
   out-of-order steps; bad signatures stored as flagged with an alert; per-user limiter;
   real-signature chain test.
+- Step 8, anchoring (FR-03), done and proven live on Sepolia
+  (`docs/live-run-2026-11-09.md`):
+  - `src/chain/`: minimal ABI with a drift test, chain client (the only network code;
+    primary and fallback RPC; secrets hidden), error classification, preflight;
+  - `src/services/`: `anchorCall`, `anchorQueue` (eligibility, advisory lock),
+    `anchorService.runOnce()` (reconcile, then one send; crash and error tables);
+  - the worker timer in `server.js`, `anchor:once` and `demo:journey` (DEV-SHORTCUT);
+  - migration `transactions-anchor-nonce`; sync's `received_at = clock_timestamp()` fix;
+  - tests use `tests/fakes/fakeChainClient.js`; no test touches Sepolia.
 
 **Next, in order:**
 
-1. Anchoring worker to the contract. Plan first: anchor a consignment's steps in stage
-   order, skip held consignments, RPC fallback.
-2. The five anomaly rules: turn `QR_CODE_ALREADY_REGISTERED` and `CONSIGNMENT_CLOSED` into
-   flagged steps with alerts, add a `MESSAGES` entry for every new flagged code, set
-   `zone_id`.
-3. GPS zones API (FR-11).
-4. Then: CSV reports, officer and admin account creation, Render deploy, open the PR.
+1. Step 9, the five anomaly rules. Plan first: turn `QR_CODE_ALREADY_REGISTERED` and
+   `CONSIGNMENT_CLOSED` into flagged steps with alerts, add a `MESSAGES` entry for every
+   new flagged code, set `zone_id`. Decide there whether anchoring failures raise an alert
+   (they are only logged now).
+2. GPS zones API (FR-11).
+3. Then: CSV reports, officer and admin account creation, Render deploy, open the PR.
 
 **Working rules that held all weekend:**
 
@@ -71,6 +81,9 @@ Updated 8 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
 - Values from signed payloads stay as text, never JavaScript floats.
 - Rejected and deferred items (sync steps, refused tokens and roles) are never audited.
 - Check `docs/decisions.md` before changing any decided behaviour.
+- Never open or read any `.env` file. The recorder key and RPC URLs are secrets: never
+  logged, printed or put in an error.
+- On PowerShell, run scripts that take flags with `node scripts/...`, not `npm run ... --`.
 
 Known limits are listed in `docs/decisions.md`; they are not repeated here.
 
