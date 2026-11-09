@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
+import { ZCAS_CAMPUS_BOUNDARY } from '../../src/seed/seedData.js';
 
 // Valid example rows for the DB tests. Each test overrides only the field it is about, so a
 // failure points at a single rule. All values are fake.
@@ -100,6 +101,13 @@ export async function insertZone(db, overrides = {}) {
   const { text, params } = zoneInsert({ ...overrides, created_by: createdBy });
   const { rows } = await db.query(text, params);
   return rows[0];
+}
+
+// The real ZCAS campus polygon from the seed data, as an active zone. Sync now flags any
+// registration outside every active zone, and the sync tests' coordinates are on campus, so
+// tests that are not about the GPS rule start with this zone, as a real deployment would.
+export function insertCampusZone(db, overrides = {}) {
+  return insertZone(db, { name: 'ZCAS Campus (test)', boundary: ZCAS_CAMPUS_BOUNDARY, ...overrides });
 }
 
 // ---------- consignments ----------

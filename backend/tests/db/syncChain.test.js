@@ -1,13 +1,18 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { useTestDb } from './helpers.js';
-import { FAKE_CONFIG, insertUser } from './fixtures.js';
+import { FAKE_CONFIG, insertUser, insertCampusZone } from './fixtures.js';
 import { createApp } from '../../src/app.js';
 import { createServices } from '../../src/services/index.js';
 import { canonicalise } from '../../src/services/stepPayload.js';
 
 const t = useTestDb();
+
+// The active campus zone, which holds the coordinates below, as a real deployment has.
+beforeEach(async () => {
+  await insertCampusZone(t.db);
+});
 
 // The whole stack as server.js wires it, on the test's own connection, so the test's
 // ROLLBACK undoes everything. Requests go one at a time: one connection, one query at once.

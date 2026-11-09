@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { useTestDb } from './helpers.js';
-import { FAKE_ARGON2_HASH, FAKE_CONFIG, insertUser } from './fixtures.js';
+import { FAKE_ARGON2_HASH, FAKE_CONFIG, insertUser, insertCampusZone } from './fixtures.js';
 import { createServices } from '../../src/services/index.js';
 import { runDemoJourney } from '../../src/cli/demoJourney.js';
 
@@ -9,6 +9,13 @@ import { runDemoJourney } from '../../src/cli/demoJourney.js';
 // "development", which is exactly what the CLI would pass on a developer's machine.
 
 const t = useTestDb();
+
+// demo:journey's coordinates are a corner of the campus, which counts as inside. A developer
+// gets this zone from npm run seed.
+beforeEach(async () => {
+  await insertCampusZone(t.db);
+});
+
 const fastPasswords = { hash: async () => FAKE_ARGON2_HASH };
 
 async function run() {

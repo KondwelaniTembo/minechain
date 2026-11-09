@@ -1,7 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { generateKeyPairSync, randomBytes, sign } from 'node:crypto';
 import { useTestDb, expectPgError, PG_ERROR } from './helpers.js';
-import { FAKE_CONFIG, insertUser } from './fixtures.js';
+import { FAKE_CONFIG, insertUser, insertCampusZone } from './fixtures.js';
 import { createServices } from '../../src/services/index.js';
 import { createSyncService } from '../../src/services/syncService.js';
 import { createAuditService } from '../../src/services/auditService.js';
@@ -9,6 +9,14 @@ import { createSignatureService, anchorHash, spkiFingerprint } from '../../src/s
 import { canonicalise } from '../../src/services/stepPayload.js';
 
 const t = useTestDb();
+
+// Every test starts with the active campus zone, which holds all the coordinates used here,
+// so only tests about the GPS rule (tests/db/anomalyRules.test.js) see a registration
+// outside every zone. Runs after useTestDb's BEGIN, so it is rolled back with the test.
+let campus;
+beforeEach(async () => {
+  campus = await insertCampusZone(t.db);
+});
 
 // The real services, as createServices wires them, on the test's own connection.
 const sync = () => createServices({ db: t.db, config: FAKE_CONFIG }).sync;
@@ -117,7 +125,8 @@ describe('syncSteps: a valid registration', () => {
     expect(step.hash_version).toBe(1);
     expect(step.review_status).toBe('passed');
     expect(step.anchor_status).toBe('pending');
-    expect(step.zone_id).toBeNull();
+    // The point is on campus, so the step records that zone.
+    expect(step.zone_id).toBe(campus.id);
   });
 
   it('takes received_at from the database, never from the request', async () => {
@@ -298,7 +307,12 @@ describe('syncSteps: rejected and deferred items store nothing', () => {
     expect(await counts()).toEqual(NOTHING);
   });
 
-  it('rejects a second registration of the same custody record with QR_CODE_ALREADY_REGISTERED', async () => {
+});
+
+// Until 9 Nov these were rejected with QR_CODE_ALREADY_REGISTERED. The duplicate rule now
+// keeps them as evidence (tests/db/anomalyRules.test.js has the details).
+describe('syncSteps: a second registration of the same custody record', () => {
+  it('is stored as a flagged duplicate on the existing consignment, which keeps its miner', async () => {
     const first = await userWithPhone();
     const second = await userWithPhone();
     const qrCode = 'MC-TEST-SHARED';
@@ -307,20 +321,21 @@ describe('syncSteps: rejected and deferred items store nothing', () => {
 
     const res = await syncOne(second.user, itemFor(second.phone, registrationFor(second.user, { qrCode })));
 
-    expect(res).toMatchObject({ outcome: 'rejected', code: 'QR_CODE_ALREADY_REGISTERED' });
-    expect(await counts()).toEqual(before);
+    expect(res).toMatchObject({ outcome: 'flagged', code: 'DUPLICATE_CONSIGNMENT', alerts: ['duplicate_consignment'] });
+    // A new step, alert and audit entry; no new consignment.
+    expect(await counts()).toEqual({ ...before, steps: before.steps + 1, alerts: before.alerts + 1, audits: before.audits + 1 });
     const { rows } = await t.db.query('SELECT miner_id FROM consignments WHERE qr_code = $1', [qrCode]);
     expect(rows).toEqual([{ miner_id: first.user.id }]);
   });
 
-  it('rejects the same miner registering the same record again under a new step id', async () => {
+  it('is flagged too when the same miner registers the same record again under a new step id', async () => {
     const { user, phone } = await userWithPhone();
     const qrCode = 'MC-TEST-AGAIN';
     await syncOne(user, itemFor(phone, registrationFor(user, { qrCode })));
 
     const res = await syncOne(user, itemFor(phone, registrationFor(user, { qrCode })));
 
-    expect(res).toMatchObject({ outcome: 'rejected', code: 'QR_CODE_ALREADY_REGISTERED' });
+    expect(res).toMatchObject({ outcome: 'flagged', code: 'DUPLICATE_CONSIGNMENT' });
   });
 });
 
@@ -675,18 +690,22 @@ describe('syncSteps: after the purchase', () => {
     return { qrCode, transporter, buyer };
   }
 
+  // Until 9 Nov these were rejected with CONSIGNMENT_CLOSED. The handoff-order rule now keeps
+  // them as evidence.
   it.each([
-    ['a handoff', handoff],
-    ['a second purchase', purchase],
-  ])('rejects %s with CONSIGNMENT_CLOSED and stores nothing', async (_label, step) => {
+    ['a handoff', handoff, 'medium'],
+    ['a second purchase', purchase, 'high'],
+  ])('stores %s as flagged HANDOFF_ORDER, and the consignment stays purchased', async (_label, step, severity) => {
     const { qrCode } = await purchased();
     const before = await counts();
 
     const { res } = await step(qrCode);
 
-    expect(res).toMatchObject({ outcome: 'rejected', code: 'CONSIGNMENT_CLOSED' });
-    expect(await counts()).toEqual(before);
+    expect(res).toMatchObject({ outcome: 'flagged', code: 'HANDOFF_ORDER', alerts: ['handoff_order'] });
+    expect(await counts()).toEqual({ ...before, steps: before.steps + 1, alerts: before.alerts + 1, audits: before.audits + 1 });
     expect(await stageOf(qrCode)).toBe('purchased');
+    const { rows } = await t.db.query('SELECT severity FROM alerts WHERE transaction_id = $1', [res.transactionId]);
+    expect(rows).toEqual([{ severity }]);
   });
 
   it('still answers duplicate for a resend of an earlier handoff, because retries are checked first', async () => {

@@ -20,7 +20,8 @@
 import { parsePayload } from './stepPayload.js';
 import { spkiFingerprint } from './signatureService.js';
 import { SigningError, SIGNING_ERROR_CODES } from './signingError.js';
-import { CHECKS, runChecks, reviewStatusFor } from './anomalyChecks.js';
+import { CHECKS, FLAGGED_MESSAGES, flaggedCodeFor, runChecks, reviewStatusFor } from './anomalyChecks.js';
+import { matchZone, pointFromText } from './zoneMatch.js';
 
 // Who may sign each step type (the role check the database cannot make).
 const ROLE_FOR_TYPE = Object.freeze({ registration: 'miner', handoff: 'transporter', purchase: 'buyer' });
@@ -37,7 +38,8 @@ const CUSTODY_RULES = Object.freeze({
 // The anchor hash scheme of every row written here (signing-spec section 7).
 const HASH_VERSION = 1;
 
-// Plain-language messages, one per code, so the app can show them as they are.
+// Plain-language messages, one per code, so the app can show them as they are. The flagged
+// codes come from the anomaly checks, so a new check brings its own message.
 const MESSAGES = Object.freeze({
   PAYLOAD_MALFORMED: 'This record is not in the signed format the server expects.',
   PAYLOAD_UNSUPPORTED_VERSION: 'This record uses a format version the server does not read. Update the app.',
@@ -46,11 +48,9 @@ const MESSAGES = Object.freeze({
   STEP_NOT_ALLOWED_FOR_ROLE: 'Your role cannot record this kind of step.',
   NO_DEVICE_KEY: 'This account has no registered device key yet. Register the key, then sync again.',
   STEP_ID_CONFLICT: 'A different record with the same step id was already received.',
-  QR_CODE_ALREADY_REGISTERED: 'This custody record is already registered to a consignment.',
   CONSIGNMENT_NOT_FOUND: 'This consignment has not reached the server yet. Keep the record and sync again later.',
   STAGE_NOT_READY: 'An earlier step of this consignment has not reached the server yet. Keep the record and sync again later.',
-  CONSIGNMENT_CLOSED: 'This consignment has already been purchased, so no further step can be recorded.',
-  INVALID_SIGNATURE: 'The record was saved, but its signature did not match your device key. An officer will review it.',
+  ...FLAGGED_MESSAGES,
 });
 
 // The record's own SigningError codes, as the sync result codes. PAYLOAD_NOT_CANONICAL is a
@@ -95,9 +95,36 @@ const INSERT_CONSIGNMENT = `
 // The consignment a handoff or purchase names, locked until the item's transaction ends.
 // Two steps for one consignment arriving at once are then decided one after the other, each
 // seeing the stage the other left (the 4 Nov consignments.stage decision).
-const LOCK_CONSIGNMENT = 'SELECT id, stage FROM consignments WHERE qr_code = $1 FOR UPDATE';
+const LOCK_CONSIGNMENT = 'SELECT id, stage, mineral_type FROM consignments WHERE qr_code = $1 FOR UPDATE';
 
 const UPDATE_STAGE = 'UPDATE consignments SET stage = $2 WHERE id = $1';
+
+// The consignment's original registration, for a duplicate: the accepted one if there is
+// one, otherwise the earliest. Read under the consignment lock taken just before.
+const SELECT_ORIGINAL_REGISTRATION = `
+  SELECT id, actor_id, review_status
+    FROM transactions
+   WHERE consignment_id = $1 AND type = 'registration'
+   ORDER BY (review_status IN ('passed', 'cleared')) DESC, received_at, id
+   LIMIT 1`;
+
+// The quantity check's two baselines, in one round trip. Both indexed: the latest accepted
+// step by transactions_consignment_received_idx, the accepted registration by the partial
+// unique index on accepted registrations. Weights as text, so they are never JS numbers.
+// The step being synced is not stored yet, so "latest" means latest before it.
+const SELECT_BASELINES = `
+  SELECT
+    (SELECT json_build_object('stepId', id, 'weightMg', weight_mg::text)
+       FROM transactions
+      WHERE consignment_id = $1 AND review_status IN ('passed', 'cleared')
+      ORDER BY received_at DESC, id DESC
+      LIMIT 1) AS previous,
+    (SELECT json_build_object('stepId', id, 'weightMg', weight_mg::text)
+       FROM transactions
+      WHERE consignment_id = $1 AND type = 'registration' AND review_status IN ('passed', 'cleared')) AS registration`;
+
+// The licensed zones a step may fall in. Read once per sync call (see syncSteps).
+const SELECT_ACTIVE_ZONES = `SELECT id, name, boundary FROM gps_zones WHERE status = 'active' ORDER BY name, id`;
 
 // The step itself. Every value comes from the signed payload or the server:
 //   - weight_mg, latitude, longitude and captured_at go in as the payload's text, so
@@ -112,8 +139,8 @@ const UPDATE_STAGE = 'UPDATE consignments SET stage = $2 WHERE id = $1';
 //     a handoff is inserted only after this transaction has seen the registration's
 //     committed consignment, and a purchase only after taking the consignment lock that
 //     the handoff held until it committed. (decisions.md, 9 Nov)
-//   - zone_id is NULL until the GPS zone check exists (a known gap until then: NULL is
-//     meant to say "outside every zone");
+//   - zone_id is the active zone the point falls in (within the 25 m tolerance), for every
+//     step type; NULL means outside every active zone;
 //   - anchor_status takes its default ('pending'); a flagged step can never leave it
 //     (transactions_anchor_only_if_approved).
 // ON CONFLICT: if a second copy of the same step won a race since the lookup above, nothing
@@ -123,7 +150,7 @@ const INSERT_STEP = `
     consignment_id, actor_id, type, idempotency_key, weight_mg, latitude, longitude, zone_id,
     captured_at, signed_payload, signature, signer_public_key, data_hash, hash_version,
     review_status, received_at)
-  VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8, $9, $10, $11, $12, $13, $14, clock_timestamp())
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $15, $8, $9, $10, $11, $12, $13, $14, clock_timestamp())
   ON CONFLICT ON CONSTRAINT transactions_idempotency_key_unique DO NOTHING
   RETURNING id`;
 
@@ -148,24 +175,51 @@ export function createSyncService({ db, signatures, audit, checks = CHECKS }) {
   }
 
   // ---------- the consignment, per step type ----------
-  // Each returns { consignmentId, nextStage }, or ends the item with an ItemOutcome.
-  // nextStage is where a passed step moves the consignment; null means it stays.
+  // Each returns { consignmentId, nextStage, context }, or ends the item with an
+  // ItemOutcome. nextStage is where a passed step moves the consignment (null: it stays).
+  // context is this type's part of what the anomaly checks read.
 
-  // A registration creates the consignment for its custody record.
+  // A registration creates the consignment for its custody record, or, when the code is
+  // already registered, is stored as a flagged duplicate on the existing one.
   async function registrationConsignment(tx, { index, user, step, dataHash }) {
     const { rows } = await tx.query(INSERT_CONSIGNMENT, [step.qrCode, step.mineral, user.id]);
-    if (rows.length === 1) return { consignmentId: rows[0].id, nextStage: null };
+    if (rows.length === 1) return { consignmentId: rows[0].id, nextStage: null, context: { existingRegistration: null } };
 
-    // The code exists. If an identical copy of this step was committed by another request
-    // while this one waited on the code's lock, it is a retry after all; otherwise this
-    // custody record was already registered. (Recording that as a flagged step with a
-    // duplicate_consignment alert comes with the duplicate rule.)
+    // The code exists. ON CONFLICT also covers two registrations of a NEW code at the same
+    // moment: the second waits on the unique index until the first commits, then lands
+    // here, so it becomes a duplicate like any other rather than an error.
+    // If an identical copy of THIS step was what got committed, it is a retry after all.
     const { rows: raced } = await tx.query(SELECT_BY_STEP_ID, [user.id, step.stepId]);
     if (raced.length === 1) throw new ItemOutcome(compareWithStored(index, step.stepId, raced[0], dataHash));
-    throw new ItemOutcome(result(index, step.stepId, 'rejected', 'QR_CODE_ALREADY_REGISTERED'));
+
+    // Locked like any step on an existing consignment, so its stage and its registration
+    // are read as they stand. The consignment itself is not changed: its miner_id and stage
+    // stay the original's.
+    const { rows: existing } = await tx.query(LOCK_CONSIGNMENT, [step.qrCode]);
+    const consignment = existing[0];
+    const { rows: originals } = await tx.query(SELECT_ORIGINAL_REGISTRATION, [consignment.id]);
+    if (originals.length === 0) {
+      // A consignment is only ever created together with its registration, in one
+      // transaction, so this would be a broken database rather than a user's mistake.
+      throw new Error('A consignment exists without a registration step');
+    }
+    const original = originals[0];
+    return {
+      consignmentId: consignment.id,
+      nextStage: null,
+      context: {
+        existingRegistration: {
+          transactionId: original.id,
+          actorId: original.actor_id,
+          mineral: consignment.mineral_type,
+          reviewStatus: original.review_status,
+        },
+      },
+    };
   }
 
-  // A handoff or purchase needs its consignment, at a stage that allows it.
+  // A handoff or purchase needs its consignment, at a stage that allows it. After the final
+  // stage it is still stored, as a flagged handoff_order step.
   async function custodyConsignment(tx, { index, step }) {
     const { rows } = await tx.query(LOCK_CONSIGNMENT, [step.qrCode]);
     const consignment = rows[0];
@@ -175,21 +229,27 @@ export function createSyncService({ db, signatures, audit, checks = CHECKS }) {
     // signed record stays valid however late it arrives, so the app resends it later.
     if (!consignment) throw new ItemOutcome(result(index, step.stepId, 'deferred', 'CONSIGNMENT_NOT_FOUND'));
 
-    // Purchased is final (contract spec section 5). Recording such a step as flagged with a
-    // handoff_order alert comes with the handoff-order rule; until then it is refused.
-    if (consignment.stage === 'purchased') {
-      throw new ItemOutcome(result(index, step.stepId, 'rejected', 'CONSIGNMENT_CLOSED'));
-    }
-
     const rule = CUSTODY_RULES[step.type];
+    const afterPurchase = consignment.stage === 'purchased';
     // Not yet: a purchase while the consignment is still registered. Most likely the
     // transporter's handoff has not been synced yet, so it is deferred, not refused.
-    if (!rule.allowedFrom.includes(consignment.stage)) {
+    // After the purchase it is a different matter: nothing can come later, so the step is
+    // kept as evidence and the handoff-order check flags it.
+    if (!afterPurchase && !rule.allowedFrom.includes(consignment.stage)) {
       throw new ItemOutcome(result(index, step.stepId, 'deferred', 'STAGE_NOT_READY'));
     }
 
-    // A relay (handoff at in_transit) leaves the stage where it is.
-    return { consignmentId: consignment.id, nextStage: rule.to === consignment.stage ? null : rule.to };
+    const { rows: baselineRows } = await tx.query(SELECT_BASELINES, [consignment.id]);
+    return {
+      consignmentId: consignment.id,
+      // A relay (handoff at in_transit) leaves the stage where it is, and nothing moves a
+      // purchased consignment. (Flagged steps never move it anyway.)
+      nextStage: afterPurchase || rule.to === consignment.stage ? null : rule.to,
+      context: {
+        consignmentStage: consignment.stage,
+        baselines: { previous: baselineRows[0].previous, registration: baselineRows[0].registration },
+      },
+    };
   }
 
   const CONSIGNMENT_FOR_TYPE = {
@@ -200,8 +260,9 @@ export function createSyncService({ db, signatures, audit, checks = CHECKS }) {
 
   // ---------- the shared pipeline ----------
 
-  // Everything that needs the database, for one item, in one transaction.
-  async function storeStep(tx, { index, user, step, item, signatureBytes, ipAddress }) {
+  // Everything that needs the database, for one item, in one transaction. zonesFor(tx)
+  // gives the active zones, read once per sync call.
+  async function storeStep(tx, { index, user, step, item, signatureBytes, ipAddress, zonesFor }) {
     const { rows: keyRows } = await tx.query(SELECT_DEVICE_KEY, [user.id]);
     if (keyRows.length === 0) {
       // requireAuth loaded this user a moment ago. A missing row is a server-side problem.
@@ -223,10 +284,17 @@ export function createSyncService({ db, signatures, audit, checks = CHECKS }) {
     // A signature that does not verify is not refused: the record is stored as evidence and
     // flagged, with an alert for an officer (anomaly check 4).
     const verified = signatures.verify({ payload: item.payload, signature: signatureBytes, publicKey });
-    const findings = runChecks({ step, verified, keyFingerprint: spkiFingerprint(publicKey) }, checks);
-    const reviewStatus = reviewStatusFor(findings);
 
-    const { consignmentId, nextStage } = await CONSIGNMENT_FOR_TYPE[step.type](tx, { index, user, step, dataHash });
+    // The consignment, locked, and what the checks need to know about it. Deferred items
+    // end here, before the zones are read.
+    const { consignmentId, nextStage, context } = await CONSIGNMENT_FOR_TYPE[step.type](tx, { index, user, step, dataHash });
+
+    // Every step gets its zone, whatever its type; only a registration is flagged for
+    // being outside every zone (the check decides that).
+    const zoneMatch = matchZone(pointFromText(step.latitude, step.longitude), await zonesFor(tx));
+
+    const findings = runChecks({ step, verified, keyFingerprint: spkiFingerprint(publicKey), zoneMatch, ...context }, checks);
+    const reviewStatus = reviewStatusFor(findings);
 
     const { rows: inserted } = await tx.query(INSERT_STEP, [
       consignmentId,
@@ -243,6 +311,7 @@ export function createSyncService({ db, signatures, audit, checks = CHECKS }) {
       dataHash,
       HASH_VERSION,
       reviewStatus,
+      zoneMatch.zoneId,
     ]);
     if (inserted.length === 0) {
       // Lost a race on (actor_id, idempotency_key) after the lookup. Throwing rolls back
@@ -274,7 +343,8 @@ export function createSyncService({ db, signatures, audit, checks = CHECKS }) {
     });
 
     if (reviewStatus === 'flagged') {
-      return result(index, step.stepId, 'flagged', findings[0].type.toUpperCase(), {
+      // Named after the most severe finding; alerts lists every one.
+      return result(index, step.stepId, 'flagged', flaggedCodeFor(findings), {
         transactionId,
         reviewStatus,
         alerts: findings.map((f) => f.type),
@@ -285,7 +355,7 @@ export function createSyncService({ db, signatures, audit, checks = CHECKS }) {
 
   // One item, start to finish. The checks that need no database run first, so a bad item
   // costs no transaction.
-  async function processItem(index, item, user, ipAddress) {
+  async function processItem(index, item, user, ipAddress, zonesFor) {
     let step;
     try {
       step = parsePayload(item.payload);
@@ -308,7 +378,7 @@ export function createSyncService({ db, signatures, audit, checks = CHECKS }) {
     if (ROLE_FOR_TYPE[step.type] !== user.role) return result(index, step.stepId, 'rejected', 'STEP_NOT_ALLOWED_FOR_ROLE');
 
     try {
-      return await db.transaction((tx) => storeStep(tx, { index, user, step, item, signatureBytes, ipAddress }));
+      return await db.transaction((tx) => storeStep(tx, { index, user, step, item, signatureBytes, ipAddress, zonesFor }));
     } catch (err) {
       if (err instanceof ItemOutcome) return err.outcome;
       throw err;
@@ -320,11 +390,20 @@ export function createSyncService({ db, signatures, audit, checks = CHECKS }) {
     // items: the validated body's steps, [{ payload, signature }].
     // Returns one result per item, in the same order.
     async syncSteps(user, items, { ipAddress = null } = {}) {
+      // The active zones, read at most once per call: a batch of 50 steps costs one zone
+      // query, not 50, and none at all if no item gets as far as needing it. Zones change
+      // rarely; a zone switched off while a batch is running still counts for that batch.
+      let zones = null;
+      const zonesFor = async (tx) => {
+        if (zones === null) zones = (await tx.query(SELECT_ACTIVE_ZONES)).rows;
+        return zones;
+      };
+
       const results = [];
       // One at a time, in order: a later item may depend on an earlier one, and the
       // database connection runs one query at a time anyway.
       for (const [index, item] of items.entries()) {
-        results.push(await processItem(index, item, user, ipAddress));
+        results.push(await processItem(index, item, user, ipAddress, zonesFor));
       }
       return results;
     },
