@@ -5,7 +5,7 @@ import { AppError } from '../errors.js';
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 
-// DEV-SHORTCUT: in-memory rate-limit stores (register, login IP, login username and sync) | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
+// DEV-SHORTCUT: in-memory rate-limit stores (register, login IP, login username, sync and reports) | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
 //
 // Shared settings for every limiter. Each limiter is made by a function rather than created
 // once at import, so each createApp call, and so each test, gets its own counter.
@@ -93,6 +93,24 @@ export function createSyncLimiter({ limit = 60, windowMs = FIFTEEN_MINUTES_MS } 
       // shared key would let one client use up everyone's limit. A plain Error becomes a
       // logged 500, as in requireRole.
       if (!req.user?.id) throw new Error('createSyncLimiter ran without requireAuth before it on this route');
+      return `user:${req.user.id}`;
+    },
+  });
+}
+
+// Report downloads per logged-in user (GET /reports/...). Each export can be a query of up to
+// 10,000 rows, so the limit is lower than for sync: 20 per 15 minutes is far more than an
+// officer or buyer downloads by hand, and stops a script from pulling reports in a loop.
+// Keyed by user id for the same reasons as sync. Must run after requireAuth.
+export function createReportLimiter({ limit = 20, windowMs = FIFTEEN_MINUTES_MS } = {}) {
+  return createLimiter({
+    limit,
+    windowMs,
+    message: 'Too many report downloads. Please wait a few minutes and try again.',
+    keyGenerator: (req) => {
+      // Fail closed, as in createSyncLimiter: a shared fallback key would let one client use
+      // up everyone's limit.
+      if (!req.user?.id) throw new Error('createReportLimiter ran without requireAuth before it on this route');
       return `user:${req.user.id}`;
     },
   });

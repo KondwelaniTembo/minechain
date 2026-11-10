@@ -5,11 +5,13 @@ import { authRoutes } from './routes/auth.js';
 import { adminUserRoutes } from './routes/adminUsers.js';
 import { adminZoneRoutes } from './routes/adminZones.js';
 import { syncRoutes } from './routes/sync.js';
+import { reportRoutes } from './routes/reports.js';
 import {
   createRegisterLimiter,
   createLoginIpLimiter,
   createLoginUsernameLimiter,
   createSyncLimiter,
+  createReportLimiter,
 } from './middleware/rateLimits.js';
 import { createRequireAuth } from './middleware/requireAuth.js';
 import { notFound } from './middleware/notFound.js';
@@ -19,7 +21,7 @@ import { errorHandler } from './middleware/errorHandler.js';
 // listens on a port. Tests pass fakes and hand the app straight to Supertest.
 //
 //   trustProxyHops: how many proxies sit in front of the app (config TRUST_PROXY)
-//   rateLimits:     { registerPerHour, loginPerIp, loginPerUsername, syncPerUser } to
+//   rateLimits:     { registerPerHour, loginPerIp, loginPerUsername, syncPerUser, reportsPerUser } to
 //                   override the limits, for tests
 export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } = {}) {
   if (!db || typeof db.query !== 'function') {
@@ -57,6 +59,7 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   const loginIpLimiter = createLoginIpLimiter({ limit: rateLimits.loginPerIp });
   const loginUsernameLimiter = createLoginUsernameLimiter({ limit: rateLimits.loginPerUsername });
   const syncLimiter = createSyncLimiter({ limit: rateLimits.syncPerUser });
+  const reportLimiter = createReportLimiter({ limit: rateLimits.reportsPerUser });
 
   app.use('/health', healthRoutes({ db }));
   const requireAuth = createRequireAuth({ tokens: services.tokens, users: services.users });
@@ -76,6 +79,11 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   // services.sync is not in the checks above; if it were missing, the route would fail
   // closed with a logged 500.
   app.use('/sync', syncRoutes({ sync: services.sync, requireAuth, syncLimiter }));
+
+  // FR-09 transaction reports and FR-13 audit trails, as CSV. Like sync, services.reports is
+  // not in the checks above; if it were missing, these routes would fail closed with a
+  // logged 500.
+  app.use('/reports', reportRoutes({ reports: services.reports, requireAuth, reportLimiter }));
 
   // Order matters: these two must come after every route.
   app.use(notFound);

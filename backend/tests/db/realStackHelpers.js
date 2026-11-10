@@ -53,12 +53,13 @@ export const TEST_PASSPHRASE = 'gold river kasempa';
 // A fresh user made entirely through the API, as a real person would be: request an
 // account, an administrator approves it, log in, register the phone's key with the token
 // from that login. The username has a random suffix, so it is unique on every run.
-// adminToken: a token for an active administrator.
-export async function loggedInSigner(app, adminToken, role) {
+// adminToken: a token for an active administrator. licenceNumber: sent at registration when
+// given, as a person would type it.
+export async function loggedInSigner(app, adminToken, role, { licenceNumber } = {}) {
   const username = `chain_${role}_${randomBytes(3).toString('hex')}`;
   const registered = await request(app)
     .post('/auth/register')
-    .send({ username, fullName: `Chain test ${role}`, password: TEST_PASSPHRASE, role });
+    .send({ username, fullName: `Chain test ${role}`, password: TEST_PASSPHRASE, role, ...(licenceNumber !== undefined && { licenceNumber }) });
   expect(registered.status).toBe(201);
   const userId = registered.body.user.id;
 
@@ -75,7 +76,7 @@ export async function loggedInSigner(app, adminToken, role) {
   expect(keyed.status).toBe(200);
   expect(keyed.body.user.publicKeyFingerprint).toEqual(expect.stringMatching(/^[0-9a-f]{64}$/));
 
-  return { user: { id: userId, role }, token, phone };
+  return { user: { id: userId, role }, username, token, phone };
 }
 
 // The helpers that need the test's database, bound to the handle from useTestDb(). t.db is
