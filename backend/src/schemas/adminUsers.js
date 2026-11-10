@@ -26,7 +26,8 @@ export const userIdParamsSchema = z
 // "1e2" (100) and " 5 ", because it uses Number(); only plain digits are allowed here, so
 // what the admin's app sends is exactly what is used. A repeated parameter
 // (?limit=1&limit=2) arrives as an array and is refused as not being a string.
-function wholeNumber({ min, max, defaultValue }) {
+// Exported for the other admin lists (schemas/gpsZones.js), so paging works the same way.
+export function wholeNumber({ min, max, defaultValue }) {
   return z
     .string()
     .regex(/^\d{1,6}$/, 'must be a whole number')

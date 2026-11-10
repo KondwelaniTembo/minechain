@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { boundaryShapeProblems } from '../services/zoneShape.js';
 
 // Six decimal places is about 11 cm, finer than phone GPS. transactions stores
 // numeric(9,6), and PostgreSQL silently rounds extra places, so a stored point would differ
@@ -41,14 +42,24 @@ export const longitudeSchema = coordinate(180);
 
 // One corner, in [lat, lng] order, the same order as gps_zones.boundary (D4). GeoJSON and
 // many map tools use [lng, lat], so a swapped corner near Lusaka (lat about -15, lng about
-// 28) still passes here; the order is the caller's responsibility.
+// 28) still passes here; zoneBoundarySchema's Zambia check catches it for a zone.
 // A tuple refuses a third item, so [lat, lng, altitude] is not quietly accepted.
 export const cornerSchema = z.tuple([latitudeSchema, longitudeSchema]);
 
-// The same rules as the gps_zones CHECK constraints (at least 3 corners, each a pair of
-// in-range numbers), plus the 6-decimal limit and the corner cap, checked here first so a
-// caller gets a clear message instead of a database error.
+// Two stages. First the same rules as the gps_zones CHECK constraints (at least 3 corners,
+// each a pair of in-range numbers), plus the 6-decimal limit and the corner cap, checked
+// here so a caller gets a clear message instead of a database error. Then the shape rules
+// in zoneShape.js (no repeated corners, a real area, a sane size, inside Zambia).
+// .pipe() runs the second stage only when the first found nothing wrong, so the shape
+// checks never see a missing or out-of-range corner, and a bad corner is reported alone.
 export const zoneBoundarySchema = z
   .array(cornerSchema)
   .min(3, 'must have at least 3 corners')
-  .max(MAX_ZONE_CORNERS, `must have at most ${MAX_ZONE_CORNERS} corners`);
+  .max(MAX_ZONE_CORNERS, `must have at most ${MAX_ZONE_CORNERS} corners`)
+  .pipe(
+    z.array(z.tuple([z.number(), z.number()])).superRefine((boundary, ctx) => {
+      for (const { path, message } of boundaryShapeProblems(boundary)) {
+        ctx.addIssue({ code: 'custom', path, message });
+      }
+    }),
+  );

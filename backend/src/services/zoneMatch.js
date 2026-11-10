@@ -44,7 +44,8 @@ export function pointFromText(latitude, longitude) {
 // Local equirectangular projection centred on the point: metres east (x) and north (y) of
 // it. One degree of latitude is the same length everywhere; one degree of longitude
 // shrinks with cos(latitude), taken at the point. The point itself is at (0, 0).
-function project(point, [lat, lng]) {
+// Exported for zoneShape.js, so a zone's shape is measured the same way it is matched.
+export function project(point, [lat, lng]) {
   // Normalised to -180..180, so a zone across the antimeridian is not 360 degrees away.
   const dLng = ((((lng - point.lng) % 360) + 540) % 360) - 180;
   return {

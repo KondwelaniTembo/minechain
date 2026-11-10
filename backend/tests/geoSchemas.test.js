@@ -7,6 +7,7 @@ import {
   zoneBoundarySchema,
   MAX_ZONE_CORNERS,
 } from '../src/schemas/geo.js';
+import { ZCAS_CAMPUS_BOUNDARY } from '../src/seed/seedData.js';
 
 // A small triangle near Lusaka, as [lat, lng] corners. Fake, not a real licence boundary.
 const TRIANGLE = [
@@ -120,9 +121,19 @@ describe('zoneBoundarySchema', () => {
   });
 
   it(`accepts ${MAX_ZONE_CORNERS} corners`, () => {
-    const corners = Array.from({ length: MAX_ZONE_CORNERS }, () => [-15.39, 28.32]);
+    // Corners round a circle about 1 km across, so they are all different and enclose an
+    // area (the shape rules refuse repeated corners). Rounded to the 6-decimal limit.
+    const round6 = (x) => Number(x.toFixed(6));
+    const corners = Array.from({ length: MAX_ZONE_CORNERS }, (_, i) => {
+      const angle = (2 * Math.PI * i) / MAX_ZONE_CORNERS;
+      return [round6(-15.4 + 0.01 * Math.sin(angle)), round6(28.3 + 0.01 * Math.cos(angle))];
+    });
 
     expect(zoneBoundarySchema.safeParse(corners).success).toBe(true);
+  });
+
+  it('accepts the seeded ZCAS campus boundary', () => {
+    expect(zoneBoundarySchema.safeParse(ZCAS_CAMPUS_BOUNDARY).success).toBe(true);
   });
 
   it.each([
@@ -148,5 +159,44 @@ describe('zoneBoundarySchema', () => {
     expect(result.error.issues).toHaveLength(1);
     expect(result.error.issues[0].path).toEqual([1, 0]);
     expect(result.error.issues[0].message).toBe('must have at most 6 decimal places');
+  });
+
+  describe('shape rules (zoneShape.js)', () => {
+    it('refuses a closed ring, pointing at the repeated corner', () => {
+      const result = zoneBoundarySchema.safeParse([...TRIANGLE, TRIANGLE[0]]);
+
+      expect(result.error.issues).toHaveLength(1);
+      expect(result.error.issues[0].path).toEqual([3]);
+      expect(result.error.issues[0].message).toContain('without repeating the first corner at the end');
+    });
+
+    it('refuses [lng, lat] corners, saying latitude comes first', () => {
+      const swapped = TRIANGLE.map(([lat, lng]) => [lng, lat]);
+
+      expect(messages(zoneBoundarySchema, swapped)).toEqual([expect.stringContaining('[latitude, longitude], latitude first')]);
+    });
+
+    it('refuses a boundary as a whole with an empty path, such as corners on one line', () => {
+      const line = [
+        [-15.4, 28.3],
+        [-15.401, 28.301],
+        [-15.402, 28.302],
+      ];
+      const result = zoneBoundarySchema.safeParse(line);
+
+      expect(result.error.issues).toEqual([expect.objectContaining({ path: [], message: expect.stringContaining('must enclose at least') })]);
+    });
+
+    it('does not run while a corner is invalid, so the bad corner is reported alone', () => {
+      // Closed AND a corner with 7 decimals: only the corner is reported. The shape rules
+      // run once the corners are fixed.
+      const boundary = [TRIANGLE[0], [-15.4000001, 28.33], TRIANGLE[2], TRIANGLE[0]];
+
+      expect(messages(zoneBoundarySchema, boundary)).toEqual(['must have at most 6 decimal places']);
+    });
+
+    it('does not run when there are too few corners', () => {
+      expect(messages(zoneBoundarySchema, [TRIANGLE[0], TRIANGLE[0]])).toEqual(['must have at least 3 corners']);
+    });
   });
 });
