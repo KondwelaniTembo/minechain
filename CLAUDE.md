@@ -36,12 +36,14 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 10 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
+Updated 11 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
 
-- **Branch:** `feature/backend-logic`. Latest code commit `958fb08` (FR-11 zone routes),
-  followed by the FR-11 docs commit (Z4). `main` has Days 1–3 (PR #4).
-- **Test totals (confirmed, run 10 Nov 23:45):** `npm test` 1465, `npm run test:db` 612,
+- **Branch:** `feature/backend-logic`. Latest code commit `a1f8c6b` (clock_timestamp
+  defaults migration), followed by the reports docs commit (R4). `main` has Days 1–3 (PR #4).
+- **Test totals (confirmed, run 11 Nov 01:21):** `npm test` 1624, `npm run test:db` 668,
   contract 37.
+- **Dev database** (`minechain_dev`) is migrated to `1794398400000_clock-timestamp-defaults`.
+  `npm run test:db` migrates `minechain_test` itself (`tests/db/globalSetup.js`).
 
 **Done on this branch** (docs updated for all of it):
 
@@ -111,13 +113,33 @@ known limitations):
   `/admin/zones` behind the `/admin/users` guard. `tests/db/adminZones.test.js` drives
   create, a matched registration, deactivate with the warning, then a `GPS_ZONE` flag.
 
+**FR-09 and FR-13, CSV reports, complete (R1–R4)**, with docs (`api.md` "Reports (FR-09,
+FR-13)", `database-schema.md` Reports and the two-clocks convention, `decisions.md`
+"Reports (1)–(13)", "Reports fix (1)–(3)" and their known limitations):
+
+- R1 `808dc8e`: `src/services/csv.js` (`toCsv`: column kinds text/number/time, every field
+  quoted, CRLF, BOM; text cells starting with = + - @ tab CR get a leading '; malformed
+  number/time cells throw without the value), `src/services/units.js` (`mgToKg`, exact
+  text), `src/schemas/reports.js` (UTC days, both included, at most 366; exactly one id).
+- R2 `367ba9a`: `src/services/reportService.js` (`transactions`, `auditTrail`, wired as
+  `services.reports`): fixed SQL, buyer limit in the query, 10,000-row cap refused with 422
+  `REPORT_TOO_LARGE`, audit entry in the same `REPEATABLE READ` transaction; `db.transaction`
+  takes `{ isolation }` (fixed table, `Object.hasOwn`).
+- R3 `64f3a36`: `src/routes/reports.js` (guard officer/buyer/admin, audit trail officer
+  only), `reportsController.js` (safe filename, file built before sending),
+  `createReportLimiter` (20 per 15 minutes per user); real-stack tests include CSV injection
+  from a registration licence number to the downloaded bytes.
+- Fixes: `ea70b86` report ties by `received_at`; `3af2c80` sync dates alerts with
+  `clock_timestamp()`; `a1f8c6b` migration `1794398400000` makes it the default for
+  `transactions.received_at` and `alerts.created_at`, after a read-only sweep of every
+  `now()`.
+
 **Next, in order:**
 
-1. CSV reports (FR-09, FR-13).
-2. Officer and admin account creation (FR-10).
-3. Admin anchoring status endpoint with manual reset (Anomaly rules (8)).
-4. Render deploy, then open the PR.
-5. Flutter app.
+1. Officer and admin account creation (FR-10).
+2. Admin anchoring status endpoint with manual reset (Anomaly rules (8)).
+3. Render deploy, then open the PR.
+4. Flutter app.
 
 **Working rules that held all weekend:**
 

@@ -27,6 +27,8 @@ and `FAKE-SIGNATURE`. None of them is a real identifier, password or token.
 | `POST` | [`/admin/zones/{id}/rename`](#post-adminzonesidrename) | Rename a zone (FR-11) | Yes, admin only |
 | `POST` | [`/admin/zones/{id}/deactivate`](#post-adminzonesiddeactivate) | Deactivate an active zone, with a reason (FR-11) | Yes, admin only |
 | `POST` | [`/admin/zones/{id}/reactivate`](#post-adminzonesidreactivate) | Reactivate an inactive zone (FR-11) | Yes, admin only |
+| `GET` | [`/reports/transactions`](#get-reportstransactions) | Download custody steps as a spreadsheet (CSV), filtered (FR-09) | Yes, officer, buyer (own purchases only) or admin |
+| `GET` | [`/reports/audit-trail`](#get-reportsaudit-trail) | Download the audit trail of one consignment or one actor as CSV (FR-13) | Yes, officer only |
 | `POST` | [`/sync/steps`](#post-syncsteps) | Upload signed custody steps from the phone's offline queue (FR-03, FR-07) | Yes, miner, transporter or buyer |
 
 ## Conventions
@@ -214,9 +216,9 @@ the endpoint sections below remain the source of truth for what exists.
 | Verify a consignment by QR code (FR-04) | | ✓ | ✓ | ✓ | | Planned |
 | View a consignment's full custody chain (FR-04, FR-05) | | | ✓ | ✓ | | Planned |
 | Signed provenance certificate (FR-16) | | | ✓ | | | Planned |
-| Transaction reports and spreadsheet export (FR-09) | | | ✓ | ✓ | ✓ read-only | Planned |
+| Transaction reports and spreadsheet export (FR-09): `GET /reports/transactions` (a buyer sees only consignments they bought) | | | ✓ | ✓ | ✓ read-only | **Built** |
 | Review anomaly alerts, with case notes (FR-08) | | | | ✓ | | Planned |
-| Download audit trails (FR-13) | | | | ✓ | | Planned |
+| Download audit trails (FR-13): `GET /reports/audit-trail` | | | | ✓ | | **Built** |
 | Approve or reject account requests (FR-12): `/admin/users/{id}/approve`, `/reject` | | | | | ✓ | **Built** |
 | List accounts; suspend and reactivate them (FR-10): `GET /admin/users`, `/admin/users/{id}/suspend`, `/reactivate` | | | | | ✓ | **Built** |
 | Reset a lost phone's device key (FR-10, [signing spec](signing-spec.md) section 2): `/admin/users/{id}/reset-key` | | | | | ✓ | **Built** |
@@ -1233,6 +1235,245 @@ after this are checked against it.
 
 **Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `ZONE_NOT_FOUND` and
 `INVALID_STATUS_TRANSITION` (the zone is already active).
+
+---
+
+## Reports (FR-09, FR-13)
+
+Two endpoints download records as spreadsheet files (CSV): the custody steps in a period
+(FR-09), and the full audit trail of one consignment or one actor (FR-13), for an officer to
+hand to the regulator.
+
+**Rules shared by both:**
+
+- **Who may use them.** Every request needs a token, and the account must be an active
+  `officer`, `buyer` or `admin`. Anyone else gets 401 or 403 (see
+  [Roles and access](#roles-and-access)). This applies to every path under `/reports`,
+  including paths that do not exist: a miner or transporter gets 403, not 404, so the paths
+  cannot be discovered. The audit trail is for officers only: a buyer or admin gets 403 there.
+- **A buyer sees only what they bought.** In the transactions report, a buyer gets only the
+  consignments they have an accepted purchase of (`passed` or `cleared`), and of those only
+  the accepted steps. Another buyer's consignment, and any flagged or rejected step, are never
+  in a buyer's file. Officers and admins see every step.
+- **No caching.** Every response, errors included, carries `Cache-Control: no-store`.
+- **Rate limit: 20 downloads per 15 minutes per account**, both reports together. It counts
+  every request that passes the role check above, including invalid ones and audit-trail
+  requests from a buyer or admin (refused straight after). A miner or transporter is refused
+  before it and not counted. Over the limit: **429 `TOO_MANY_REQUESTS`**, "Too many report
+  downloads. Please wait a few minutes and try again.", with `Retry-After` (see
+  [Rate limits](#rate-limits)).
+- **At most 10,000 rows.** A report that would be longer is refused with 422
+  `REPORT_TOO_LARGE`, never cut short: a shortened file handed to the regulator would look
+  complete. Choose a shorter period or add a filter.
+- **Every download is recorded** in the audit log, with the account as the actor and its IP
+  address. The rows and the audit entry are read and written in one database transaction, so
+  a file is never sent without its record. A refused request records nothing.
+
+  | Report | Audit action | Entity | `details` |
+  |---|---|---|---|
+  | Transactions | `report.transactions_export` | none | `{ filters, scope, rowCount }`; `scope` is `own_purchases` for a buyer, `all` otherwise |
+  | Audit trail | `report.audit_trail_export` | the consignment, or the user | `{ filters, rowCount }` |
+
+  `filters` are the query parameters as validated, with ids in lower case.
+
+### The file
+
+- **Format:** CSV as in RFC 4180. Fields are separated by commas, every record ends with CRLF
+  (`\r\n`), the last one included, and **every field is in double quotes**, with a `"` inside
+  written as `""`. The first record is a header row of the column names below. A report with
+  no rows is the header row alone.
+- **Encoding:** UTF-8, starting with a byte order mark (the bytes `EF BB BF`). Without it,
+  Excel on Windows guesses another encoding and garbles characters outside ASCII.
+- **Headers:** `Content-Type: text/csv; charset=utf-8`, and `Content-Disposition: attachment;
+  filename="…"`, so the file is saved rather than shown. The filename contains only lower-case
+  letters, digits, `.` and `-`:
+
+  | Report | Filename |
+  |---|---|
+  | Transactions | `minechain-transactions-{from}-to-{to}.csv` |
+  | Audit trail, one consignment | `minechain-audit-trail-consignment-{consignmentId}.csv` |
+  | Audit trail, one actor | `minechain-audit-trail-user-{actorId}-{from}-to-{to}.csv` |
+
+- **Times are UTC**, in ISO 8601 with milliseconds, for example `2026-11-10T06:00:00.000Z`.
+  Zambia is UTC+2, so that is 08:00 in Lusaka. An empty cell means "none".
+- **Weights** are given twice: `weight_mg`, the whole milligrams as signed, and `weight_kg`,
+  the same value in kilograms with always 6 decimal places (`1500000` mg is `1.500000`). The
+  kilograms are worked out from the digits, never with floating-point arithmetic, so they are
+  exact.
+- **Coordinates** are the signed values with 6 decimal places, latitude first.
+- **Hashes** are `0x` followed by 64 lower-case hex characters.
+
+**Cells that start like a formula.** A spreadsheet treats a cell starting with `=`, `+`, `-`
+or `@` as a formula, and a tab or carriage return at the start can hide one. Several text
+fields come from people (a licence number typed at registration, a QR code, a zone name, an
+officer's notes), so a text cell starting with one of those six characters gets a **single
+quote (`'`) in front**. Spreadsheets show such a cell as plain text instead of running it.
+**A leading `'` was added by the server; the original value is the rest of the cell.** For
+example, the licence number `=HYPERLINK("http://x","y")` is written as
+`"'=HYPERLINK(""http://x"",""y"")"`. Number and time cells (weights, coordinates, block
+numbers, times) are never changed this way: they can only ever hold digits, a point, a minus
+sign or a timestamp, so `-15.419012` stays a number. Only the first character is checked.
+
+**Errors these endpoints can return**, on top of the [token errors](#authentication). They
+are JSON, as everywhere else, never CSV:
+
+| Status | Code | When | Message |
+|---|---|---|---|
+| 400 | `VALIDATION_FAILED` | A query parameter is missing, invalid or not allowed (see each endpoint). Each problem is named by its field; a problem with the query as a whole is named `query` | Some fields are missing or invalid. |
+| 403 | `FORBIDDEN` | Logged in and active, but this role may not use this report | You do not have permission to do this. |
+| 404 | `CONSIGNMENT_NOT_FOUND` | Audit trail: no consignment has this id | No consignment has this id. |
+| 404 | `USER_NOT_FOUND` | Audit trail: no user has this id | No user has this id. |
+| 422 | `REPORT_TOO_LARGE` | More than 10,000 rows | This report has more than 10,000 rows. Choose a shorter date range or add a filter. |
+| 429 | `TOO_MANY_REQUESTS` | More than 20 downloads in 15 minutes | Too many report downloads. Please wait a few minutes and try again. |
+| 500 | `INTERNAL_ERROR` | Unexpected server fault | Something went wrong |
+
+---
+
+## GET /reports/transactions
+
+The custody steps recorded in a period, one row per step, ordered by when the phone recorded
+them (FR-09).
+
+| | |
+|---|---|
+| **Login needed** | Yes, officer, buyer (own purchases only) or admin |
+| **Rate limits** | 20 per 15 minutes per account, shared with the audit trail |
+| **Request body** | None |
+
+**Query parameters**
+
+| Parameter | Required | Rules |
+|---|---|---|
+| `from` | yes | A UTC day, `YYYY-MM-DD`, that exists on the calendar |
+| `to` | yes | The same, on or after `from`. The period is at most **366 days, counting both** `from` and `to` |
+| `mineral` | no | `gold`, `copper`, `cobalt`, `manganese`, `emerald` or `amethyst` |
+| `actorId` | no | A user id (UUID): steps by that person |
+| `zoneId` | no | A zone id (UUID): steps matched to that zone |
+| `type` | no | `registration`, `handoff` or `purchase` |
+| `reviewStatus` | no | `passed`, `flagged`, `cleared` or `rejected` |
+| `anchorStatus` | no | `pending`, `submitted`, `confirmed` or `failed` |
+
+- **Both days are included, in UTC:** `from=2026-11-01&to=2026-11-30` covers every step
+  recorded from `2026-11-01T00:00:00.000Z` up to, but not including,
+  `2026-12-01T00:00:00.000Z`.
+- **The period is about when the phone recorded the step** (`captured_at_utc`), not when it
+  reached the server.
+- Every filter given must match. A parameter may appear once; any other parameter is refused.
+
+**Order:** by `captured_at_utc`; steps recorded at the same moment are ordered by
+`received_at_utc`, which follows custody order; then by `step_id`, so the order never varies.
+
+**Columns**
+
+| Column | Meaning |
+|---|---|
+| `step_id` | The step's id |
+| `consignment_id`, `qr_code`, `mineral` | The consignment |
+| `consignment_stage` | The consignment's stage **now** (`registered`, `in_transit` or `purchased`), not at the time of the step |
+| `step_type` | `registration`, `handoff` or `purchase` |
+| `actor_username`, `actor_role`, `actor_licence_number` | Who recorded the step. Full names are never included |
+| `weight_mg`, `weight_kg` | The weight, see [The file](#the-file) |
+| `latitude`, `longitude` | Where the step was recorded |
+| `zone_name`, `zone_licence_number` | The licensed zone the point was matched to; empty when it was outside every active zone |
+| `captured_at_utc` | When the phone recorded the step (the phone's clock, covered by the signature) |
+| `received_at_utc` | When the server received it (the server's clock) |
+| `review_status` | `passed`, `flagged`, `cleared` or `rejected` |
+| `anchor_status` | `pending`, `submitted`, `confirmed` or `failed` |
+| `chain_tx_hash`, `block_number`, `anchored_at_utc` | The Sepolia transaction, its block, and the block's time. **Only for `confirmed` steps**: a submitted transaction can still be dropped and replaced, so its hash is not final. Empty otherwise |
+| `data_hash` | The hash recorded on-chain for this step. It is public on Sepolia, and lets anyone check the step against the chain |
+
+```
+GET /reports/transactions?from=2026-11-10&to=2026-11-10&mineral=gold
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+```
+
+**200 OK**, `minechain-transactions-2026-11-10-to-2026-11-10.csv` (fake values; two records
+shown, each one line in the file):
+
+```
+"step_id","consignment_id","qr_code","mineral","consignment_stage","step_type","actor_username","actor_role","actor_licence_number","weight_mg","weight_kg","latitude","longitude","zone_name","zone_licence_number","captured_at_utc","received_at_utc","review_status","anchor_status","chain_tx_hash","block_number","anchored_at_utc","data_hash"
+"7a3e9b10-0000-4000-8000-000000000001","5c0d7e21-0000-4000-8000-000000000001","MC-2026-000001","gold","purchased","registration","mutale_banda","miner","DEMO-ASM-0001","1500000","1.500000","-13.450000","25.820000","Kasempa North","DEMO-LML-0001","2026-11-10T06:00:00.000Z","2026-11-10T06:05:12.345Z","passed","confirmed","0xabababababababababababababababababababababababababababababababab","12047700","2026-11-10T06:07:24.000Z","0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+```
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `REPORT_TOO_LARGE` and `TOO_MANY_REQUESTS`. See
+[the shared table](#reports-fr-09-fr-13).
+
+---
+
+## GET /reports/audit-trail
+
+Everything that happened to one consignment, or everything one actor did in a period, one
+row per event in time order (FR-13). For officers only.
+
+| | |
+|---|---|
+| **Login needed** | Yes, officer only |
+| **Rate limits** | 20 per 15 minutes per account, shared with the transactions report |
+| **Request body** | None |
+
+**Query parameters:** exactly one of `consignmentId` and `actorId`.
+
+| Parameter | Rules |
+|---|---|
+| `consignmentId` | A consignment id (UUID). Its whole trail, from registration on. `from` and `to` are refused with it |
+| `actorId` | A user id (UUID). Requires `from` and `to` |
+| `from`, `to` | With `actorId` only: UTC days, both included, at most 366 days, as for the [transactions report](#get-reportstransactions) |
+
+Neither id, or both, is refused with `"field": "query"`.
+
+**Events**
+
+| `event` | When (`event_time_utc`) | In which trail |
+|---|---|---|
+| `step_recorded` | The server received a step (its `received_at`) | both |
+| `alert_raised` | An anomaly check raised an alert on a step | both |
+| `step_anchored` | The step's Sepolia transaction was mined (the block's time) | both |
+| `alert_reviewed`, `alert_dismissed` | An officer closed an alert. Officer review is still to be built; these rows appear once alerts can be closed | both |
+| `account_event` | A change to the actor's account: `user.create`, `user.register`, `user.approve`, `user.reject`, `user.suspend`, `user.reactivate`, `user.key_register` or `user.key_reset`. Logins and failed logins are not included | actor only |
+
+- **An actor's trail** contains the steps that actor recorded, the alerts and anchoring of
+  those steps, and their account events. Steps by other people on the same consignments are
+  not in it. The period applies to each event's own time, so a step recorded before `from`
+  but anchored inside the period shows only its `step_anchored` row.
+- **Order:** by `event_time_utc`. Events at the same moment follow the order of the table
+  above (`step_recorded`, `alert_raised`, `step_anchored`, then the closing of an alert, then
+  `account_event`), then by id, so the order never varies.
+
+**Columns**
+
+| Column | Meaning |
+|---|---|
+| `event_time_utc`, `event` | When, and what (above) |
+| `consignment_id`, `qr_code`, `mineral` | The consignment; empty on `account_event` rows |
+| `step_id`, `step_type` | The step the event is about; empty on `account_event` rows |
+| `actor_username`, `actor_role`, `actor_licence_number` | On step and alert rows, who recorded the step. **On `account_event` rows, who made the change**: an administrator for an approval or suspension, the user themselves for a registration or key, empty for the seed |
+| `weight_mg`, `weight_kg`, `latitude`, `longitude`, `zone_name`, `captured_at_utc` | The step, as in the transactions report |
+| `review_status` | The step's review status **now** |
+| `alert_id`, `alert_type`, `alert_severity`, `alert_status` | On alert rows, the alert |
+| `alert_details` | On alert rows, the alert's details as JSON (see [database-schema.md](database-schema.md), `details` per alert type) |
+| `reviewer_username`, `review_notes` | On a closed alert, the officer and their notes |
+| `chain_tx_hash`, `block_number` | On `step_anchored` rows only |
+| `data_hash` | On every step and alert row |
+| `account_action`, `account_details` | On `account_event` rows: the action, and its details as JSON. IP addresses are never included |
+
+```
+GET /reports/audit-trail?consignmentId=5c0d7e21-0000-4000-8000-000000000001
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+```
+
+**200 OK**, `minechain-audit-trail-consignment-5c0d7e21-0000-4000-8000-000000000001.csv`
+(fake values; the header and two of the rows, each one line in the file):
+
+```
+"event_time_utc","event","consignment_id","qr_code","mineral","step_id","step_type","actor_username","actor_role","actor_licence_number","weight_mg","weight_kg","latitude","longitude","zone_name","captured_at_utc","review_status","alert_id","alert_type","alert_severity","alert_status","alert_details","reviewer_username","review_notes","chain_tx_hash","block_number","data_hash","account_action","account_details"
+"2026-11-10T07:02:10.101Z","step_recorded","5c0d7e21-0000-4000-8000-000000000001","MC-2026-000001","gold","7a3e9b10-0000-4000-8000-000000000002","handoff","chanda_mwale","transporter","","1200000","1.200000","-13.460000","25.840000","","2026-11-10T07:00:00.000Z","flagged","","","","","","","","","","0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef","",""
+"2026-11-10T07:02:10.104Z","alert_raised","5c0d7e21-0000-4000-8000-000000000001","MC-2026-000001","gold","7a3e9b10-0000-4000-8000-000000000002","handoff","chanda_mwale","transporter","","1200000","1.200000","-13.460000","25.840000","","2026-11-10T07:00:00.000Z","flagged","3b1f0c9e-0000-4000-8000-000000000001","quantity_discrepancy","medium","open","{""weightMg"": ""1200000"", ""thresholdPercent"": 10}","","","","","0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef","",""
+```
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN` (any role but officer),
+`CONSIGNMENT_NOT_FOUND`, `USER_NOT_FOUND`, `REPORT_TOO_LARGE` and `TOO_MANY_REQUESTS`. A
+trail for an id that does not exist is refused rather than sent as an empty file, which would
+look like "nothing happened". See [the shared table](#reports-fr-09-fr-13).
 
 ---
 

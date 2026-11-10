@@ -131,6 +131,26 @@ one database transaction, so every consignment has at least one step.
 - **Primary keys** are `uuid` values from `gen_random_uuid()`, except in `audit_logs`.
   Phones can create UUIDs offline without clashing, and they cannot be guessed.
 - **Times** are `timestamptz`, stored in UTC.
+- **Two clocks.** `now()` is the time the database transaction *started*, and stays the same
+  for every statement in it; `clock_timestamp()` is the time of the statement itself. Where
+  two times in one transaction are ordered against each other, the later one must use
+  `clock_timestamp()`, or it can come out earlier than something written before it.
+  - `transactions.received_at` and `alerts.created_at` default to `clock_timestamp()`
+    (migration `1794398400000_clock-timestamp-defaults`), and sync also writes
+    `clock_timestamp()` explicitly for both. See [Anchoring](#anchoring) for why
+    `received_at` must follow custody order; an alert is inserted after its step, so its
+    `created_at` is never earlier than the step's `received_at`.
+  - Every other default (`created_at`, `updated_at` through `set_updated_at()`,
+    `audit_logs.occurred_at`) is `now()`, and nothing orders them against another time in
+    the same transaction. A read-only check of every `now()` found them safe (decisions log,
+    11 Nov). Three to watch:
+    - `audit_logs.occurred_at` is `now()`, so an entry such as `transaction.create` is earlier
+      than the step it records; if audit entries are ever merged into a trail by time, they
+      would sort before their step.
+    - `alerts.reviewed_at` should be written with `clock_timestamp()` when officer review is
+      built.
+    - `consignments.created_at` is not a display time for "registered at": it is slightly
+      earlier than the registration step; use the registration's `received_at`.
 - **Fixed lists** use `CHECK (col IN (...))` rather than `ENUM`, so a value can be added or
   removed with one small migration.
 - **Hashes and keys** are `bytea` with a length check.
@@ -253,6 +273,11 @@ one database transaction, so every consignment has at least one step.
 - `details`: must be a JSON object. Its shape depends on the type (below).
 - One alert per rule per step: `UNIQUE (transaction_id, type)`.
 - A partial index on `created_at` covers open alerts only, for the officer's queue.
+- `created_at` is `clock_timestamp()`, written by sync and also the column default since
+  11 Nov. An alert is inserted after its step in the same transaction, so it is never
+  earlier than the step's `received_at`, and the audit trail lists it after the step. Alerts
+  stored before 11 Nov carry their transaction's start time and can sort before their step
+  (a known limitation; development data only).
 
 **`details` per alert type.** Written by the anomaly checks in
 `backend/src/services/anomalyChecks.js`. Weights are whole milligrams as text, never JSON
@@ -371,8 +396,9 @@ anchoring worker skips held consignments.
 
 **Values.** Weight, coordinates and capture time are stored from the signed text, with no
 floating-point step. `received_at` is always set by the database, as `clock_timestamp()` at the
-insert rather than the column default `now()` (the transaction's start), so that within a
-consignment it follows custody order (decisions log, 9 Nov). `zone_id` is worked out by the
+insert rather than `now()` (the transaction's start), so that within a consignment it follows
+custody order (decisions log, 9 Nov). Since 11 Nov the column default is `clock_timestamp()`
+too, so an insert that leaves it out gets the same. `zone_id` is worked out by the
 server from the signed coordinates (see [transactions](#transactions)).
 
 One row means one anchoring job: see [Anchoring](#anchoring).
@@ -466,7 +492,9 @@ consignment, a handoff is inserted only after its transaction has seen the regis
 committed consignment, and a purchase only after taking the consignment lock the handoff
 held until it committed, so insert times follow custody order. With `now()`, a handoff could
 get the earlier time, and the queue would wait for ever or send the purchase first
-(decisions log, 9 Nov).
+(decisions log, 9 Nov). The column default was changed from `now()` to `clock_timestamp()`
+on 11 Nov (migration `1794398400000_clock-timestamp-defaults`), so a future insert path that
+leaves it out cannot bring the problem back.
 
 ### Held consignments
 
@@ -493,6 +521,28 @@ with its connection, so a crashed worker can never leave it held.
 Known limitations of anchoring (a stuck row blocks the queue, the one-in-flight throughput,
 Render's spin-down) are listed in [decisions.md](decisions.md).
 
+## Reports
+
+The CSV reports (FR-09, FR-13; columns and rules in [api.md](api.md#reports-fr-09-fr-13))
+read these tables through fixed queries in `backend/src/services/reportService.js`:
+
+- **Transactions report:** one row per step, joined to its consignment, its actor and its
+  zone, filtered on `captured_at` in a UTC day range and ordered by
+  `(captured_at, received_at, id)`. Capture times can be equal (phone clocks set by hand,
+  two steps in the same millisecond); `received_at` then decides, because it follows custody
+  order (see [Anchoring](#anchoring)); `id` is the last resort, so the order never varies.
+  The filters use the FR-09 indexes on [transactions](#transactions).
+- **Audit trail:** events built from `transactions` (recorded, anchored), `alerts` (raised,
+  closed) and, for an actor, `audit_logs` entries about that user, ordered by event time,
+  then a fixed event order, then ids.
+- **Never selected:** `password_hash`, `public_key`, `signer_public_key`, `signature`,
+  `signed_payload`, `actor_ref`, `full_name`, `ip_address`, `anchor_error`, `anchor_nonce`
+  and `anchor_attempts`. Each query lists its columns, so a column added later cannot appear
+  in a report by accident.
+- **One snapshot:** each export reads its rows and writes its `audit_logs` entry in one
+  `REPEATABLE READ` transaction (`db.transaction(fn, { isolation: 'repeatable read' })`), so
+  every query sees the same moment and an export is never sent without its entry.
+
 ## Rules enforced by the service, not the database
 
 A CHECK constraint can only see its own row, so these rules live in the backend services:
@@ -515,7 +565,11 @@ A CHECK constraint can only see its own row, so these rules live in the backend 
   returns to `open`;
 - closing an alert updates the step in the same database transaction: `reviewed` makes
   the step `rejected`, and `dismissed` makes it `cleared`;
-- audit `details` never contain passwords, tokens or keys.
+- audit `details` never contain passwords, tokens or keys;
+- a buyer's transactions report holds only accepted (`passed` or `cleared`) steps of
+  consignments the buyer has an accepted purchase of, a condition inside the report query;
+- every report export writes its `audit_logs` entry in the same transaction as the rows it
+  sends (see [Reports](#reports)).
 
 ## Append-only audit log
 
