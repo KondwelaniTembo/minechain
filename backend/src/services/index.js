@@ -6,6 +6,7 @@ import { createTokenService } from './tokenService.js';
 import { createAccountService } from './accountService.js';
 import { createSignatureService } from './signatureService.js';
 import { createSyncService } from './syncService.js';
+import { createZoneService } from './zoneService.js';
 
 // The one place where the real services are connected to each other. server.js and the
 // end-to-end DB tests both use it, so the wiring is never written twice. Unit tests skip it
@@ -21,6 +22,7 @@ export function createServices({ db, config }) {
   const users = createUserService({ db, passwords, passwordPolicy: checkPasswordPolicy, audit, tokens, signatures });
   const accounts = createAccountService({ db, audit });
   const sync = createSyncService({ db, signatures, audit });
+  const zones = createZoneService({ db, audit });
 
-  return { users, tokens, accounts, signatures, sync };
+  return { users, tokens, accounts, signatures, sync, zones };
 }
