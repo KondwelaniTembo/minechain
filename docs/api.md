@@ -978,24 +978,51 @@ step's outcome. One result per step, in the order sent:
 
 ### Codes
 
+The app must branch on `code`, never on `message`. Codes are stable; messages are plain
+language for the user and may be reworded.
+
 | Code | Outcome | Meaning | What the app does |
 |---|---|---|---|
 | `INVALID_SIGNATURE` | flagged | The signature did not verify against the account's registered device key. The record may have been changed after signing, or signed on another phone | Show "under review". Check that `publicKeyFingerprint` on `/auth/me` matches this phone's key |
+| `DUPLICATE_CONSIGNMENT` | flagged | A registration for a QR code that is already registered. It is stored on the existing consignment, whose miner and stage do not change | Show "under review". Check the custody record that was scanned |
+| `HANDOFF_ORDER` | flagged | A handoff or purchase for a consignment that is already `purchased`, the final stage | Show "under review" |
+| `QUANTITY_DISCREPANCY` | flagged | A handoff or purchase whose weight differs by more than 10% from the latest earlier accepted step, or from the accepted registration | Show "under review" |
+| `GPS_ZONE` | flagged | A registration whose location is outside every active GPS zone, allowing 25 m for GPS error. With no active zone at all, every registration gets this | Show "under review" |
 | `PAYLOAD_MALFORMED` | rejected | Not a valid signed payload (wrong bytes, lines, order or values) | An app bug: report it, keep the record |
 | `PAYLOAD_UNSUPPORTED_VERSION` | rejected | The payload's format version is not one this server reads | Ask the user to update the app |
 | `SIGNATURE_MALFORMED` | rejected | Not strict base64, or not 8–72 bytes | An app bug: report it, keep the record |
 | `ACTOR_MISMATCH` | rejected | The payload's `actor_id` is not the logged-in user | Make sure the account that signed the step is the one logged in |
 | `STEP_NOT_ALLOWED_FOR_ROLE` | rejected | Registration is for miners, handoff for transporters, purchase for buyers | An app bug: the app should not offer this step to this role |
 | `STEP_ID_CONFLICT` | rejected | A **different** record with the same `step_id` was already stored for this user | An app bug: every step needs a fresh `step_id`. Keep both records |
-| `QR_CODE_ALREADY_REGISTERED` | rejected | This custody record's QR code already belongs to a consignment | Check the custody record that was scanned |
-| `CONSIGNMENT_CLOSED` | rejected | The consignment has already been purchased; no further step is possible | Check the custody record that was scanned |
 | `NO_DEVICE_KEY` | deferred | The account has no registered device key yet | Register the key ([`PUT /auth/me/public-key`](#put-authmepublic-key)), then send the step again |
 | `CONSIGNMENT_NOT_FOUND` | deferred | No consignment has this QR code yet: most likely the miner's registration has not been synced | Send it again later. It will be accepted once the registration arrives |
-| `STAGE_NOT_READY` | deferred | A purchase while the consignment is still at `registered`: most likely the transporter's handoff has not been synced | Send it again later |
+| `STAGE_NOT_READY` | deferred | A purchase while the consignment is still at `registered`. Either the transporter's handoff has not been synced yet, or it is stored but flagged and waiting for an officer's review (a flagged step does not move the stage) | Send it again later. It will be accepted once a handoff is accepted |
 
-`QR_CODE_ALREADY_REGISTERED` and `CONSIGNMENT_CLOSED` are temporary answers. When the
-anomaly rules for duplicate consignments and handoff order are built, these steps will be
-stored as `flagged` with an alert instead, so an officer sees them.
+### Flagged results
+
+A flagged step was stored, so the app removes it from the queue and must not send it again.
+Every check runs on every step, so one step can fail several. `code` names the **most
+severe** finding; between findings of the same severity, the first in check order wins.
+The order is: signature, duplicate consignment, handoff order, quantity, GPS zone. `alerts`
+lists the type of every alert stored for the step, in that same order.
+
+| Code | Alert type | Severity | `message` |
+|---|---|---|---|
+| `INVALID_SIGNATURE` | `invalid_signature` | high | The record was saved, but its signature did not match your device key. An officer will review it. |
+| `DUPLICATE_CONSIGNMENT` | `duplicate_consignment` | high | This custody record was already registered. Your record was saved, and an officer will review it. |
+| `HANDOFF_ORDER` | `handoff_order` | high for a purchase, medium for a handoff | This consignment has already been sold. Your record was saved, and an officer will review it. |
+| `QUANTITY_DISCREPANCY` | `quantity_discrepancy` | medium | The record was saved, but the weight differs by more than 10% from an earlier step. An officer will review it. |
+| `GPS_ZONE` | `gps_zone` | medium | The record was saved, but its location is outside every registered extraction zone. An officer will review it. |
+
+For example, a registration that is both a duplicate and outside every zone gets `code`
+`DUPLICATE_CONSIGNMENT` (high beats medium) and `alerts`
+`["duplicate_consignment", "gps_zone"]`.
+
+The `STAGE_NOT_READY` message is: "This consignment is not ready for this step yet. An
+earlier step has not reached the server, or is waiting for an officer's review. Keep the
+record and sync again later."
+
+The shape of each alert's `details` is in [database-schema.md](database-schema.md#alerts).
 
 ### How the server handles a batch
 

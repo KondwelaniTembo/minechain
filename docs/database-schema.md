@@ -177,14 +177,20 @@ one database transaction, so every consignment has at least one step.
 - `stage`: `registered`, `in_transit` or `purchased`. This is a stored copy, kept in step
   with `transactions` (see decisions).
 - Weight, GPS, capture time and hash are not stored here. They belong to the signed
-  registration step. A consignment is **held** while any alert on its steps is open.
+  registration step. A consignment is **held** while any alert on its steps is open, with
+  one exception (see [Held consignments](#held-consignments)).
 
 ### transactions
 - `type`: `registration`, `handoff` or `purchase`.
 - `idempotency_key`: made by the phone and included in the signed record. It is unique per
   actor, so a retried sync cannot create a second row (see below).
 - `weight_mg` > 0. `latitude` and `longitude` are `numeric(9,6)` within ±90 and ±180.
-  `zone_id` is the matched zone, or NULL when the point was outside every zone.
+  `zone_id` is set by sync for **every** step, whatever its type: the active zone the point
+  falls in, counting points within 25 m of a zone's edge as inside. NULL means the point
+  was outside every active zone. Only a registration is flagged for that (`gps_zone`);
+  handoffs and purchases happen on the road and at buying centres, so their `zone_id` is
+  recorded for reports only. When the point is in or near more than one zone, the choice is
+  fixed: inside before near, then nearer, then by name, then by id.
 - **Evidence:**
   - `signed_payload` is the exact text the phone signed;
   - `signature` is 8–72 bytes (DER);
@@ -222,9 +228,74 @@ one database transaction, so every consignment has at least one step.
   - An open alert has no review fields.
   - A reviewed or dismissed alert has `reviewed_by`, `reviewed_at` and non-blank
     `review_notes`.
-- `details`: must be a JSON object.
+- `details`: must be a JSON object. Its shape depends on the type (below).
 - One alert per rule per step: `UNIQUE (transaction_id, type)`.
 - A partial index on `created_at` covers open alerts only, for the officer's queue.
+
+**`details` per alert type.** Written by the anomaly checks in
+`backend/src/services/anomalyChecks.js`. Weights are whole milligrams as text, never JSON
+numbers. Details hold ids, never names of people. All values in the examples are fake.
+
+- `invalid_signature` (high): the SHA-256 fingerprint of the registered key the signature
+  was checked against, never the key itself.
+
+  ```json
+  { "keyFingerprint": "3b1f0c9e3b1f0c9e3b1f0c9e3b1f0c9e3b1f0c9e3b1f0c9e3b1f0c9e3b1f0c9e" }
+  ```
+
+- `duplicate_consignment` (high): the consignment's original registration (the accepted one
+  if there is one, otherwise the earliest), whether the same miner registered both, and both
+  minerals.
+
+  ```json
+  { "originalTransactionId": "7a3e9b10-0000-4000-8000-000000000001",
+    "originalReviewStatus": "passed", "sameMiner": false,
+    "mineral": "gold", "originalMineral": "gold" }
+  ```
+
+- `handoff_order` (high for a purchase, medium for a handoff): a step after the consignment
+  was purchased.
+
+  ```json
+  { "consignmentStage": "purchased", "stepType": "handoff" }
+  ```
+
+- `quantity_discrepancy` (medium): the step's weight, the threshold, and each baseline it was
+  compared with. `previous` (the latest earlier accepted step) is present only when that
+  step is not the registration; `registration` (the accepted registration) is present when
+  there is one. `differenceMg` is the step's weight minus the baseline's: negative is a loss.
+  `failedBaselines` names those over the threshold. Here a handoff gained weight and the
+  purchase then lost it: within 10% of the registration, but not of the handoff.
+
+  ```json
+  { "weightMg": "1460000", "thresholdPercent": 10, "failedBaselines": ["previous"],
+    "previous": { "stepId": "7a3e9b10-0000-4000-8000-000000000002", "weightMg": "1640000",
+                  "differenceMg": "-180000", "exceeded": true },
+    "registration": { "stepId": "7a3e9b10-0000-4000-8000-000000000001", "weightMg": "1500000",
+                      "differenceMg": "-40000", "exceeded": false } }
+  ```
+
+- `gps_zone` (medium, registrations only): the nearest active zone and the distance to its
+  edge in whole metres, with the tolerance. With no active zone at all, the details say so
+  instead.
+
+  ```json
+  { "nearestZoneId": "5c0d7e21-0000-4000-8000-000000000001",
+    "nearestZoneName": "ZCAS Campus (demo)", "distanceMetres": 142, "toleranceMetres": 25 }
+  ```
+
+  ```json
+  { "noActiveZones": true, "toleranceMetres": 25 }
+  ```
+
+- `record_tampered`: never raised by sync. It comes from verification, which is still to be
+  built, and its details will be defined there.
+
+**Two meanings of `stepId`.** Inside `quantity_discrepancy` details, `previous.stepId` and
+`registration.stepId` are server ids, `transactions.id`. In a `POST /sync/steps` result,
+`stepId` is the client's `step_id` from the signed payload, stored as
+`transactions.idempotency_key`. They are different values. A rename was considered and
+deferred (decisions log, 10 Nov).
 
 ### audit_logs
 - `id`: a `bigint` identity, assigned in insert order. Gaps are normal, because a
@@ -279,8 +350,8 @@ anchoring worker skips held consignments.
 **Values.** Weight, coordinates and capture time are stored from the signed text, with no
 floating-point step. `received_at` is always set by the database, as `clock_timestamp()` at the
 insert rather than the column default `now()` (the transaction's start), so that within a
-consignment it follows custody order (decisions log, 9 Nov). `zone_id` is NULL until
-the GPS zone check is built.
+consignment it follows custody order (decisions log, 9 Nov). `zone_id` is worked out by the
+server from the signed coordinates (see [transactions](#transactions)).
 
 One row means one anchoring job: see [Anchoring](#anchoring).
 
@@ -356,7 +427,7 @@ The next step is the oldest row, by `(received_at, id)`, that meets all of these
 
 - `anchor_status = 'pending'` and `review_status` is `passed` or `cleared`. The query repeats
   the condition of `transactions_anchor_queue_idx` so PostgreSQL can use it;
-- its consignment is **not held**: no open alert on any of its steps;
+- its consignment is **not held** (see [Held consignments](#held-consignments));
 - **no earlier step** of the same consignment, by `(received_at, id)`, is `passed`, `cleared`
   or `flagged` and not yet `confirmed`. Rejected steps are ignored, a failed one blocks
   everything after it, and a flagged one blocks because it may still be cleared;
@@ -374,6 +445,21 @@ committed consignment, and a purchase only after taking the consignment lock the
 held until it committed, so insert times follow custody order. With `now()`, a handoff could
 get the earlier time, and the queue would wait for ever or send the purchase first
 (decisions log, 9 Nov).
+
+### Held consignments
+
+Any open alert on any step of a consignment holds the **whole** consignment from anchoring,
+including a registration that has not been anchored yet. The only exception is alerts on a
+flagged duplicate of an accepted registration: a flagged registration on a consignment that
+has a different, accepted registration. All of that duplicate's alerts are excused, not
+only `duplicate_consignment`, and the duplicate does not block the ordering rule either.
+Otherwise anyone with an approved account who had seen a QR code could freeze another
+miner's consignment by registering it again.
+
+Held is worked out by a query, never stored (D3), so closing the last open alert releases
+the hold. The rule is written once, as `HELD` in `backend/src/services/anchorQueue.js`, and
+`isConsignmentHeld()` there uses the same SQL as the queue. A held consignment still accepts
+new steps, which are checked and stored normally; they simply wait to be anchored.
 
 ### One worker at a time
 
@@ -395,7 +481,9 @@ A CHECK constraint can only see its own row, so these rules live in the backend 
   `SELECT … FOR UPDATE` and updates `consignments.stage` in the same database transaction
   as the step;
 - the 10% quantity discrepancy check;
-- the GPS point lies inside `zone_id`, and the zone is active;
+- `zone_id` is the active zone containing the point, counting points within 25 m of its
+  edge as inside, or NULL if there is none; only a registration is flagged for being
+  outside every active zone;
 - the P-256 signature verifies against `signer_public_key`;
 - `latitude` and `longitude` have at most 6 decimal places. The API rejects more, rather
   than letting `numeric(9,6)` round them, and the app rounds to 6 places before signing;

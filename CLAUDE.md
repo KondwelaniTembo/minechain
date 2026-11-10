@@ -38,10 +38,10 @@ Rules that shape the design:
 
 Updated 10 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
 
-- **Branch:** `feature/backend-logic`, HEAD `f81c3ea` (Step 9.4). `main` has Days 1–3 (PR #4).
-- **Last test totals the developer reported:** `npm test` 1353 and `npm run test:db` 565
-  (after 9.3), contract 37. Since then 9.4 added about 10 DB tests (expected
-  `test:db` ≈ 575); confirm with a run.
+- **Branch:** `feature/backend-logic`. Latest code commit `fe4abdb` (the `STAGE_NOT_READY`
+  message fix), followed by the Step 9 docs commit (9.5b). `main` has Days 1–3 (PR #4).
+- **Test totals (confirmed, run 10 Nov 21:01):** `npm test` 1353, `npm run test:db` 577,
+  contract 37. The earlier `test:db` 575 (after 9.4) was confirmed 10 Nov 00:03.
 
 **Done on this branch** (docs updated for all of it):
 
@@ -64,7 +64,9 @@ Updated 10 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
   - migration `transactions-anchor-nonce`; sync's `received_at = clock_timestamp()` fix;
   - tests use `tests/fakes/fakeChainClient.js`; no test touches Sepolia.
 
-**Step 9, anomaly rules (FR-08), in progress** (code done for 9.1–9.4; docs not yet):
+**Step 9, anomaly rules (FR-08), complete (9.1–9.5)**, with docs (`api.md` sync codes,
+`database-schema.md` alert details and held consignments, `decisions.md` "Anomaly rules
+(1)–(10)" and their known limitations):
 
 - 9.1 `src/services/zoneMatch.js`: point-in-polygon on `[lat, lng]`, nearest-edge distance
   (local equirectangular projection; floats allowed here, nothing derived is signed),
@@ -83,19 +85,23 @@ Updated 10 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
 - 9.4 `anchorQueue.js`: a flagged duplicate of an accepted registration neither holds the
   consignment (ALL its alerts are excused) nor blocks the ordering gate;
   `isConsignmentHeld()` exposes the same rule. Alerts on any other step still hold.
+- 9.5 tests and fix:
+  - `7ef7b17`: shared helpers moved to `tests/db/realStackHelpers.js` (no behaviour change);
+  - `ec2f0bd`: `tests/db/flaggedChain.test.js`. Accounts are made through the API
+    (`loggedInSigner`: register, admin approve, login, key). A 20% lighter handoff is
+    flagged, holds the consignment and stays off the fake chain, and the purchase after it
+    is deferred. A second test shows a hold also blocks an unanchored registration;
+  - `fe4abdb`: the `STAGE_NOT_READY` message names both causes (an earlier step not
+    arrived, or waiting for review); the code and outcome are unchanged.
 
 **Next, in order:**
 
-1. 9.5: one real-stack chain test with a flagged step (HTTP, real signatures), then the
-   Step 9 docs: `api.md` (sync codes and messages), `database-schema.md` (`zone_id`, alert
-   details per type, the hold exception), `decisions.md` (thresholds, two quantity
-   baselines, GPS registrations-only with 25 m tolerance and any active zone, duplicate hold
-   exception and its trade-off, handoff-order severities and the late-relay limit, most-
-   severe code, no "moved while held" rule, anchoring failures not alerts, "no GPS fix" note
-   for the app, licence-linked zones as future work), then this status.
-2. GPS zones API (FR-11).
-3. Then: an admin anchoring status endpoint with manual reset, CSV reports, officer and
-   admin account creation, Render deploy, open the PR.
+1. GPS zones API (FR-11).
+2. CSV reports (FR-09, FR-13).
+3. Officer and admin account creation (FR-10).
+4. Admin anchoring status endpoint with manual reset (Anomaly rules (8)).
+5. Render deploy, then open the PR.
+6. Flutter app.
 
 **Working rules that held all weekend:**
 
