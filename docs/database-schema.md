@@ -163,11 +163,33 @@ one database transaction, so every consignment has at least one step.
 - `approved_by` and `approved_at` are set together. Nobody can approve their own account.
 
 ### gps_zones
-- `name`: unique ignoring case.
-- `status`: `active` or `inactive`. Zones are deactivated, never deleted.
+- `name`: unique ignoring case, through the index `gps_zones_name_lower_key` on
+  `lower(name)`. It covers active **and** inactive zones, so a name stays taken after its
+  zone is deactivated. A replacement zone gets the old name only after the old zone is
+  renamed (see [api.md, Replacing a zone](api.md#replacing-a-zone)).
+- `status`: `active` or `inactive`. Zones are deactivated, never deleted:
+  `transactions.zone_id` refers to them (`ON DELETE RESTRICT`).
 - `boundary`: a JSON array of at least 3 corners. Each corner is a `[lat, lng]` pair of
   numbers within ±90 and ±180, checked with a strict jsonpath expression. The order is
   `[lat, lng]`, the reverse of GeoJSON's `[lng, lat]`.
+- **`boundary` and `licence_number` are fixed once the zone is created.** Every
+  `transactions.zone_id` must keep meaning the shape that was checked when the step
+  arrived, so a new shape is a new zone. The zone service has no statement that updates
+  either column (a test reads its `UPDATE` statements to keep it so), and no API route
+  changes them. The database does not enforce this: there is no trigger, so a direct SQL
+  `UPDATE` could still change them (a known limitation in decisions).
+- **Shape rules.** Every boundary written through the API or the seed passes
+  `zoneBoundarySchema` (`backend/src/schemas/geo.js`) first. On top of the database checks,
+  it requires at most 100 corners and at most 6 decimal places, and then the shape rules in
+  `backend/src/services/zoneShape.js`: no corner repeating the one before it, no closing
+  corner (the last repeating the first), at least 3 different corners, every corner inside
+  a rough box around Zambia, an area of at least 100 m², and at most 50 km from north to
+  south and from east to west. The seed uses the same schema, so the seeded demo zone obeys
+  the same rules. The full list, with messages, is in
+  [api.md, The boundary](api.md#the-boundary).
+- **Sync reads the active zones on every call**, with no cache. A zone created,
+  deactivated or reactivated applies from the next sync. Steps already stored keep their
+  `zone_id`, and nothing is checked again.
 
 ### consignments
 - `chain_id`: a generated column: 16 zero bytes followed by the 16 bytes of `id`. It is the
@@ -484,6 +506,8 @@ A CHECK constraint can only see its own row, so these rules live in the backend 
 - `zone_id` is the active zone containing the point, counting points within 25 m of its
   edge as inside, or NULL if there is none; only a registration is flagged for being
   outside every active zone;
+- a zone's `boundary` passes the shape rules, and its `boundary` and `licence_number` never
+  change after it is created (see [gps_zones](#gps_zones));
 - the P-256 signature verifies against `signer_public_key`;
 - `latitude` and `longitude` have at most 6 decimal places. The API rejects more, rather
   than letting `numeric(9,6)` round them, and the app rounds to 6 places before signing;

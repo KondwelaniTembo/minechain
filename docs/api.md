@@ -22,6 +22,11 @@ and `FAKE-SIGNATURE`. None of them is a real identifier, password or token.
 | `POST` | [`/admin/users/{id}/suspend`](#post-adminusersidsuspend) | Suspend an active account, with a reason (FR-10) | Yes, admin only |
 | `POST` | [`/admin/users/{id}/reactivate`](#post-adminusersidreactivate) | Reactivate a suspended account (FR-10) | Yes, admin only |
 | `POST` | [`/admin/users/{id}/reset-key`](#post-adminusersidreset-key) | Remove a suspended account's device key, for a lost phone | Yes, admin only |
+| `GET` | [`/admin/zones`](#get-adminzones) | List licensed GPS zones by status (FR-11) | Yes, admin only |
+| `POST` | [`/admin/zones`](#post-adminzones) | Create a licensed GPS zone (FR-11) | Yes, admin only |
+| `POST` | [`/admin/zones/{id}/rename`](#post-adminzonesidrename) | Rename a zone (FR-11) | Yes, admin only |
+| `POST` | [`/admin/zones/{id}/deactivate`](#post-adminzonesiddeactivate) | Deactivate an active zone, with a reason (FR-11) | Yes, admin only |
+| `POST` | [`/admin/zones/{id}/reactivate`](#post-adminzonesidreactivate) | Reactivate an inactive zone (FR-11) | Yes, admin only |
 | `POST` | [`/sync/steps`](#post-syncsteps) | Upload signed custody steps from the phone's offline queue (FR-03, FR-07) | Yes, miner, transporter or buyer |
 
 ## Conventions
@@ -216,7 +221,7 @@ the endpoint sections below remain the source of truth for what exists.
 | List accounts; suspend and reactivate them (FR-10): `GET /admin/users`, `/admin/users/{id}/suspend`, `/reactivate` | | | | | ✓ | **Built** |
 | Reset a lost phone's device key (FR-10, [signing spec](signing-spec.md) section 2): `/admin/users/{id}/reset-key` | | | | | ✓ | **Built** |
 | Create officer and admin accounts; change role (FR-10) | | | | | ✓ | Planned |
-| Manage licensed GPS extraction zones (FR-11) | | | | | ✓ | Planned |
+| Manage licensed GPS extraction zones (FR-11): `/admin/zones` | | | | | ✓ | **Built** |
 | Monitor system health: API errors, blockchain sync failures, database capacity (System Administrator use case) | | | | | ✓ | Planned |
 | Trigger a manual re-synchronisation (System Administrator use case) | | | | | ✓ | Planned |
 
@@ -882,6 +887,352 @@ reason, and now `"publicKeyFingerprint": null`.
 `INVALID_STATUS_TRANSITION` (the account is not suspended: "Only a suspended account can
 have its device key reset. This account is active.") and `NO_PUBLIC_KEY` (the account has
 no key, so nothing was changed). See [the shared table](#admin-account-management).
+
+---
+
+## GPS zone management (FR-11)
+
+Five endpoints let an administrator manage the licensed extraction zones. Sync checks every
+registration against the **active** zones (see [Flagged results](#flagged-results), code
+`GPS_ZONE`), and records the matching zone on every step.
+
+**Rules shared by all five:**
+
+- **Admin only.** Every request needs a token, and the account must be an active `admin`.
+  Anyone else gets 401 or 403 (see [Roles and access](#roles-and-access)). This applies to
+  every path under `/admin/zones`, including paths that do not exist: a non-admin gets 403,
+  not 404, so the paths cannot be discovered.
+- **No caching.** Every response, errors included, carries `Cache-Control: no-store`.
+- **Rate limits:** none yet, as for `/admin/users`.
+- **A zone is never deleted.** Steps refer to the zone they were matched to, so a zone that
+  is no longer licensed is deactivated instead.
+- **The boundary and the licence number never change.** They are set when the zone is
+  created, and no endpoint changes them. Every step's zone must keep meaning the shape that
+  was checked when the step arrived. A new shape is a new zone: see
+  [Replacing a zone](#replacing-a-zone).
+- **Names are unique ignoring letter case, among active and inactive zones alike.**
+  `Kasempa North` and `KASEMPA NORTH` cannot both exist, even if one of them is inactive.
+- **Changes apply from the next sync.** Sync reads the active zones on every call, so a
+  created, deactivated or reactivated zone is used from the next `POST /sync/steps`. Steps
+  already stored keep their zone, and nothing is checked again.
+- **Every change is recorded** in the audit log, in the same database transaction, with the
+  administrator as the actor and their IP address. A refused request records nothing.
+
+  | Action | Audit action | `details` |
+  |---|---|---|
+  | Create | `gps_zone.create` | `{ name, licenceNumber, cornerCount }` |
+  | Rename | `gps_zone.rename` | `{ from, to }`: the old and new names |
+  | Deactivate | `gps_zone.deactivate` | `{ from: "active", to: "inactive", reason, activeZonesLeft }` |
+  | Reactivate | `gps_zone.reactivate` | `{ from: "inactive", to: "active" }` |
+
+- **`{id}`** is the zone's id, a UUID. Upper- or lower-case letters are both accepted.
+
+### The boundary
+
+A boundary is a JSON array of corners, listed in order around the edge (either direction).
+Each corner is **`[latitude, longitude]`, latitude first**. GeoJSON and many map tools write
+`[longitude, latitude]`, so swap the two before sending such corners. In Google Maps,
+right-clicking a spot shows "lat, lng" in the right order.
+
+- **3 to 100 corners.**
+- Each value is a **JSON number** (not a string), latitude between −90 and 90, longitude
+  between −180 and 180, with **at most 6 decimal places**. More places are refused, not
+  rounded.
+- **Do not close the ring.** The edge from the last corner back to the first is implied, so
+  do not repeat the first corner at the end, as GeoJSON does.
+
+The shape is then checked. These rules run only once every corner is valid, so a bad corner
+is reported on its own first:
+
+| Rule | Field | Message |
+|---|---|---|
+| No corner repeats the one before it | that corner | repeats the corner before it; list each corner once |
+| The last corner is not the first one again | the last corner | repeats the first corner; list each corner once, without repeating the first corner at the end |
+| At least 3 different corners | `boundary` | must have at least 3 different corners |
+| Every corner is inside a rough box around Zambia (latitude −18.5 to −8.0, longitude 21.5 to 34.0). Only the first corner outside it is reported. This mainly catches corners sent as `[longitude, latitude]` | the first corner outside | is outside Zambia; each corner must be [latitude, longitude], latitude first (in Zambia, latitude is about -8 to -18 and longitude about 22 to 34) |
+| The shape encloses at least 100 square metres | `boundary` | must enclose at least 100 square metres; check that the corners are not all on one line |
+| The shape fits within 50 km from north to south and from east to west | `boundary` | must fit within 50 km from north to south and from east to west |
+
+**Field paths.** A problem with one corner names it by its position, counting from 0:
+`boundary.3` is the fourth corner, and `boundary.1.0` is the latitude of the second corner.
+A problem with the shape as a whole is named `boundary`. For example, a closed triangle
+(4 corners, the last repeating the first):
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_FAILED",
+    "message": "Some fields are missing or invalid.",
+    "details": [
+      {
+        "field": "boundary.3",
+        "message": "repeats the first corner; list each corner once, without repeating the first corner at the end"
+      }
+    ]
+  }
+}
+```
+
+**Not checked:** edges that cross each other (a "bow-tie"), holes, zones made of several
+polygons, and zones that overlap. Two overlapping active zones are allowed; a point in both
+is matched to one of them by a fixed rule.
+
+### The zone view
+
+All five endpoints return zones in this form.
+
+| Field | Meaning |
+|---|---|
+| `id` | The zone's id |
+| `name` | The zone's name, as shown in reports and alerts |
+| `licenceNumber` | The licence the zone belongs to; `null` if none was given |
+| `status` | `active` (registrations are checked against it) or `inactive` |
+| `boundary` | The corners, as `[latitude, longitude]` pairs, exactly as created |
+| `createdBy` | The id of the administrator who created the zone |
+| `createdAt`, `updatedAt` | When the zone was created, and when it last changed (a rename or a status change) |
+
+### Replacing a zone
+
+A boundary cannot be edited, so a corrected or changed licence area is a new zone. Because
+names stay taken by inactive zones, the old zone is renamed first:
+
+1. [Rename](#post-adminzonesidrename) the old zone, for example to
+   `Kasempa North (until Nov 2026)`.
+2. [Create](#post-adminzones) the new zone with the original name.
+3. [Deactivate](#post-adminzonesiddeactivate) the old zone.
+
+A zone is active at every moment, so no registration is flagged during the change. For a
+moment both zones are active, which is harmless. The same flow corrects a wrong licence
+number.
+
+### No active zones left
+
+Deactivating the last active zone is allowed: a revoked licence must be able to go. The
+response is still **200**, and carries a warning:
+
+```json
+{
+  "code": "NO_ACTIVE_ZONES",
+  "message": "No GPS zone is active now, so every new registration will be flagged as outside a licensed zone until a zone is created or reactivated."
+}
+```
+
+The app should show it to the administrator. While no zone is active, every registration is
+stored as flagged (`GPS_ZONE`). A warning is never missed, even when two administrators
+deactivate the last two zones at the same moment: the second waits for the first, and
+exactly one of them is warned. It can rarely be a false alarm, if another administrator
+reactivates a zone at that same moment; listing the active zones shows the real state.
+
+**Errors these endpoints can return**, on top of the [token errors](#authentication):
+
+| Status | Code | When | Message |
+|---|---|---|---|
+| 400 | `VALIDATION_FAILED` | `{id}` is not a UUID; a name, licence number, boundary or reason breaks a rule above; a body or query has a field it should not (for example `boundary` sent to rename). Each problem is named by its field path, such as `boundary.3` | Some fields are missing or invalid. |
+| 403 | `FORBIDDEN` | Logged in and active, but not an administrator | You do not have permission to do this. |
+| 404 | `ZONE_NOT_FOUND` | No zone has this id | No GPS zone has this id. |
+| 409 | `ZONE_NAME_TAKEN` | Another zone, active or inactive, already has this name in any letter case | A GPS zone with this name already exists. Names are compared ignoring letter case and include inactive zones. Choose another name, or rename the other zone first. |
+| 409 | `INVALID_STATUS_TRANSITION` | Deactivating a zone that is already inactive, or reactivating one that is already active | Only an active zone can be deactivated. This zone is inactive. (The wording names the action and the actual status.) |
+| 500 | `INTERNAL_ERROR` | Unexpected server fault | Something went wrong |
+
+---
+
+## GET /admin/zones
+
+Lists zones with one status, by name, ignoring letter case. With no query it lists the
+first page of active zones: the ones registrations are checked against.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | None yet |
+| **Request body** | None |
+
+**Query parameters**
+
+| Parameter | Default | Rules |
+|---|---|---|
+| `status` | `active` | `active` or `inactive` |
+| `limit` | `20` | Whole number, 1 to 100 |
+| `offset` | `0` | Whole number, 0 to 10 000: how many matching zones to skip |
+
+As for [`GET /admin/users`](#get-adminusers), `limit` and `offset` must be plain digits, and
+any other parameter is refused with `VALIDATION_FAILED`.
+
+**200 OK**: `{ "zones": [ … ], "total": 1, "limit": 20, "offset": 0 }`, each zone in
+[the zone view](#the-zone-view). `total` counts every zone with that status, not only this
+page.
+
+**Errors:** `VALIDATION_FAILED` and `FORBIDDEN`.
+
+---
+
+## POST /admin/zones
+
+Creates a zone. It is `active` at once, so the next sync checks registrations against it.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | None yet |
+
+**Request body**
+
+| Field | Type | Required | Rules |
+|---|---|---|---|
+| `name` | string | yes | Surrounding spaces are trimmed. 3–100 characters. Unique ignoring letter case, among active and inactive zones |
+| `licenceNumber` | string | no | Surrounding spaces are trimmed. 1–50 characters. Cannot be changed later |
+| `boundary` | array | yes | See [The boundary](#the-boundary). Cannot be changed later |
+
+Any other field, such as `status` or `createdBy`, is refused. The creator is always the
+administrator who sent the request.
+
+```
+POST /admin/zones
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+Content-Type: application/json
+```
+
+```json
+{
+  "name": "Kasempa North",
+  "licenceNumber": "DEMO-LML-0001",
+  "boundary": [
+    [-13.45, 25.82],
+    [-13.47, 25.86],
+    [-13.49, 25.81]
+  ]
+}
+```
+
+**201 Created**
+
+```json
+{
+  "zone": {
+    "id": "7a1c2d3e-0000-4000-8000-0000000000aa",
+    "name": "Kasempa North",
+    "licenceNumber": "DEMO-LML-0001",
+    "status": "active",
+    "boundary": [
+      [-13.45, 25.82],
+      [-13.47, 25.86],
+      [-13.49, 25.81]
+    ],
+    "createdBy": "3f2b6c1e-0000-4000-8000-0000000000ad",
+    "createdAt": "2026-11-10T09:00:00.000Z",
+    "updatedAt": "2026-11-10T09:00:00.000Z"
+  }
+}
+```
+
+**Errors:** `VALIDATION_FAILED` (with field paths, such as `boundary.3`), `FORBIDDEN` and
+`ZONE_NAME_TAKEN`.
+
+---
+
+## POST /admin/zones/{id}/rename
+
+Renames an active or inactive zone. Only the name changes. Alerts already raised keep the
+name they were raised with.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | None yet |
+
+**Request body**
+
+| Field | Type | Required | Rules |
+|---|---|---|---|
+| `name` | string | yes | As for [create](#post-adminzones) |
+
+`boundary` and `licenceNumber` are refused here, because they cannot change.
+
+```json
+{ "name": "Kasempa North (until Nov 2026)" }
+```
+
+**200 OK**: `{ "zone": { … } }` with the new name.
+
+- **The same name** (exactly the same text) changes nothing and records nothing; the
+  answer is still 200 with the zone.
+- **A change of letter case only**, such as `kasempa north` to `Kasempa North`, is allowed,
+  and recorded.
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `ZONE_NOT_FOUND` and `ZONE_NAME_TAKEN`.
+
+---
+
+## POST /admin/zones/{id}/deactivate
+
+Makes an active zone `inactive`. Registrations synced after this are no longer matched to it.
+Steps already stored keep the zone they were matched to.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | None yet |
+
+**Request body**: `reason`, with the same rules as for
+[rejecting an account](#post-adminusersidreject): 3–500 characters after trimming. The
+reason is kept only in the audit log, permanently; the zone itself has no reason field.
+
+```
+POST /admin/zones/7a1c2d3e-0000-4000-8000-0000000000aa/deactivate
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+Content-Type: application/json
+```
+
+```json
+{ "reason": "Licence revoked" }
+```
+
+**200 OK**: `{ "zone": { … }, "warning": null }`, or, when this was the last active zone,
+the [`NO_ACTIVE_ZONES` warning](#no-active-zones-left):
+
+```json
+{
+  "zone": {
+    "id": "7a1c2d3e-0000-4000-8000-0000000000aa",
+    "name": "Kasempa North",
+    "licenceNumber": "DEMO-LML-0001",
+    "status": "inactive",
+    "boundary": [
+      [-13.45, 25.82],
+      [-13.47, 25.86],
+      [-13.49, 25.81]
+    ],
+    "createdBy": "3f2b6c1e-0000-4000-8000-0000000000ad",
+    "createdAt": "2026-11-10T09:00:00.000Z",
+    "updatedAt": "2026-11-10T11:30:00.000Z"
+  },
+  "warning": {
+    "code": "NO_ACTIVE_ZONES",
+    "message": "No GPS zone is active now, so every new registration will be flagged as outside a licensed zone until a zone is created or reactivated."
+  }
+}
+```
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `ZONE_NOT_FOUND` and
+`INVALID_STATUS_TRANSITION` (the zone is already inactive).
+
+---
+
+## POST /admin/zones/{id}/reactivate
+
+Makes an inactive zone `active` again, with its original boundary. Registrations synced
+after this are checked against it.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | None yet |
+| **Request body** | None, or `{}`. Any field is refused |
+
+**200 OK**: `{ "zone": { … } }` with `"status": "active"`.
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `ZONE_NOT_FOUND` and
+`INVALID_STATUS_TRANSITION` (the zone is already active).
 
 ---
 

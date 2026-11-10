@@ -38,10 +38,10 @@ Rules that shape the design:
 
 Updated 10 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
 
-- **Branch:** `feature/backend-logic`. Latest code commit `fe4abdb` (the `STAGE_NOT_READY`
-  message fix), followed by the Step 9 docs commit (9.5b). `main` has Days 1–3 (PR #4).
-- **Test totals (confirmed, run 10 Nov 21:01):** `npm test` 1353, `npm run test:db` 577,
-  contract 37. The earlier `test:db` 575 (after 9.4) was confirmed 10 Nov 00:03.
+- **Branch:** `feature/backend-logic`. Latest code commit `958fb08` (FR-11 zone routes),
+  followed by the FR-11 docs commit (Z4). `main` has Days 1–3 (PR #4).
+- **Test totals (confirmed, run 10 Nov 23:45):** `npm test` 1465, `npm run test:db` 612,
+  contract 37.
 
 **Done on this branch** (docs updated for all of it):
 
@@ -94,14 +94,30 @@ Updated 10 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
   - `fe4abdb`: the `STAGE_NOT_READY` message names both causes (an earlier step not
     arrived, or waiting for review); the code and outcome are unchanged.
 
+**FR-11, GPS zones API, complete (Z1–Z4)**, with docs (`api.md` "GPS zone management
+(FR-11)", `database-schema.md` gps_zones rules, `decisions.md` "GPS zones (1)–(7)" and their
+known limitations):
+
+- Z1 `aab4def`: `src/services/zoneShape.js` (no repeated or closing corner, at least 3
+  different corners, at least 100 m², at most 50 km each side, `ZAMBIA_BOUNDS` to catch
+  `[lng, lat]` swaps), run by `zoneBoundarySchema` after the corner rules (`.pipe()`), so
+  the seed obeys them too; `src/schemas/gpsZones.js`; `wholeNumber` exported.
+- Z2 `1132b70`: `src/services/zoneService.js` (`list`, `create`, `rename`, `deactivate`,
+  `reactivate`), wired as `services.zones`. Boundary and licence number never updated
+  (a test reads the `UPDATE` statements). Deactivate locks all active zones `ORDER BY id`,
+  counts afterwards and returns `NO_ACTIVE_ZONES` when none is left; two-connection race
+  test with `pg_locks`.
+- Z3 `958fb08`: `src/routes/adminZones.js` and `adminZonesController.js`, mounted at
+  `/admin/zones` behind the `/admin/users` guard. `tests/db/adminZones.test.js` drives
+  create, a matched registration, deactivate with the warning, then a `GPS_ZONE` flag.
+
 **Next, in order:**
 
-1. GPS zones API (FR-11).
-2. CSV reports (FR-09, FR-13).
-3. Officer and admin account creation (FR-10).
-4. Admin anchoring status endpoint with manual reset (Anomaly rules (8)).
-5. Render deploy, then open the PR.
-6. Flutter app.
+1. CSV reports (FR-09, FR-13).
+2. Officer and admin account creation (FR-10).
+3. Admin anchoring status endpoint with manual reset (Anomaly rules (8)).
+4. Render deploy, then open the PR.
+5. Flutter app.
 
 **Working rules that held all weekend:**
 
