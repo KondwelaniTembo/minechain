@@ -10,6 +10,7 @@ import { ChainClientError } from '../../src/chain/chainClient.js';
 import { classifyChainError } from '../../src/chain/chainErrors.js';
 import { DEPLOY_BLOCK } from '../../src/chain/mineChainAbi.js';
 import { createFakeChainClient } from '../fakes/fakeChainClient.js';
+import { freeLock, silentLog } from './realStackHelpers.js';
 
 // The worker against the in-memory chain: every row of the crash table and the error table
 // from the Step 8 plan. Each test builds its own fake chain; the database is the usual
@@ -34,12 +35,6 @@ function testClock() {
   return clock;
 }
 const PAST_GRACE = ANCHOR_GRACE_SECONDS + 1;
-
-// Most tests do not care about the advisory lock (its own test is below), so they get one
-// that is always free.
-const freeLock = async () => ({ acquired: true, isLost: () => false, release: async () => {} });
-
-const silentLog = () => ({ warn: () => {}, error: () => {} });
 
 function setup({ config = CONFIG, fakeOptions } = {}) {
   const fake = createFakeChainClient(fakeOptions);
