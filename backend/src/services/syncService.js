@@ -155,9 +155,14 @@ const INSERT_STEP = `
   ON CONFLICT ON CONSTRAINT transactions_idempotency_key_unique DO NOTHING
   RETURNING id`;
 
+// created_at is clock_timestamp(), for the same reason as received_at above (decisions.md,
+// 9 Nov). The column's default now() is when the transaction started, which is BEFORE the
+// step's own received_at in the same transaction, so the audit trail, which orders events by
+// time, would list the alert before the step it was raised on. The alert is inserted after
+// its step, so its time at INSERT is always the same as or later than the step's.
 const INSERT_ALERT = `
-  INSERT INTO alerts (transaction_id, type, severity, details)
-  VALUES ($1, $2, $3, $4)`;
+  INSERT INTO alerts (transaction_id, type, severity, details, created_at)
+  VALUES ($1, $2, $3, $4, clock_timestamp())`;
 
 // Dependencies are passed in, so DB tests can give a failing audit service.
 //   db:         the app's db object

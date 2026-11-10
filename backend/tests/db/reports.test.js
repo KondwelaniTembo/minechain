@@ -220,6 +220,49 @@ describe('reports through the real stack', () => {
     expect(audits).toEqual([{ actor_id: officer.id, entity_type: 'consignment', entity_id: consignmentId }]);
   });
 
+  it('lists a flagged handoff after its registration, and its alert after the handoff, using the times sync wrote', async () => {
+    const { app, adminToken, officerToken } = await setup();
+    const miner = await loggedInSigner(app, adminToken, 'miner');
+    const transporter = await loggedInSigner(app, adminToken, 'transporter');
+    const qrCode = `MC-TRAIL-${randomUUID()}`;
+
+    const registered = await syncSteps(app, miner, [
+      item(miner, 'registration', qrCode, { weightMg: '1500000', capturedAt: CAPTURED_AT.registration }),
+    ]);
+    expect(registered.body.results[0].outcome).toBe('created');
+    // 20% lighter: twice the 10% the quantity rule allows.
+    const handedOff = await syncSteps(app, transporter, [
+      item(transporter, 'handoff', qrCode, { weightMg: '1200000', capturedAt: CAPTURED_AT.handoff }),
+    ]);
+    expect(handedOff.body.results[0]).toMatchObject({ outcome: 'flagged', code: 'QUANTITY_DISCREPANCY' });
+    const registrationId = registered.body.results[0].transactionId;
+    const handoffId = handedOff.body.results[0].transactionId;
+    const { rows: consignments } = await t.db.query('SELECT id FROM consignments WHERE qr_code = $1', [qrCode]);
+
+    const res = await download(app, officerToken, `/reports/audit-trail?consignmentId=${consignments[0].id}`);
+
+    expect(res.status).toBe(200);
+    const { rows } = parseCsv(res.body);
+    expect(rows.map((r) => [r.event, r.step_id, r.alert_type])).toEqual([
+      ['step_recorded', registrationId, ''],
+      ['step_recorded', handoffId, ''],
+      ['alert_raised', handoffId, 'quantity_discrepancy'],
+    ]);
+
+    // The event times are exactly what sync stored: nothing in this test sets a time.
+    const { rows: stored } = await t.db.query(
+      `SELECT (SELECT received_at FROM transactions WHERE id = $1) AS registration_received,
+              (SELECT received_at FROM transactions WHERE id = $2) AS handoff_received,
+              (SELECT created_at FROM alerts WHERE transaction_id = $2) AS alert_created`,
+      [registrationId, handoffId],
+    );
+    expect(rows.map((r) => r.event_time_utc)).toEqual([
+      stored[0].registration_received.toISOString(),
+      stored[0].handoff_received.toISOString(),
+      stored[0].alert_created.toISOString(),
+    ]);
+  });
+
   it('refuses the audit trail to a buyer through the real stack', async () => {
     const { app, adminToken } = await setup();
     const buyer = await loggedInSigner(app, adminToken, 'buyer');

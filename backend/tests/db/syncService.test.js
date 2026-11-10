@@ -375,6 +375,21 @@ describe('syncSteps: a signature that does not verify', () => {
     ]);
   });
 
+  it("dates the alert no earlier than its own step's received_at", async () => {
+    const { res } = await syncBadSignature();
+
+    // With the column default now() the alert would carry the transaction's start time,
+    // which is before the step's clock_timestamp(), and the audit trail would list the alert
+    // before the step it was raised on.
+    const { rows } = await t.db.query(
+      `SELECT a.created_at >= s.received_at AS in_order
+         FROM alerts a JOIN transactions s ON s.id = a.transaction_id
+        WHERE s.id = $1`,
+      [res.transactionId],
+    );
+    expect(rows).toEqual([{ in_order: true }]);
+  });
+
   it('still creates the consignment, which the open alert holds', async () => {
     const { fields } = await syncBadSignature();
 
