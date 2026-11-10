@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
 import { adminUserRoutes } from './routes/adminUsers.js';
+import { adminZoneRoutes } from './routes/adminZones.js';
 import { syncRoutes } from './routes/sync.js';
 import {
   createRegisterLimiter,
@@ -66,6 +67,10 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   // existing tests that build the app with only users and tokens keep working. If it were
   // ever missing, these routes would fail closed: a logged 500, never an open route.
   app.use('/admin/users', adminUserRoutes({ accounts: services.accounts, requireAuth }));
+
+  // FR-11 licensed GPS zones. Like accounts, services.zones is not in the checks above; if it
+  // were missing, these routes would fail closed with a logged 500.
+  app.use('/admin/zones', adminZoneRoutes({ zones: services.zones, requireAuth }));
 
   // Signed custody steps from the phone's offline queue (FR-03, FR-07). Like accounts,
   // services.sync is not in the checks above; if it were missing, the route would fail
