@@ -30,10 +30,9 @@ const HANDOFF_MG = '1200000';
 const PURCHASE_MG = '1195000';
 
 // The current STAGE_NOT_READY text, copied exactly so a change to it is a deliberate test
-// change. (It is misleading in this case, where the handoff has arrived but is flagged; a
-// separate fix after 9.5.)
+// change.
 const STAGE_NOT_READY_MESSAGE =
-  'An earlier step of this consignment has not reached the server yet. Keep the record and sync again later.';
+  "This consignment is not ready for this step yet. An earlier step has not reached the server, or is waiting for an officer's review. Keep the record and sync again later.";
 
 // The campus zone holds the test coordinates; its id is what every step's zone_id must be.
 let zone;

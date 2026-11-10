@@ -49,7 +49,8 @@ const MESSAGES = Object.freeze({
   NO_DEVICE_KEY: 'This account has no registered device key yet. Register the key, then sync again.',
   STEP_ID_CONFLICT: 'A different record with the same step id was already received.',
   CONSIGNMENT_NOT_FOUND: 'This consignment has not reached the server yet. Keep the record and sync again later.',
-  STAGE_NOT_READY: 'An earlier step of this consignment has not reached the server yet. Keep the record and sync again later.',
+  STAGE_NOT_READY:
+    "This consignment is not ready for this step yet. An earlier step has not reached the server, or is waiting for an officer's review. Keep the record and sync again later.",
   ...FLAGGED_MESSAGES,
 });
 
