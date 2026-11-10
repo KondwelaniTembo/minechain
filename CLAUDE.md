@@ -36,12 +36,12 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 9 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
+Updated 10 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
 
-- **Branch:** `feature/backend-logic`, last code commit `f149839` (the gas-sizing fix after
-  8.8); the 8.9 docs are the next commit. `main` has Days 1–3 (PR #4).
-- **Last test totals the developer ran** (9 Nov, after all Step 8 fixes, both clean):
-  `npm test` 1269, `npm run test:db` 545, contract 37 (with `--gas-stats`).
+- **Branch:** `feature/backend-logic`, HEAD `f81c3ea` (Step 9.4). `main` has Days 1–3 (PR #4).
+- **Last test totals the developer reported:** `npm test` 1353 and `npm run test:db` 565
+  (after 9.3), contract 37. Since then 9.4 added about 10 DB tests (expected
+  `test:db` ≈ 575); confirm with a run.
 
 **Done on this branch** (docs updated for all of it):
 
@@ -64,14 +64,38 @@ Updated 9 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
   - migration `transactions-anchor-nonce`; sync's `received_at = clock_timestamp()` fix;
   - tests use `tests/fakes/fakeChainClient.js`; no test touches Sepolia.
 
+**Step 9, anomaly rules (FR-08), in progress** (code done for 9.1–9.4; docs not yet):
+
+- 9.1 `src/services/zoneMatch.js`: point-in-polygon on `[lat, lng]`, nearest-edge distance
+  (local equirectangular projection; floats allowed here, nothing derived is signed),
+  25 m tolerance, deterministic zone choice.
+- 9.2 `anomalyChecks.js`: `checkDuplicate` (high), `checkHandoffOrder` (handoff after
+  purchase medium, second purchase high), `checkQuantity` (medium; more than 10% off the
+  previous accepted step OR the accepted registration, BigInt, no division),
+  `checkGpsZone` (medium; registrations only; flags all when no zone is active). A check
+  whose context is absent (`undefined`) returns null. Code = most severe finding, ties by
+  check order; `FLAGGED_MESSAGES` for every sync-time code.
+- 9.3 `syncService.js`: context gathered under the consignment lock; zones read once per
+  sync call; `zone_id` set for every step; a duplicate QR code and a step after purchase
+  are stored flagged (codes `QR_CODE_ALREADY_REGISTERED` and `CONSIGNMENT_CLOSED` are
+  gone); purchase at `registered` is still deferred. DB tests give syncing tests an active
+  campus zone (`insertCampusZone`); `tests/db/anomalyRules.test.js` covers each rule.
+- 9.4 `anchorQueue.js`: a flagged duplicate of an accepted registration neither holds the
+  consignment (ALL its alerts are excused) nor blocks the ordering gate;
+  `isConsignmentHeld()` exposes the same rule. Alerts on any other step still hold.
+
 **Next, in order:**
 
-1. Step 9, the five anomaly rules. Plan first: turn `QR_CODE_ALREADY_REGISTERED` and
-   `CONSIGNMENT_CLOSED` into flagged steps with alerts, add a `MESSAGES` entry for every
-   new flagged code, set `zone_id`. Decide there whether anchoring failures raise an alert
-   (they are only logged now).
+1. 9.5: one real-stack chain test with a flagged step (HTTP, real signatures), then the
+   Step 9 docs: `api.md` (sync codes and messages), `database-schema.md` (`zone_id`, alert
+   details per type, the hold exception), `decisions.md` (thresholds, two quantity
+   baselines, GPS registrations-only with 25 m tolerance and any active zone, duplicate hold
+   exception and its trade-off, handoff-order severities and the late-relay limit, most-
+   severe code, no "moved while held" rule, anchoring failures not alerts, "no GPS fix" note
+   for the app, licence-linked zones as future work), then this status.
 2. GPS zones API (FR-11).
-3. Then: CSV reports, officer and admin account creation, Render deploy, open the PR.
+3. Then: an admin anchoring status endpoint with manual reset, CSV reports, officer and
+   admin account creation, Render deploy, open the PR.
 
 **Working rules that held all weekend:**
 
