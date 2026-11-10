@@ -150,16 +150,31 @@ describe('transactions report: rows and columns', () => {
     expect(rows[0]).toMatchObject({ zone_name: null, zone_licence_number: null });
   });
 
-  it('orders by capture time, then by id for steps captured at the same instant', async () => {
+  it('orders by capture time, then by received time when capture times are equal, not by id', async () => {
     const officer = await requester('officer');
     const late = await step({ capturedAt: '2026-11-10T10:00:00.000Z' });
-    const sameA = await step({ capturedAt: '2026-11-10T09:00:00.000Z' });
-    const sameB = await step({ capturedAt: '2026-11-10T09:00:00.000Z' });
+    const one = await step({ capturedAt: '2026-11-10T09:00:00.000Z' });
+    const two = await step({ capturedAt: '2026-11-10T09:00:00.000Z' });
+    // uuids compare byte by byte, which is the same as comparing their lower-case text.
+    const [lowerId, higherId] = [one, two].sort((a, b) => (a.id < b.id ? -1 : 1));
+    // Received in the OPPOSITE order to their ids, so ordering by id would give the wrong
+    // answer and only received_at gives the right one.
+    await t.db.query('UPDATE transactions SET received_at = $1 WHERE id = $2', [at('2026-11-10T09:05:00.000Z'), higherId.id]);
+    await t.db.query('UPDATE transactions SET received_at = $1 WHERE id = $2', [at('2026-11-10T09:06:00.000Z'), lowerId.id]);
 
     const { rows } = await reports().transactions(NOV_10, officer);
 
-    // uuids compare byte by byte, which is the same as comparing their lower-case text.
-    expect(ids(rows)).toEqual([...[sameA.id, sameB.id].sort(), late.id]);
+    expect(ids(rows)).toEqual([higherId.id, lowerId.id, late.id]);
+  });
+
+  it('falls back to id when both the capture and the received times are equal', async () => {
+    const officer = await requester('officer');
+    const sameA = await step({ capturedAt: '2026-11-10T09:00:00.000Z', receivedAt: '2026-11-10T09:05:00.000Z' });
+    const sameB = await step({ capturedAt: '2026-11-10T09:00:00.000Z', receivedAt: '2026-11-10T09:05:00.000Z' });
+
+    const { rows } = await reports().transactions(NOV_10, officer);
+
+    expect(ids(rows)).toEqual([sameA.id, sameB.id].sort());
   });
 
   it('returns no rows, and still records the export, when nothing matches', async () => {

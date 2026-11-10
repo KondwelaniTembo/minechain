@@ -47,8 +47,11 @@ const ACCEPTED = "('passed', 'cleared')";
 
 // ---------- transactions report (FR-09) ----------
 
-// One row per custody step, in the order the steps were recorded (captured_at, then id so
-// two steps at the same instant always come out in the same order).
+// One row per custody step, in the order the steps were recorded: by captured_at, the
+// phone's time. Equal capture times happen (phone clocks set by hand, two steps in the same
+// millisecond), and then received_at decides, which follows custody order since sync sets it
+// with clock_timestamp() (decisions log, 9 Nov). id, a random uuid, is only the last resort,
+// so the order is still fixed when both times are equal.
 //   $1, $2  captured_at range [start, endExclusive), from utcDayRange
 //   $3..$8  optional filters: mineral, actor, zone, step type, review status, anchor status
 //   $9      the buyer's id for the buyer limit, or NULL for officers and admins
@@ -99,7 +102,7 @@ const TRANSACTIONS_REPORT = `
                           AND p.type = 'purchase'
                           AND p.actor_id = $9
                           AND p.review_status IN ${ACCEPTED})))
-   ORDER BY t.captured_at, t.id
+   ORDER BY t.captured_at, t.received_at, t.id
    LIMIT $10`;
 
 // The file's columns, in order. key is the property each row carries (the same name).
