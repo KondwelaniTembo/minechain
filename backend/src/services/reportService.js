@@ -39,6 +39,11 @@ export const ACCOUNT_EVENT_ACTIONS = Object.freeze([
   'user.reactivate',
   'user.key_register',
   'user.key_reset',
+  // FR-10 account creation: a new activation code, the activation itself, and a password
+  // change. Their failed attempts are left out, like failed logins.
+  'user.activation_reissue',
+  'user.activate',
+  'user.password_change',
 ]);
 
 // Steps a buyer may see: accepted ones only (passed, cleared). Flagged and rejected steps

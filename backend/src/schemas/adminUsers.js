@@ -1,7 +1,13 @@
 import { z } from 'zod';
+import { usernameSchema, fullNameSchema } from './auth.js';
 
-// The four statuses, exactly as the users_status_valid CHECK in the users migration allows.
-export const ACCOUNT_STATUSES = Object.freeze(['pending', 'active', 'suspended', 'rejected']);
+// The five statuses, exactly as the users_status_valid CHECK allows since the
+// users-activation migration. 'invited': created by an administrator, not activated yet.
+export const ACCOUNT_STATUSES = Object.freeze(['pending', 'active', 'suspended', 'rejected', 'invited']);
+
+// The roles an administrator creates (FR-10). Miners, transporters and buyers request their
+// own accounts (FR-12, SELF_REGISTER_ROLES), so they are never created here.
+export const CREATABLE_ROLES = Object.freeze(['officer', 'admin']);
 
 export const LIST_LIMIT_DEFAULT = 20;
 // One page stays small however many users exist (NFR-05 plans for 500 or more).
@@ -41,7 +47,7 @@ export function wholeNumber({ min, max, defaultValue }) {
 // which is what an admin opens the screen to do (FR-12).
 export const listUsersQuerySchema = z
   .object({
-    status: z.enum(ACCOUNT_STATUSES, { error: 'must be pending, active, suspended or rejected' }).default('pending'),
+    status: z.enum(ACCOUNT_STATUSES, { error: 'must be pending, active, suspended, rejected or invited' }).default('pending'),
     limit: wholeNumber({ min: 1, max: LIST_LIMIT_MAX, defaultValue: LIST_LIMIT_DEFAULT }),
     offset: wholeNumber({ min: 0, max: LIST_OFFSET_MAX, defaultValue: 0 }),
   })
@@ -59,6 +65,18 @@ export const reasonBodySchema = z
       .trim()
       .min(REASON_MIN_LENGTH, `must be at least ${REASON_MIN_LENGTH} characters`)
       .max(REASON_MAX_LENGTH, `must be at most ${REASON_MAX_LENGTH} characters`),
+  })
+  .strict();
+
+// POST /admin/users: an administrator creates an officer or administrator account (FR-10).
+// The same username and full-name rules as registration. No password: the person chooses
+// their own with the activation code. No licence number: officers and administrators hold
+// none. .strict(): a stray field such as status or password is refused, not ignored.
+export const createUserBodySchema = z
+  .object({
+    username: usernameSchema,
+    fullName: fullNameSchema,
+    role: z.enum(CREATABLE_ROLES, { error: 'must be officer or admin' }),
   })
   .strict();
 

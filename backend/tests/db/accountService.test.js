@@ -16,6 +16,7 @@ const IP = '203.0.113.7';
 const ADMIN_KEYS = [
   'id', 'username', 'fullName', 'licenceNumber', 'role', 'status', 'statusReason',
   'approvedBy', 'approvedAt', 'createdAt', 'updatedAt', 'publicKeyFingerprint',
+  'activationExpiresAt',
 ].sort();
 
 const activeAdmin = (overrides = {}) => insertUser(t.db, { role: 'admin', status: 'active', ...overrides });

@@ -1,13 +1,24 @@
+import { randomBytes } from 'node:crypto';
 import { AppError } from '../errors.js';
 import { SELF_REGISTER_ROLES } from '../schemas/auth.js';
+import { CREATABLE_ROLES } from '../schemas/adminUsers.js';
 import { spkiFingerprint } from './signatureService.js';
+import { generate as generateCode, hash as hashCode } from './activationCode.js';
+
+// How long an activation code works. Long enough for an administrator to hand it over in
+// person or by phone and for the officer to find a signal, short enough that a code written
+// on paper does not stay useful for long. The time is worked out in SQL from
+// clock_timestamp(), so it never depends on the app server's clock.
+export const ACTIVATION_TTL_HOURS = 72;
 
 // The columns an administrator may see, written out once. A fixed constant placed into
 // fixed statements, never anything from a request, so no input can become SQL. It leaves
-// out password_hash and actor_ref (the on-chain identity) on purpose. public_key is
-// selected only so toAdminUser can show its fingerprint; the raw key is never returned.
+// out password_hash, actor_ref (the on-chain identity) and activation_code_hash on purpose.
+// public_key is selected only so toAdminUser can show its fingerprint; the raw key is never
+// returned. activation_expires_at is safe to show: it is a time, not a secret.
 const ADMIN_COLUMNS = `id, username, full_name, licence_number, role, status, status_reason,
-                       approved_by, approved_at, created_at, updated_at, public_key`;
+                       approved_by, approved_at, created_at, updated_at, public_key,
+                       activation_expires_at`;
 
 const LIST_USERS = `
   SELECT ${ADMIN_COLUMNS}
@@ -66,6 +77,31 @@ const LOCK_ACTIVE_ADMINS = `
 
 const SELECT_STATE = 'SELECT role, status FROM users WHERE id = $1';
 
+// A new officer or administrator account, waiting for its owner to activate it. status and
+// the empty password hash are written into the SQL, not taken from input, so this statement
+// can only ever create an invited account. approved_by stays NULL: nobody approved a request,
+// and the user.create audit entry records who created the account. actor_ref is random, as
+// at registration, because it is the user's on-chain identity.
+const INSERT_INVITED = `
+  INSERT INTO users (username, full_name, role, status, password_hash, actor_ref,
+                     activation_code_hash, activation_expires_at)
+  VALUES ($1, $2, $3, 'invited', NULL, $4, $5, clock_timestamp() + make_interval(hours => $6::int))
+  RETURNING ${ADMIN_COLUMNS}`;
+
+// A new code for an invited account. The old hash is overwritten, so the old code stops
+// working at once; the attempt counter starts again. The status in the WHERE makes the check
+// and the change one step, as for the other actions.
+const REISSUE_ACTIVATION = `
+  UPDATE users
+     SET activation_code_hash = $2,
+         activation_expires_at = clock_timestamp() + make_interval(hours => $3::int),
+         activation_failed_attempts = 0
+   WHERE id = $1 AND status = 'invited'
+  RETURNING ${ADMIN_COLUMNS}`;
+
+const UNIQUE_VIOLATION = '23505';
+const USERNAME_CONSTRAINT = 'users_username_lower_key';
+
 // Key reset reads before it writes, unlike the four actions above: the audit entry must name
 // the key being removed, and an UPDATE's RETURNING gives only the new value (NULL). FOR UPDATE
 // locks the row until the transaction ends, so nothing can change status or key between this
@@ -104,6 +140,10 @@ function toAdminUser(row) {
     // Lets an administrator see whether the account has a device key before resetting it,
     // and compare it with the fingerprint the user's phone shows.
     publicKeyFingerprint: row.public_key ? spkiFingerprint(row.public_key) : null,
+    // When the current activation code stops working, for an invited account that has one;
+    // null otherwise (the database allows a code only while the account is invited). A time
+    // in the past means the code has expired and a new one is needed.
+    activationExpiresAt: row.activation_expires_at,
   };
 }
 
@@ -281,6 +321,89 @@ export function createAccountService({ db, audit }) {
           ipAddress,
         });
         return toAdminUser(updated[0]);
+      });
+    },
+
+    // Creates an officer or administrator account (FR-10), invited until its owner activates
+    // it with the code. input has already passed createUserBodySchema; the role is checked
+    // again here, so no caller can create a miner, transporter or buyer this way. Any active
+    // administrator may create another administrator (a known limitation; it is audited).
+    //
+    // Returns { user, activation: { code, expiresAt } }. This is the ONLY place the code
+    // ever appears: only its hash is stored, and the audit entry never holds it.
+    async createAccount({ username, fullName, role, actorId, ipAddress = null }) {
+      if (!CREATABLE_ROLES.includes(role)) {
+        throw new AppError(
+          400,
+          'ROLE_NOT_CREATABLE',
+          'Only officer and administrator accounts are created by an administrator. Miners, transporters and buyers register themselves.',
+        );
+      }
+
+      const { code, display } = generateCode();
+      try {
+        return await db.transaction(async (tx) => {
+          const { rows } = await tx.query(INSERT_INVITED, [
+            username,
+            fullName,
+            role,
+            randomBytes(32),
+            hashCode(code),
+            ACTIVATION_TTL_HOURS,
+          ]);
+          const user = toAdminUser(rows[0]);
+          await audit.record(tx, {
+            action: 'user.create',
+            actorId,
+            entityType: 'user',
+            entityId: user.id,
+            // source tells these apart from the seed's user.create entries.
+            details: { source: 'admin', role, activationExpiresAt: user.activationExpiresAt },
+            ipAddress,
+          });
+          return { user, activation: { code: display, expiresAt: user.activationExpiresAt } };
+        });
+      } catch (err) {
+        // The unique index decides, as at registration, so two admins choosing the same
+        // username at once cannot both succeed. It covers every account in any letter case,
+        // including invited, pending and rejected ones.
+        if (err.code === UNIQUE_VIOLATION && err.constraint === USERNAME_CONSTRAINT) {
+          throw new AppError(409, 'USERNAME_TAKEN', 'That username is already taken. Please choose another.');
+        }
+        throw err;
+      }
+    },
+
+    // A new activation code for an invited account: the code was lost, it expired, or it
+    // was erased after too many wrong attempts. The old code stops working at once, so this
+    // is also how a mistaken invitation is revoked: reissue, and do not pass the new code
+    // on. Returns { user, activation: { code, expiresAt } }, the only place the new code
+    // appears.
+    reissueActivation({ userId, actorId, ipAddress = null }) {
+      const id = normalizeId(userId);
+      const { code, display } = generateCode();
+      return db.transaction(async (tx) => {
+        const { rows } = await tx.query(REISSUE_ACTIVATION, [id, hashCode(code), ACTIVATION_TTL_HOURS]);
+        if (rows.length === 0) {
+          const { rows: found } = await tx.query(SELECT_STATE, [id]);
+          if (found.length === 0) throw userNotFound();
+          throw new AppError(
+            409,
+            'INVALID_STATUS_TRANSITION',
+            `Only an invited account can get a new activation code. This account is ${found[0].status}.`,
+          );
+        }
+
+        const user = toAdminUser(rows[0]);
+        await audit.record(tx, {
+          action: 'user.activation_reissue',
+          actorId,
+          entityType: 'user',
+          entityId: id,
+          details: { activationExpiresAt: user.activationExpiresAt },
+          ipAddress,
+        });
+        return { user, activation: { code: display, expiresAt: user.activationExpiresAt } };
       });
     },
 

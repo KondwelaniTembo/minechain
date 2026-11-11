@@ -16,6 +16,10 @@ export const usernameSchema = z
   .max(32, 'must be at most 32 characters')
   .regex(/^[A-Za-z0-9_.-]+$/, 'may only use letters, digits, and _ . -');
 
+// A person's full name, as registration and admin account creation both take it. Exported
+// for the same reason as usernameSchema: one rule, never a copy.
+export const fullNameSchema = z.string().trim().min(1, 'is required').max(100, 'must be at most 100 characters');
+
 // Shape checks only. The password policy runs in userService.register, so a weak password
 // always gets WEAK_PASSWORD with the policy's codes, wherever the request came from.
 // .strict(): any other field, such as status or id, is refused. New accounts are always
@@ -23,7 +27,7 @@ export const usernameSchema = z
 export const registerSchema = z
   .object({
     username: usernameSchema,
-    fullName: z.string().trim().min(1, 'is required').max(100, 'must be at most 100 characters'),
+    fullName: fullNameSchema,
     // Not trimmed: spaces are a legitimate part of a passphrase.
     password: z.string().min(1, 'is required'),
     role: z.enum(SELF_REGISTER_ROLES, { error: 'must be miner, transporter or buyer' }),

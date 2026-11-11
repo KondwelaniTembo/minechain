@@ -506,6 +506,7 @@ describe('userService.getAuthenticatedUser', () => {
     ['pending', 'ACCOUNT_PENDING'],
     ['suspended', 'ACCOUNT_SUSPENDED'],
     ['rejected', 'ACCOUNT_REJECTED'],
+    ['invited', 'ACCOUNT_NOT_ACTIVATED'],
     ['archived', 'ACCOUNT_NOT_ACTIVE'],
   ])('refuses a %s account with 403 %s, the same answer as at login', async (status, code) => {
     const { service } = setupLookup([{ ...dbRow, status }]);

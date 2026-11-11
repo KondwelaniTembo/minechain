@@ -4,6 +4,7 @@ import {
   listUsersQuerySchema,
   reasonBodySchema,
   emptyBodySchema,
+  createUserBodySchema,
   LIST_LIMIT_DEFAULT,
   LIST_LIMIT_MAX,
   LIST_OFFSET_MAX,
@@ -50,7 +51,7 @@ describe('listUsersQuerySchema', () => {
       expect(listUsersQuerySchema.parse({})).toEqual({ status: 'pending', limit: LIST_LIMIT_DEFAULT, offset: 0 });
     });
 
-    it.each(['pending', 'active', 'suspended', 'rejected'])('the status %s', (status) => {
+    it.each(['pending', 'active', 'suspended', 'rejected', 'invited'])('the status %s', (status) => {
       expect(listUsersQuerySchema.parse({ status }).status).toBe(status);
     });
 
@@ -70,8 +71,8 @@ describe('listUsersQuerySchema', () => {
 
   describe('refuses', () => {
     it.each([
-      ['an unknown status', { status: 'deleted' }, 'status', 'must be pending, active, suspended or rejected'],
-      ['a status in capitals', { status: 'PENDING' }, 'status', 'must be pending, active, suspended or rejected'],
+      ['an unknown status', { status: 'deleted' }, 'status', 'must be pending, active, suspended, rejected or invited'],
+      ['a status in capitals', { status: 'PENDING' }, 'status', 'must be pending, active, suspended, rejected or invited'],
       ['limit 0', { limit: '0' }, 'limit', 'must be at least 1'],
       ['a limit over the cap', { limit: String(LIST_LIMIT_MAX + 1) }, 'limit', `must be at most ${LIST_LIMIT_MAX}`],
       ['an offset over the cap', { offset: String(LIST_OFFSET_MAX + 1) }, 'offset', `must be at most ${LIST_OFFSET_MAX}`],
@@ -146,6 +147,41 @@ describe('reasonBodySchema', () => {
     ])('the extra field %s', (field, extra) => {
       expect(failedFields(reasonBodySchema, { reason: 'Under investigation', ...extra })).toEqual([field]);
     });
+  });
+});
+
+describe('createUserBodySchema', () => {
+  it.each(['officer', 'admin'])('accepts a %s, trimming the username and full name', (role) => {
+    expect(createUserBodySchema.parse({ username: ' chanda_mwale ', fullName: ' Chanda Mwale ', role })).toEqual({
+      username: 'chanda_mwale',
+      fullName: 'Chanda Mwale',
+      role,
+    });
+  });
+
+  it.each(['miner', 'transporter', 'buyer', 'superuser'])('refuses the role %s', (role) => {
+    expect(messages(createUserBodySchema, { username: 'chanda_mwale', fullName: 'Chanda Mwale', role })).toEqual([
+      'must be officer or admin',
+    ]);
+  });
+
+  it.each([
+    ['a username with a space', { username: 'chanda mwale' }, ['username']],
+    ['a username of 2 characters', { username: 'cm' }, ['username']],
+    ['a blank full name', { fullName: '   ' }, ['fullName']],
+    ['no role', { role: undefined }, ['role']],
+  ])('refuses %s, with the registration rules', (_label, change, fields) => {
+    const body = { username: 'chanda_mwale', fullName: 'Chanda Mwale', role: 'officer', ...change };
+
+    expect(failedFields(createUserBodySchema, body)).toEqual(fields);
+  });
+
+  it.each([
+    ['password', { password: 'gold river kasempa' }],
+    ['status', { status: 'active' }],
+    ['licenceNumber', { licenceNumber: 'DEMO-1' }],
+  ])('refuses the extra field %s', (field, extra) => {
+    expect(failedFields(createUserBodySchema, { username: 'chanda_mwale', fullName: 'Chanda Mwale', role: 'officer', ...extra })).toEqual([field]);
   });
 });
 

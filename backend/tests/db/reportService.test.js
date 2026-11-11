@@ -557,6 +557,9 @@ describe('audit trail: one actor', () => {
       'user.reactivate',
       'user.key_register',
       'user.key_reset',
+      'user.activation_reissue',
+      'user.activate',
+      'user.password_change',
     ]);
   });
 

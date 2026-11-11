@@ -161,6 +161,17 @@ export function createUserService({ db, passwords, passwordPolicy, audit, tokens
         throw invalidCredentials();
       }
 
+      // An invited account (FR-10) has no password yet: there is nothing to verify, and
+      // passing NULL to Argon2 would throw. It is answered exactly like an unknown username:
+      // the same Argon2 work and the same 401, so neither the time taken nor the answer tells
+      // anyone that the username exists or is waiting for activation. Only the audit entry,
+      // which no client sees, says why.
+      if (user.password_hash === null) {
+        await passwords.verifyDummy(password);
+        await recordFailedLogin('account_invited', { userId: user.id, ipAddress });
+        throw invalidCredentials();
+      }
+
       if (!(await passwords.verify(user.password_hash, password))) {
         await recordFailedLogin('wrong_password', { userId: user.id, ipAddress });
         throw invalidCredentials();
