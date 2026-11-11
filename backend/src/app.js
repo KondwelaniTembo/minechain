@@ -10,6 +10,7 @@ import {
   createRegisterLimiter,
   createLoginIpLimiter,
   createLoginUsernameLimiter,
+  createActivationLimiter,
   createSyncLimiter,
   createReportLimiter,
 } from './middleware/rateLimits.js';
@@ -21,8 +22,8 @@ import { errorHandler } from './middleware/errorHandler.js';
 // listens on a port. Tests pass fakes and hand the app straight to Supertest.
 //
 //   trustProxyHops: how many proxies sit in front of the app (config TRUST_PROXY)
-//   rateLimits:     { registerPerHour, loginPerIp, loginPerUsername, syncPerUser, reportsPerUser } to
-//                   override the limits, for tests
+//   rateLimits:     { registerPerHour, loginPerIp, loginPerUsername, activationPerIp, syncPerUser,
+//                   reportsPerUser } to override the limits, for tests
 export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } = {}) {
   if (!db || typeof db.query !== 'function') {
     throw new TypeError('createApp needs a db object with a query() method');
@@ -58,13 +59,17 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   const registerLimiter = createRegisterLimiter({ limit: rateLimits.registerPerHour });
   const loginIpLimiter = createLoginIpLimiter({ limit: rateLimits.loginPerIp });
   const loginUsernameLimiter = createLoginUsernameLimiter({ limit: rateLimits.loginPerUsername });
+  const activationLimiter = createActivationLimiter({ limit: rateLimits.activationPerIp });
   const syncLimiter = createSyncLimiter({ limit: rateLimits.syncPerUser });
   const reportLimiter = createReportLimiter({ limit: rateLimits.reportsPerUser });
 
   app.use('/health', healthRoutes({ db }));
   const requireAuth = createRequireAuth({ tokens: services.tokens, users: services.users });
 
-  app.use('/auth', authRoutes({ users: services.users, registerLimiter, loginIpLimiter, loginUsernameLimiter, requireAuth }));
+  app.use(
+    '/auth',
+    authRoutes({ users: services.users, registerLimiter, loginIpLimiter, loginUsernameLimiter, activationLimiter, requireAuth }),
+  );
 
   // FR-10 and FR-12 account management. services.accounts is not in the checks above, so
   // existing tests that build the app with only users and tokens keep working. If it were

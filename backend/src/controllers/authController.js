@@ -26,6 +26,16 @@ export function createAuthController({ users }) {
       res.status(200).json({ token, tokenType: 'Bearer', expiresIn, user });
     },
 
+    // By the time this runs, noStore, the activation limiter and validate(activateBodySchema)
+    // have passed. The answer has the same shape as a login's, so the app treats both alike.
+    // A 400 WEAK_PASSWORD or 401 ACTIVATION_INVALID goes to errorHandler unchanged.
+    async activate(req, res) {
+      const { username, code, password } = req.validated.body;
+      const { user, token, expiresIn } = await users.activate({ username, code, password, ipAddress: req.ip });
+
+      res.status(200).json({ token, tokenType: 'Bearer', expiresIn, user });
+    },
+
     // requireAuth has already checked the token and loaded the current user.
     me(req, res) {
       // Personal details: no cache may keep a copy.

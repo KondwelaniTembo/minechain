@@ -3,13 +3,13 @@ import { createAuthController } from '../controllers/authController.js';
 import { validate } from '../middleware/validate.js';
 import { requireRole } from '../middleware/requireRole.js';
 import { noStore } from '../middleware/noStore.js';
-import { registerSchema, loginSchema, publicKeyBodySchema } from '../schemas/auth.js';
+import { registerSchema, loginSchema, publicKeyBodySchema, activateBodySchema } from '../schemas/auth.js';
 import { SIGNING_ROLES } from '../roles.js';
 
-// /register and /login are public: nobody has a token yet. /me needs one.
+// /register, /login and /activate are public: nobody has a token yet. /me needs one.
 // The limiters and requireAuth are made by createApp and passed in, so each app instance
 // has its own counters.
-export function authRoutes({ users, registerLimiter, loginIpLimiter, loginUsernameLimiter, requireAuth }) {
+export function authRoutes({ users, registerLimiter, loginIpLimiter, loginUsernameLimiter, activationLimiter, requireAuth }) {
   const router = Router();
   const controller = createAuthController({ users });
 
@@ -20,6 +20,12 @@ export function authRoutes({ users, registerLimiter, loginIpLimiter, loginUserna
   // The IP limiter runs first, so even malformed requests count against the network. The
   // username limiter runs after validate, because its key needs the cleaned-up username.
   router.post('/login', loginIpLimiter, validate(loginSchema), loginUsernameLimiter, controller.login);
+
+  // An officer or administrator created by an administrator (FR-10) sets their password with
+  // the activation code, and gets a token as at login. no-store first, so every answer,
+  // including a 429 or 400, carries it: the success holds a token. The limiter before
+  // validation, so malformed requests count too.
+  router.post('/activate', noStore, activationLimiter, validate(activateBodySchema), controller.activate);
 
   router.get('/me', requireAuth, controller.me);
 

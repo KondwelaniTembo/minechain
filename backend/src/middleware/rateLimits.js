@@ -5,7 +5,7 @@ import { AppError } from '../errors.js';
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 
-// DEV-SHORTCUT: in-memory rate-limit stores (register, login IP, login username, sync and reports) | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
+// DEV-SHORTCUT: in-memory rate-limit stores (register, login IP, login username, activation, sync and reports) | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
 //
 // Shared settings for every limiter. Each limiter is made by a function rather than created
 // once at import, so each createApp call, and so each test, gets its own counter.
@@ -47,6 +47,19 @@ export function createLoginIpLimiter({ limit = 100, windowMs = FIFTEEN_MINUTES_M
     limit,
     windowMs,
     message: 'Too many login attempts from this network. Please try again later.',
+  });
+}
+
+// Activation attempts per client IP (POST /auth/activate), counting everything. Each code
+// already allows only 5 wrong guesses; this stops one source working through many invited
+// usernames. 30 per 15 minutes, not lower, for the carrier-grade NAT reason above, and
+// because a real person needs only one or two tries. No per-username limiter: the 5-guess
+// erase is that limit, kept in the database rather than in memory.
+export function createActivationLimiter({ limit = 30, windowMs = FIFTEEN_MINUTES_MS } = {}) {
+  return createLimiter({
+    limit,
+    windowMs,
+    message: 'Too many activation attempts from this network. Please try again later.',
   });
 }
 

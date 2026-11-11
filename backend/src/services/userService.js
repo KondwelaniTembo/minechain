@@ -4,6 +4,51 @@ import { notActiveError } from './accountStatus.js';
 import { SIGNING_ROLES } from '../roles.js';
 import { createSignatureService, spkiFingerprint } from './signatureService.js';
 import { SigningError } from './signingError.js';
+import { normalise as normaliseCode, hash as hashCode, matches as codeMatches } from './activationCode.js';
+
+// Wrong codes allowed against one activation code. The fifth wrong one erases it, and an
+// administrator must issue a new one. With 60 random bits, 5 guesses give an attacker a
+// chance of about 4 in 10^18.
+export const ACTIVATION_MAX_ATTEMPTS = 5;
+
+// The invited account with this username, and whether its code is still in time. The expiry
+// is judged by the database's clock, the same clock that set it (accountService), so the app
+// server's clock never matters. code_live is NULL when there is no code.
+const ACTIVATION_STATE = `
+  SELECT id, activation_code_hash,
+         activation_expires_at > clock_timestamp() AS code_live
+    FROM users
+   WHERE lower(username) = lower($1) AND status = 'invited'`;
+
+// One wrong code. Counting and erasing are one statement, so two wrong guesses at the same
+// moment cannot both see "4 so far" and both escape the erase: the second waits for the
+// first's row lock and then counts from 5. In SET every column means its value before this
+// statement, so all three lines see the same old count. The WHERE names the code that was
+// judged ($3): if an administrator issued a new code in the meantime, a guess at the old one
+// counts against nothing.
+const COUNT_WRONG_CODE = `
+  UPDATE users
+     SET activation_failed_attempts = activation_failed_attempts + 1,
+         activation_code_hash = CASE WHEN activation_failed_attempts + 1 >= $2 THEN NULL ELSE activation_code_hash END,
+         activation_expires_at = CASE WHEN activation_failed_attempts + 1 >= $2 THEN NULL ELSE activation_expires_at END
+   WHERE id = $1 AND status = 'invited' AND activation_code_hash = $3
+  RETURNING activation_code_hash IS NULL AS code_erased`;
+
+// The right code. Every condition that made it right is checked again in the WHERE, so the
+// check and the change are one step: a second activation with the same code, a reissue or
+// the expiry arriving in between all make this match nothing. The password hash and the new
+// status are set together, as users_password_only_when_invited requires. approved_by stays
+// NULL: the user.create entry records which administrator made the account.
+const ACTIVATE = `
+  UPDATE users
+     SET password_hash = $3,
+         status = 'active',
+         activation_code_hash = NULL,
+         activation_expires_at = NULL,
+         activation_failed_attempts = 0
+   WHERE id = $1 AND status = 'invited' AND activation_code_hash = $2
+     AND activation_expires_at > clock_timestamp()
+  RETURNING id, username, full_name, licence_number, role, status, created_at, public_key`;
 
 // Only this unique violation means "username taken". Any other one, such as the
 // astronomically unlikely actor_ref clash, is a server problem and stays a 500.
@@ -55,6 +100,24 @@ function invalidCredentials() {
   return new AppError(401, 'INVALID_CREDENTIALS', 'Username or password is incorrect.');
 }
 
+// One builder for every failed activation, for the same reason as invalidCredentials: an
+// unknown username, an account that is not invited, a missing, expired or wrong code all get
+// exactly this answer, so it reveals neither which usernames exist nor which are waiting.
+function activationInvalid() {
+  return new AppError(401, 'ACTIVATION_INVALID', 'This activation code is not valid. Ask an administrator for a new one.');
+}
+
+// The policy's codes and messages only: the password itself is never sent back. Shared by
+// registration and activation, so both refuse a weak password in exactly the same words.
+function weakPassword(problems) {
+  return new AppError(
+    400,
+    'WEAK_PASSWORD',
+    'Choose a stronger password.',
+    problems.map(({ code, message }) => ({ field: 'password', code, message })),
+  );
+}
+
 // A token that no longer matches the database: the user is gone, or their role changed.
 // 401, because logging in again is the fix (it issues a fresh token with the current role).
 // Same code and message as any other refused token, so nothing extra is revealed.
@@ -86,20 +149,26 @@ export function createUserService({ db, passwords, passwordPolicy, audit, tokens
       ipAddress,
     });
 
+  // Failed activations are security events, kept for the same reasons and in the same way
+  // as failed logins: own statement, top-level db, never inside a transaction that the
+  // following throw would roll back. details holds a fixed reason word (and codeErased on the
+  // wrong code that erased it), never the code or password that was typed.
+  const recordFailedActivation = (reason, { userId = null, ipAddress, extra = {} }) =>
+    audit.record(db, {
+      action: 'user.activation_failed',
+      actorId: userId,
+      entityType: userId ? 'user' : null,
+      entityId: userId,
+      details: { reason, ...extra },
+      ipAddress,
+    });
+
   return {
     // input has already passed registerSchema. ipAddress comes from the request, for the
     // audit entry.
     async register(input, { ipAddress = null } = {}) {
       const problems = passwordPolicy(input.password, { username: input.username });
-      if (problems.length > 0) {
-        // The policy's codes and messages only: the password itself is never sent back.
-        throw new AppError(
-          400,
-          'WEAK_PASSWORD',
-          'Choose a stronger password.',
-          problems.map(({ code, message }) => ({ field: 'password', code, message })),
-        );
-      }
+      if (problems.length > 0) throw weakPassword(problems);
 
       // Hashed before the transaction opens: Argon2 takes about 50 ms, and keeping that
       // outside keeps the transaction, and anything it locks, as short as possible.
@@ -207,6 +276,74 @@ export function createUserService({ db, passwords, passwordPolicy, audit, tokens
           ipAddress,
         });
       });
+
+      const { token, expiresIn } = await tokens.sign({ userId: user.id, role: user.role });
+      return { user: toSafeUser(user), token, expiresIn };
+    },
+
+    // Activates an invited officer or administrator account (FR-10) with the code an
+    // administrator gave them and the password they choose now. Returns
+    // { user, token, expiresIn }, exactly like a login, so the app goes straight in.
+    // input has passed activateBodySchema: the username is trimmed, the code is any short
+    // string (normaliseCode decides whether it can be a code), the password is untouched.
+    async activate({ username, code, password, ipAddress = null }) {
+      // The password first, before anything about the account or code is looked at. A weak
+      // password is refused without using up one of the 5 guesses, and the answer is the
+      // same whether or not the username exists, so it reveals nothing.
+      const problems = passwordPolicy(password, { username });
+      if (problems.length > 0) throw weakPassword(problems);
+
+      const { rows } = await db.query(ACTIVATION_STATE, [username]);
+      const account = rows[0];
+
+      // Unknown, or not invited (already active, pending, and so on): one reason, because
+      // either way there is no code here to try.
+      if (!account) {
+        await recordFailedActivation('unknown_username', { ipAddress });
+        throw activationInvalid();
+      }
+      const fail = async (reason, extra) => {
+        await recordFailedActivation(reason, { userId: account.id, ipAddress, extra });
+        return activationInvalid();
+      };
+
+      // Erased after too many wrong codes. Not counted as a guess: there is nothing to guess.
+      if (account.activation_code_hash === null) throw await fail('no_code');
+      if (!account.code_live) throw await fail('expired');
+
+      // A typed value that cannot be a code at all counts as a wrong guess too, so malformed
+      // values are not a way round the 5-guess limit.
+      const canonical = normaliseCode(code);
+      if (canonical === null || !codeMatches(hashCode(canonical), account.activation_code_hash)) {
+        const { rows: counted } = await db.query(COUNT_WRONG_CODE, [
+          account.id,
+          ACTIVATION_MAX_ATTEMPTS,
+          account.activation_code_hash,
+        ]);
+        throw await fail('wrong_code', counted[0]?.code_erased ? { codeErased: true } : {});
+      }
+
+      // Hashed before the transaction opens, as at registration: Argon2 takes about 50 ms.
+      const passwordHash = await passwords.hash(password);
+
+      const user = await db.transaction(async (tx) => {
+        const { rows: activated } = await tx.query(ACTIVATE, [account.id, account.activation_code_hash, passwordHash]);
+        // Lost a race: the code was used, replaced or expired since it was checked above.
+        // Nothing changed, so returning null (not throwing) just ends the transaction; the
+        // failure is then recorded outside it, below, as every failed activation is.
+        if (activated.length === 0) return null;
+        // Same transaction: the account becomes active only together with this record.
+        await audit.record(tx, {
+          action: 'user.activate',
+          actorId: account.id,
+          entityType: 'user',
+          entityId: account.id,
+          details: {},
+          ipAddress,
+        });
+        return activated[0];
+      });
+      if (!user) throw await fail('code_changed');
 
       const { token, expiresIn } = await tokens.sign({ userId: user.id, role: user.role });
       return { user: toSafeUser(user), token, expiresIn };

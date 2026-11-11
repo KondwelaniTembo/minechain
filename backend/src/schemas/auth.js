@@ -59,3 +59,19 @@ export const loginSchema = z
     password: z.string().min(1, 'is required').max(1024, 'must be at most 1024 characters'),
   })
   .strict();
+
+// POST /auth/activate (FR-10). Like login, the schema checks presence and size only.
+// - username: as at login. A malformed one cannot be invited, so it gets the usual 401.
+// - code: any short string. Whether it can be a code (lower case, hyphens, spaces, O for 0)
+//   is decided by activationCode.normalise, the one place that knows the rules; a value it
+//   cannot read counts as a wrong guess. 64 is normalise's own limit. Not trimmed, because
+//   normalise drops spaces anywhere.
+// - password: as at login. The policy runs in userService.activate, which refuses a weak one
+//   with WEAK_PASSWORD before the code is looked at.
+export const activateBodySchema = z
+  .object({
+    username: z.string().trim().min(1, 'is required').max(32, 'must be at most 32 characters'),
+    code: z.string().min(1, 'is required').max(64, 'must be at most 64 characters'),
+    password: z.string().min(1, 'is required').max(1024, 'must be at most 1024 characters'),
+  })
+  .strict();

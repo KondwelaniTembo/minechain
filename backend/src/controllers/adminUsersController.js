@@ -16,6 +16,20 @@ export function createAdminUsersController({ accounts }) {
       res.status(200).json(await accounts.list(req.validated.query));
     },
 
+    // 201: a new account exists. The code is in this response and nowhere else; named
+    // fields only, so nothing else the service might return is sent by accident.
+    async create(req, res) {
+      const { username, fullName, role } = req.validated.body;
+      const { user, activation } = await accounts.createAccount({ username, fullName, role, ...actor(req) });
+      res.status(201).json({ user, activation });
+    },
+
+    // 200: the account already existed; only its code changed.
+    async reissueActivation(req, res) {
+      const { user, activation } = await accounts.reissueActivation({ userId: targetId(req), ...actor(req) });
+      res.status(200).json({ user, activation });
+    },
+
     async approve(req, res) {
       const user = await accounts.approve({ targetId: targetId(req), ...actor(req) });
       res.status(200).json({ user });

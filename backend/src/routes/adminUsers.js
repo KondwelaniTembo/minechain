@@ -8,6 +8,7 @@ import {
   listUsersQuerySchema,
   reasonBodySchema,
   emptyBodySchema,
+  createUserBodySchema,
 } from '../schemas/adminUsers.js';
 
 // Mounted at /admin/users. requireAuth is made by createApp and passed in, like the auth
@@ -25,6 +26,11 @@ export function adminUserRoutes({ accounts, requireAuth }) {
 
   router.get('/', validate(listUsersQuerySchema, 'query'), controller.list);
 
+  // FR-10: an officer or administrator account, invited until its owner activates it. The
+  // response holds the activation code, the only time it is ever shown; noStore above keeps
+  // it out of every cache.
+  router.post('/', validate(createUserBodySchema), controller.create);
+
   // Params before body: a malformed id is the more basic mistake, and is refused before
   // PostgreSQL could see it (it would raise 22P02 and become a 500).
   const id = validate(userIdParamsSchema, 'params');
@@ -34,6 +40,8 @@ export function adminUserRoutes({ accounts, requireAuth }) {
   router.post('/:id/reactivate', id, validate(emptyBodySchema), controller.reactivate);
   // Lost or replaced phone: only on a suspended account (signing-spec section 2).
   router.post('/:id/reset-key', id, validate(reasonBodySchema), controller.resetKey);
+  // A new code for an invited account: lost, expired or erased. The old one stops working.
+  router.post('/:id/activation-code', id, validate(emptyBodySchema), controller.reissueActivation);
 
   return router;
 }
