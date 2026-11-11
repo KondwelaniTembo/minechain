@@ -38,11 +38,11 @@ Rules that shape the design:
 
 Updated 11 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
 
-- **Branch:** `feature/backend-logic`. Latest code commit `a1f8c6b` (clock_timestamp
-  defaults migration), followed by the reports docs commit (R4). `main` has Days 1–3 (PR #4).
-- **Test totals (confirmed, run 11 Nov 01:21):** `npm test` 1624, `npm run test:db` 668,
+- **Branch:** `feature/backend-logic`. Latest code commit `071c00e` (password change),
+  followed by the FR-10 docs commit (A6). `main` has Days 1–3 (PR #4).
+- **Test totals (confirmed, run 11 Nov 21:11):** `npm test` 1759, `npm run test:db` 736,
   contract 37.
-- **Dev database** (`minechain_dev`) is migrated to `1794398400000_clock-timestamp-defaults`.
+- **Dev database** (`minechain_dev`) is migrated to `1794441600000_users-activation`.
   `npm run test:db` migrates `minechain_test` itself (`tests/db/globalSetup.js`).
 
 **Done on this branch** (docs updated for all of it):
@@ -134,12 +134,36 @@ FR-13)", `database-schema.md` Reports and the two-clocks convention, `decisions.
   `transactions.received_at` and `alerts.created_at`, after a read-only sweep of every
   `now()`.
 
+**FR-10, officer and admin account creation, complete (A1–A6)**, with docs (`api.md`
+`POST /admin/users`, `/activation-code`, `/auth/activate`, `/auth/me/password` and the five
+account statuses, `database-schema.md` users rules, `decisions.md` "Accounts (1)–(20)" and
+their known limitations):
+
+- A1 `7b11afc`: migration `1794441600000_users-activation`: status `invited`, NULL
+  `password_hash` only while invited, `activation_code_hash` (32 bytes),
+  `activation_expires_at`, `activation_failed_attempts`, `tokens_valid_after`; its Down
+  refuses while invited rows exist.
+- A2 `cc5bf4f`: `src/services/activationCode.js`: 12 Crockford base32 characters (60 bits,
+  `randomInt`), `normalise` (ASCII check before upper-casing; O→0, I/L→1), SHA-256,
+  `timingSafeEqual`.
+- A3 `ad00033`: `accountService.createAccount` (officer/admin only, `ROLE_NOT_CREATABLE`)
+  and `reissueActivation`; expiry `clock_timestamp()` + 72 h; invited login = unknown
+  username; `activationExpiresAt` in the admin view. `857da61`: "an" before vowel statuses
+  in refusal messages, with a pinned row per action.
+- A4 `aee6d96`: `userService.activate` (policy first; one 401 `ACTIVATION_INVALID`; 5th
+  wrong code erased in the counting `UPDATE`; failures audited outside the transaction,
+  `code_changed` for a lost race), `createActivationLimiter` (30 per 15 min per IP), routes
+  `POST /auth/activate`, `POST /admin/users`, `POST /admin/users/{id}/activation-code`.
+- A5 `071c00e`: `POST /auth/me/password`: cut-off `tokens_valid_after` = the fresh token's
+  `iat` (one clock, the app server's); older tokens get `TOKEN_INVALID`; 400 refusals;
+  `createPasswordChangeLimiter` (10 failures per 15 min per user). `verify()` returns `iat`.
+- A6: these docs.
+
 **Next, in order:**
 
-1. Officer and admin account creation (FR-10).
-2. Admin anchoring status endpoint with manual reset (Anomaly rules (8)).
-3. Render deploy, then open the PR.
-4. Flutter app.
+1. Admin anchoring status endpoint with manual reset (Anomaly rules (8)). Plan only first.
+2. Render deploy, then open the PR.
+3. Flutter app.
 
 **Working rules that held all weekend:**
 

@@ -13,7 +13,7 @@ behind the design are recorded in [decisions.md](decisions.md).
 
 | Table | Holds | Requirements |
 |---|---|---|
-| `users` | Accounts for the five roles: password hash, P-256 public key, random on-chain actor reference, approval | FR-06, FR-10, FR-12 |
+| `users` | Accounts for the five roles: password hash, P-256 public key, random on-chain actor reference, approval, activation code hash, password-change cut-off | FR-06, FR-10, FR-12 |
 | `gps_zones` | Licensed extraction zones, stored as polygons | FR-08, FR-11 |
 | `consignments` | Identity, mineral, miner and current stage of each consignment | FR-01 |
 | `transactions` | One row per signed custody step: signature, anchored hash, review and anchoring state | FR-02, FR-03, FR-05, FR-07 |
@@ -39,7 +39,7 @@ erDiagram
     text username UK "unique ignoring case"
     text full_name
     text licence_number
-    text password_hash "Argon2id or bcrypt"
+    text password_hash "Argon2id or bcrypt; NULL while invited"
     text role
     text status
     text status_reason
@@ -47,6 +47,10 @@ erDiagram
     bytea actor_ref UK "32 random bytes"
     uuid approved_by FK
     timestamptz approved_at
+    bytea activation_code_hash "SHA-256, 32 bytes"
+    timestamptz activation_expires_at
+    smallint activation_failed_attempts
+    timestamptz tokens_valid_after
     timestamptz created_at
     timestamptz updated_at
   }
@@ -151,6 +155,12 @@ one database transaction, so every consignment has at least one step.
       built.
     - `consignments.created_at` is not a display time for "registered at": it is slightly
       earlier than the registration step; use the registration's `received_at`.
+  - `users.activation_expires_at` is written as `clock_timestamp() + 72 hours` and checked
+    against `clock_timestamp()`, so the database's clock both sets and judges it.
+  - `users.tokens_valid_after` is the one time that comes from the **app server's** clock:
+    it is the issue time (`iat`) of the token a password change returns, compared with the
+    `iat` of every later token, which the same server writes. Comparing it with a database
+    time would mix two clocks (decisions log, Accounts).
 - **Fixed lists** use `CHECK (col IN (...))` rather than `ENUM`, so a value can be added or
   removed with one small migration.
 - **Hashes and keys** are `bytea` with a length check.
@@ -167,11 +177,47 @@ one database transaction, so every consignment has at least one step.
 ## Rules by table
 
 ### users
-- `username`: 3–32 characters from `A–Z a–z 0–9 _ . -`, unique ignoring case.
-- `password_hash`: must be an Argon2id or bcrypt hash string. A plain password is refused.
+- `username`: 3–32 characters from `A–Z a–z 0–9 _ . -`, unique ignoring case. The index
+  covers every status, so the username of an invited, pending or rejected account stays
+  taken.
+- `password_hash`: an Argon2id or bcrypt hash string, or NULL (`users_password_is_hash`).
+  A plain password is refused.
 - `role`: `miner`, `transporter`, `buyer`, `officer` or `admin`.
-- `status`: `pending` (the default), `active`, `suspended` or `rejected`. Suspended and
-  rejected accounts need a non-blank `status_reason`.
+- `status`: `pending` (the default), `active`, `suspended`, `rejected` or `invited`
+  (`users_status_valid`). Suspended and rejected accounts need a non-blank `status_reason`.
+  - `pending`: a miner, transporter or buyer asked for an account and waits for approval.
+  - `invited`: an administrator created this officer or administrator account (FR-10), and
+    its owner has not activated it yet. It cannot log in, every admin action except a new
+    code refuses it, and it is never counted as an active administrator.
+  - `active`, `suspended`, `rejected`: as before; `rejected` is final.
+- **Invited accounts and their activation codes** (migration `1794441600000_users-activation`):
+  - `users_password_only_when_invited`: `(password_hash IS NULL) = (status = 'invited')`.
+    Both directions in one rule: an invited account has **no** password hash at all, rather
+    than a made-up one (NULL says honestly "no password yet", and no login can ever match
+    it), and every other account always has one. Activation must therefore set the hash and the status in
+    the same `UPDATE`.
+  - `activation_code_hash`: the SHA-256 of the current activation code, or NULL when there
+    is none (never issued, used, or erased after 5 wrong attempts). The code itself is never
+    stored. `users_activation_code_32_bytes`: a SHA-256 digest is always 32 bytes, so any
+    other length is a bug.
+  - `activation_expires_at`: when that code stops working. `users_activation_complete`:
+    `(activation_code_hash IS NULL) = (activation_expires_at IS NULL)`, so there is never a
+    code that never expires, nor an expiry with nothing to expire. The code and its expiry
+    are set together and cleared together.
+  - `users_activation_only_when_invited`: a code exists only while the account is
+    `invited`. Once it is active, a leftover code is impossible, not merely unused. An
+    invited account may have no code (after the erase), until an administrator issues a new
+    one.
+  - `activation_failed_attempts` (`smallint`, default 0): wrong codes tried against the
+    current code. `users_activation_attempts_non_negative`: at least 0. Reset to 0 by a new
+    code and by activation. The limit of 5 is the service's.
+- `tokens_valid_after`: the password-change cut-off. A token issued (`iat`) before this
+  moment is refused; NULL, the value of every account until its first password change,
+  means no cut-off. Set by `POST /auth/me/password` to the fresh token's own issue time, as
+  `to_timestamp(<iat>)`, in the same `UPDATE` as the new hash.
+- **Rolling back** `1794441600000_users-activation` stops with an error while any invited
+  account exists: it has no password hash, which the old schema requires. Activate those
+  accounts, or remove them if they have no history, first.
 - `public_key`: NULL, or a 91-byte P-256 key as exported by the Android Keystore. Unique
   across accounts through the index `users_public_key_key` (migration
   `users-public-key-unique`), so one device key belongs to one account. NULLs never clash,
@@ -565,7 +611,18 @@ A CHECK constraint can only see its own row, so these rules live in the backend 
   returns to `open`;
 - closing an alert updates the step in the same database transaction: `reviewed` makes
   the step `rejected`, and `dismissed` makes it `cleared`;
-- audit `details` never contain passwords, tokens or keys;
+- audit `details` never contain passwords, tokens or keys, nor an activation code;
+- only `officer` and `admin` accounts are created as `invited`, and only by an
+  administrator (the role is checked by the request schema and again in the service);
+- the fifth wrong activation code erases the code and its expiry, in the same `UPDATE`
+  that counts it, and a guess counts only against the code that was judged;
+- activation sets the password hash, `active`, and clears the code, expiry and count in
+  one `UPDATE` whose `WHERE` repeats every check (still invited, the same code, not
+  expired);
+- a password change sets the new hash and `tokens_valid_after` in one `UPDATE` that
+  matches only while the old hash is still current;
+- a token is refused when its `iat` is before `tokens_valid_after`, a condition inside the
+  lookup `requireAuth` runs on every request;
 - a buyer's transactions report holds only accepted (`passed` or `cleared`) steps of
   consignments the buyer has an accepted purchase of, a condition inside the report query;
 - every report export writes its `audit_logs` entry in the same transaction as the rows it

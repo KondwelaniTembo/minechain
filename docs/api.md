@@ -14,14 +14,18 @@ and `FAKE-SIGNATURE`. None of them is a real identifier, password or token.
 | `GET` | [`/health`](#get-health) | Is the API up, and can it reach the database? | No |
 | `POST` | [`/auth/register`](#post-authregister) | Request an account (FR-12) | No |
 | `POST` | [`/auth/login`](#post-authlogin) | Log in and receive a token (FR-06) | No |
+| `POST` | [`/auth/activate`](#post-authactivate) | Activate an officer or administrator account with its activation code, choose a password, and receive a token (FR-10) | No |
 | `GET` | [`/auth/me`](#get-authme) | The logged-in user's own account | Yes |
 | `PUT` | [`/auth/me/public-key`](#put-authmepublic-key) | Register this phone's device key (FR-02) | Yes, miner, transporter or buyer |
+| `POST` | [`/auth/me/password`](#post-authmepassword) | Change your own password; every other session ends (FR-06) | Yes, any role |
 | `GET` | [`/admin/users`](#get-adminusers) | List accounts by status (FR-10, FR-12) | Yes, admin only |
+| `POST` | [`/admin/users`](#post-adminusers) | Create an officer or administrator account, with a one-time activation code (FR-10) | Yes, admin only |
 | `POST` | [`/admin/users/{id}/approve`](#post-adminusersidapprove) | Approve an account request (FR-12) | Yes, admin only |
 | `POST` | [`/admin/users/{id}/reject`](#post-adminusersidreject) | Reject an account request, with a reason (FR-12) | Yes, admin only |
 | `POST` | [`/admin/users/{id}/suspend`](#post-adminusersidsuspend) | Suspend an active account, with a reason (FR-10) | Yes, admin only |
 | `POST` | [`/admin/users/{id}/reactivate`](#post-adminusersidreactivate) | Reactivate a suspended account (FR-10) | Yes, admin only |
 | `POST` | [`/admin/users/{id}/reset-key`](#post-adminusersidreset-key) | Remove a suspended account's device key, for a lost phone | Yes, admin only |
+| `POST` | [`/admin/users/{id}/activation-code`](#post-adminusersidactivation-code) | Issue a new activation code for an invited account; the old one stops working (FR-10) | Yes, admin only |
 | `GET` | [`/admin/zones`](#get-adminzones) | List licensed GPS zones by status (FR-11) | Yes, admin only |
 | `POST` | [`/admin/zones`](#post-adminzones) | Create a licensed GPS zone (FR-11) | Yes, admin only |
 | `POST` | [`/admin/zones/{id}/rename`](#post-adminzonesidrename) | Rename a zone (FR-11) | Yes, admin only |
@@ -56,8 +60,8 @@ Every error, whatever its cause, has the same shape:
 
 - `code` is stable and meant for the app's logic. It never changes for a given situation.
 - `message` is plain language and can be shown to the user.
-- `details` is added only for `VALIDATION_FAILED` and `WEAK_PASSWORD`, as a list naming each
-  problem:
+- `details` is added only for `VALIDATION_FAILED`, `WEAK_PASSWORD`,
+  `CURRENT_PASSWORD_INCORRECT` and `PASSWORD_UNCHANGED`, as a list naming each problem:
 
   ```json
   {
@@ -105,6 +109,10 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
 - **The account is checked on every request.** A token stops working at once if the account
   is suspended, set back to pending, rejected, deleted, or given a different role, even
   before the token expires.
+- **A password change ends every other session.** A token issued before the account's last
+  password change gets 401 `TOKEN_INVALID`, the same answer as for a deleted account, so the
+  answer does not say that the password was changed. The token returned by the change itself
+  keeps working (see [`POST /auth/me/password`](#post-authmepassword)).
 - Store the token in the phone's secure storage, never in plain preferences or logs.
 
 **Token errors:**
@@ -112,11 +120,12 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
 | Status | Code | When | Message |
 |---|---|---|---|
 | 401 | `TOKEN_MISSING` | No `Authorization` header, another scheme (such as `Basic`), or `Bearer` with nothing after it | Please log in to continue. |
-| 401 | `TOKEN_INVALID` | The token is malformed, forged, tampered with, or no longer matches the account (the user no longer exists, or the role changed). Logging in again fixes it | Your session is not valid. Please log in again. |
+| 401 | `TOKEN_INVALID` | The token is malformed, forged, tampered with, or no longer matches the account (the user no longer exists, the role changed, or the token was issued before the account's last password change). Logging in again fixes it | Your session is not valid. Please log in again. |
 | 401 | `TOKEN_EXPIRED` | The token is older than its lifetime. Ask for the password again | Your session has expired. Please log in again. |
 | 403 | `ACCOUNT_PENDING` | The account is waiting for approval | Your account is waiting for approval by an administrator. |
 | 403 | `ACCOUNT_SUSPENDED` | The account has been suspended | Your account has been suspended. Please contact an administrator. |
 | 403 | `ACCOUNT_REJECTED` | The account request was not approved | Your account request was not approved. Please contact an administrator. |
+| 403 | `ACCOUNT_NOT_ACTIVATED` | The account was created by an administrator and has not been activated yet. An invited account has no password and cannot log in, so the app does not normally meet this code (login answers `INVALID_CREDENTIALS` first) | Your account has not been activated yet. Use the activation code from your administrator. |
 | 403 | `ACCOUNT_NOT_ACTIVE` | Any other status that is not active (a fallback) | Your account is not active. Please contact an administrator. |
 | 403 | `FORBIDDEN` | Logged in and active, but this role may not use this endpoint (see [Roles and access](#roles-and-access)) | You do not have permission to do this. |
 
@@ -140,6 +149,8 @@ A 403 has no `WWW-Authenticate` header, because the credentials themselves were 
 | `POST /auth/register` | 30 per hour | client IP | every request, including invalid ones |
 | `POST /auth/login` | 100 per 15 minutes | client IP | every request, including invalid ones |
 | `POST /auth/login` | 10 per 15 minutes | username (any letter case or surrounding spaces) | failed attempts only (401 and 403). Successful logins are not counted |
+| `POST /auth/activate` | 30 per 15 minutes | client IP | every request, including invalid ones |
+| `POST /auth/me/password` | 10 per 15 minutes | logged-in user | failed attempts only (every error after the token check, including `VALIDATION_FAILED`). Successful changes are not counted. A request refused for its token never reaches the limiter |
 
 The per-IP limits are high on purpose. Zambian mobile networks use carrier-grade NAT, so a
 whole mining site can share one public IP address. The per-username limit is what stops
@@ -208,6 +219,8 @@ the endpoint sections below remain the source of truth for what exists.
 | Module (requirement) | Miner | Transporter | Buyer | Officer | Admin | Status |
 |---|:-:|:-:|:-:|:-:|:-:|---|
 | Own account: `GET /auth/me` | ✓ | ✓ | ✓ | ✓ | ✓ | **Built** |
+| Change own password (FR-06): `POST /auth/me/password` | ✓ | ✓ | ✓ | ✓ | ✓ | **Built** |
+| Activate an account an administrator created (FR-10): `POST /auth/activate`, no login | | | | ✓ | ✓ | **Built** |
 | Register a device key (FR-02): `PUT /auth/me/public-key` | ✓ | ✓ | ✓ | | | **Built** |
 | Register a consignment at extraction (FR-01, FR-02) | ✓ | | | | | Planned |
 | Record a handoff to a transporter (FR-02, FR-03) | | ✓ | | | | Planned |
@@ -222,7 +235,8 @@ the endpoint sections below remain the source of truth for what exists.
 | Approve or reject account requests (FR-12): `/admin/users/{id}/approve`, `/reject` | | | | | ✓ | **Built** |
 | List accounts; suspend and reactivate them (FR-10): `GET /admin/users`, `/admin/users/{id}/suspend`, `/reactivate` | | | | | ✓ | **Built** |
 | Reset a lost phone's device key (FR-10, [signing spec](signing-spec.md) section 2): `/admin/users/{id}/reset-key` | | | | | ✓ | **Built** |
-| Create officer and admin accounts; change role (FR-10) | | | | | ✓ | Planned |
+| Create officer and admin accounts, and reissue their activation codes (FR-10): `POST /admin/users`, `/admin/users/{id}/activation-code` | | | | | ✓ | **Built** |
+| Change an account's role; delete an account with no history (FR-10) | | | | | ✓ | Planned |
 | Manage licensed GPS extraction zones (FR-11): `/admin/zones` | | | | | ✓ | **Built** |
 | Monitor system health: API errors, blockchain sync failures, database capacity (System Administrator use case) | | | | | ✓ | Planned |
 | Trigger a manual re-synchronisation (System Administrator use case) | | | | | ✓ | Planned |
@@ -424,7 +438,7 @@ so it never contains a name or other personal data.
 |---|---|---|---|
 | 400 | `VALIDATION_FAILED` | A field is missing, empty, too long (password over 1024 characters), or not allowed | Some fields are missing or invalid. |
 | 400 | `INVALID_JSON` | The body is not valid JSON | Request body is not valid JSON |
-| 401 | `INVALID_CREDENTIALS` | The username does not exist, **or** the password is wrong. The two are deliberately identical, and take about the same time, so nobody can find out which usernames exist | Username or password is incorrect. |
+| 401 | `INVALID_CREDENTIALS` | The username does not exist, **or** the password is wrong, **or** the account is invited and has no password yet. All three are deliberately identical, and take about the same time, so nobody can find out which usernames exist or which accounts are waiting for activation | Username or password is incorrect. |
 | 403 | `ACCOUNT_PENDING` | Correct password, but the account is waiting for approval | Your account is waiting for approval by an administrator. |
 | 403 | `ACCOUNT_SUSPENDED` | Correct password, but the account is suspended | Your account has been suspended. Please contact an administrator. |
 | 403 | `ACCOUNT_REJECTED` | Correct password, but the account request was not approved | Your account request was not approved. Please contact an administrator. |
@@ -436,6 +450,98 @@ so it never contains a name or other personal data.
 
 An account's status (the 403s) is revealed only after the correct password. A pending
 account with a wrong password gets the same 401 as anyone else.
+
+---
+
+## POST /auth/activate
+
+Activates an officer or administrator account that an administrator created with
+[`POST /admin/users`](#post-adminusers) (FR-10). The person types the activation code the
+administrator gave them and chooses their own password, so nobody else ever knows it. The
+answer is the same as a login's: the app is logged in at once.
+
+| | |
+|---|---|
+| **Login needed** | No |
+| **Rate limits** | 30 per IP per 15 minutes, every request counted, including invalid ones |
+
+**Request body**
+
+| Field | Type | Required | Rules |
+|---|---|---|---|
+| `username` | string | yes | Surrounding spaces are trimmed. 1–32 characters. Letter case does not matter |
+| `code` | string | yes | 1–64 characters. Not trimmed. Typed as described below; whether it can be a code is decided by the server, and a value that cannot is simply a wrong code |
+| `password` | string | yes | Not trimmed. 1–1024 characters, and must meet the [password policy](#post-authregister), including not containing the username |
+
+Any other field is refused with `VALIDATION_FAILED`.
+
+```json
+{ "username": "chanda_mwale", "code": "7kq4 m2xd 9tne", "password": "copper hill solwezi" }
+```
+
+**The activation code.** 12 characters from the Crockford base32 alphabet
+`0123456789ABCDEFGHJKMNPQRSTVWXYZ` (the digits and capital letters without I, L, O and U),
+shown to the administrator once as three groups of four, for example `7KQ4-M2XD-9TNE`.
+It carries 60 random bits.
+
+- **How it may be typed:** in any letter case, with or without the hyphens, and with spaces
+  anywhere. `O` is read as `0`, and `I` and `L` as `1`, because they look alike.
+  `7kq4m2xd9tne`, `7KQ4 M2XD 9TNE` and `7KQ4-M2XD-9TNE` are the same code.
+- **Anything else is a wrong code:** `U`, punctuation, a letter outside plain ASCII, or the
+  wrong number of characters.
+- **It works for 72 hours** from when it was issued, by the database's clock.
+- **It works once.** After activation the account is no longer invited, and the same code
+  gets 401.
+- **5 wrong codes erase it.** The fifth wrong code removes the code and its expiry, and
+  then even the right code is refused. An administrator issues a new one with
+  [`POST /admin/users/{id}/activation-code`](#post-adminusersidactivation-code). An
+  expired or erased code does not count as a wrong guess.
+
+**The order of the checks.** The new password is checked against the policy first, before
+the username or the code is looked at. A weak password is refused with `WEAK_PASSWORD`
+without using up one of the 5 guesses, and the answer is the same whether or not the
+username exists.
+
+**200 OK**, with `Cache-Control: no-store`: exactly the shape of a
+[login](#post-authlogin), with the account now `active`.
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE",
+  "tokenType": "Bearer",
+  "expiresIn": 3600,
+  "user": {
+    "id": "3f2b6c1e-0000-4000-8000-000000000002",
+    "username": "chanda_mwale",
+    "fullName": "Chanda Mwale",
+    "licenceNumber": null,
+    "role": "officer",
+    "status": "active",
+    "createdAt": "2026-11-11T09:00:00.000Z",
+    "publicKeyFingerprint": null
+  }
+}
+```
+
+**Errors.** Every response, errors included, carries `Cache-Control: no-store`.
+
+| Status | Code | When | Message |
+|---|---|---|---|
+| 400 | `VALIDATION_FAILED` | A field is missing, empty, not a string or too long, or another field was sent | Some fields are missing or invalid. |
+| 400 | `WEAK_PASSWORD` | The password breaks the policy. `details` lists each problem with `"field": "password"`, as at [registration](#post-authregister) | Choose a stronger password. |
+| 400 | `INVALID_JSON` | The body is not valid JSON | Request body is not valid JSON |
+| 401 | `ACTIVATION_INVALID` | **Every** other failure: the username does not exist, the account is not invited (already active, pending, and so on), it has no code (erased), the code has expired, the code is wrong, or it stopped working while this request was being handled. All are deliberately identical | This activation code is not valid. Ask an administrator for a new one. |
+| 413 | `PAYLOAD_TOO_LARGE` | The body is over 100 kB | Request body is too large |
+| 429 | `TOO_MANY_REQUESTS` | 30 requests from this IP in 15 minutes | Too many activation attempts from this network. Please try again later. |
+| 500 | `INTERNAL_ERROR` | Unexpected server fault | Something went wrong |
+
+**Recorded** in the audit log: a successful activation as `user.activate`, with the account
+as the actor and empty details, in the same database transaction as the activation. Every
+401 is recorded too, as `user.activation_failed` with a fixed `reason` (`unknown_username`,
+`no_code`, `expired`, `wrong_code`, or `code_changed` when the code stopped working during
+the request), and `codeErased: true` on the wrong code that erased it. An unknown username
+is recorded with no actor, and the typed username is never stored. The code and the
+password are never recorded anywhere.
 
 ---
 
@@ -476,7 +582,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
 | Status | Code | When | Message |
 |---|---|---|---|
 | 401 | `TOKEN_MISSING` | No usable `Authorization: Bearer` header | Please log in to continue. |
-| 401 | `TOKEN_INVALID` | Malformed, forged or tampered token, or the user no longer exists, or the role changed | Your session is not valid. Please log in again. |
+| 401 | `TOKEN_INVALID` | Malformed, forged or tampered token, or the user no longer exists, or the role changed, or the token was issued before the account's last password change | Your session is not valid. Please log in again. |
 | 401 | `TOKEN_EXPIRED` | The token's lifetime has passed | Your session has expired. Please log in again. |
 | 403 | `ACCOUNT_PENDING` | The account was set back to pending after the token was issued | Your account is waiting for approval by an administrator. |
 | 403 | `ACCOUNT_SUSPENDED` | The account was suspended after the token was issued | Your account has been suspended. Please contact an administrator. |
@@ -579,13 +685,113 @@ Every response, errors included, carries `Cache-Control: no-store`.
 
 ---
 
+## POST /auth/me/password
+
+Changes the logged-in user's own password (FR-06), and ends every other session. The answer
+is the same as a login's, with a fresh token: the phone that made the change swaps to it
+and stays logged in. Every token issued before the change, on any phone, gets 401
+`TOKEN_INVALID` from then on.
+
+| | |
+|---|---|
+| **Login needed** | Yes, any role. The account must be active |
+| **Rate limits** | 10 failed attempts per user per 15 minutes. Successful changes are not counted |
+
+**Request body**
+
+| Field | Type | Required | Rules |
+|---|---|---|---|
+| `currentPassword` | string | yes | Not trimmed. 1–1024 characters. Only checked against the stored password, so an older password that does not meet today's policy can still be replaced |
+| `newPassword` | string | yes | Not trimmed. 1–1024 characters, and must meet the [password policy](#post-authregister), including not containing the username |
+
+Any other field (for example `userId`) is refused with `VALIDATION_FAILED`. The password
+changed is always the logged-in account's, never one named in the body.
+
+```json
+{ "currentPassword": "gold river kasempa", "newPassword": "copper hill solwezi" }
+```
+
+**The order of the checks**, each answered before the next is tried:
+
+1. The new password against the policy (`WEAK_PASSWORD`). A weak choice is refused without
+   the current password being tried, so it never adds to the failed attempts recorded.
+2. The current password (`CURRENT_PASSWORD_INCORRECT`).
+3. The new password is not the same as the current one (`PASSWORD_UNCHANGED`). The check
+   uses the same comparison as login, so text typed with different but equivalent
+   characters counts as the same password.
+
+**200 OK**, with `Cache-Control: no-store`: exactly the shape of a
+[login](#post-authlogin), with the fresh token.
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE",
+  "tokenType": "Bearer",
+  "expiresIn": 3600,
+  "user": {
+    "id": "3f2b6c1e-0000-4000-8000-000000000001",
+    "username": "mutale_banda",
+    "fullName": "Mutale Banda",
+    "licenceNumber": "ZM-ASM-0042",
+    "role": "miner",
+    "status": "active",
+    "createdAt": "2026-11-05T09:00:00.000Z",
+    "publicKeyFingerprint": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+}
+```
+
+- **Other sessions end.** The server stores the fresh token's issue time (`iat`, whole
+  seconds) as the account's cut-off. A token issued before it is refused with the ordinary
+  401 `TOKEN_INVALID`, which does not say why. The fresh token was issued in that very
+  second, so it passes.
+- **The old password stops working** at login at once; the new one works.
+- **Recorded** in the audit log as `user.password_change` with `{ "sessionsEnded": true }`,
+  in the same database transaction as the change. A wrong current password is recorded as
+  `user.password_change_failed` with `{ "reason": "wrong_current_password" }`, kept even
+  though the request fails. The weak and unchanged refusals are not recorded. No password
+  or hash is ever recorded.
+
+**Errors.** Every response, errors included, carries `Cache-Control: no-store`. The three
+refusals are 400, never 401: the person is logged in, and a 401 would make the app throw
+the session away over a typing mistake.
+
+| Status | Code | When | Message |
+|---|---|---|---|
+| 400 | `VALIDATION_FAILED` | A field is missing, empty, not a string or over 1024 characters, another field was sent, or there is no body | Some fields are missing or invalid. |
+| 400 | `WEAK_PASSWORD` | The new password breaks the policy. `details` lists each problem with `"field": "newPassword"` and the codes listed under [registration](#post-authregister) | Choose a stronger password. |
+| 400 | `CURRENT_PASSWORD_INCORRECT` | The current password is wrong, or the password was changed by another request a moment ago. `details`: `[{ "field": "currentPassword", "message": "is not correct" }]` | Your current password is not correct. |
+| 400 | `PASSWORD_UNCHANGED` | The new password is the current one. `details`: `[{ "field": "newPassword", "message": "must be different from your current password" }]` | Choose a password different from your current one. |
+| 400 | `INVALID_JSON` | The body is not valid JSON | Request body is not valid JSON |
+| 401 | `TOKEN_MISSING`, `TOKEN_INVALID`, `TOKEN_EXPIRED` | See [Authentication](#authentication) | |
+| 403 | `ACCOUNT_PENDING`, `ACCOUNT_SUSPENDED`, `ACCOUNT_REJECTED` | The account is not active | See [Authentication](#authentication) |
+| 413 | `PAYLOAD_TOO_LARGE` | The body is over 100 kB | Request body is too large |
+| 429 | `TOO_MANY_REQUESTS` | 10 failed attempts by this user in 15 minutes | Too many failed password changes. Please wait 15 minutes and try again. |
+| 500 | `INTERNAL_ERROR` | Unexpected server fault | Something went wrong |
+
+---
+
 ## Admin account management
 
-Six endpoints let an administrator review account requests (FR-12), suspend or reactivate
-accounts (FR-10), and remove a lost phone's device key. Creating officer and administrator
-accounts and changing a role are planned for a later step.
+Eight endpoints let an administrator review account requests (FR-12), create officer and
+administrator accounts and reissue their activation codes (FR-10), suspend or reactivate
+accounts (FR-10), and remove a lost phone's device key. Changing a role and deleting an
+account are planned for a later step.
 
-**Rules shared by all six:**
+**Account statuses.** Every account has one of five:
+
+| Status | Meaning | Can log in |
+|---|---|---|
+| `pending` | A miner, transporter or buyer asked for an account ([`/auth/register`](#post-authregister)) and is waiting for approval | No (403 `ACCOUNT_PENDING`, after the right password) |
+| `invited` | An administrator created this officer or administrator account ([`POST /admin/users`](#post-adminusers)); its owner has not activated it yet. It has no password at all | No: login answers `INVALID_CREDENTIALS`, as for an unknown username. Activate with [`/auth/activate`](#post-authactivate) |
+| `active` | Approved or activated | Yes |
+| `suspended` | Suspended by an administrator, with a reason | No (403 `ACCOUNT_SUSPENDED`) |
+| `rejected` | The request was refused, with a reason. Final | No (403 `ACCOUNT_REJECTED`) |
+
+An invited account is not active, so approve, reject, suspend, reactivate and reset key all
+refuse it, and it never counts as one of the active administrators that must remain.
+
+**Rules shared by all eight:**
 
 - **Admin only.** Every request needs a token, and the account must be an active `admin`.
   Anyone else gets 401 or 403 (see [Roles and access](#roles-and-access)). This applies to
@@ -603,6 +809,8 @@ accounts and changing a role are planned for a later step.
   | Suspend | `active` | `suspended` | `{ "reason": "…" }` | All roles, with two extra rules for administrators (below) |
   | Reactivate | `suspended` | `active` | none, or `{}` | All roles |
   | Reset key | `suspended` | `suspended` (the device key is removed; the status does not change) | `{ "reason": "…" }` | Accounts with a device key: `miner`, `transporter`, `buyer` |
+  | Create | (new account) | `invited` | `{ "username", "fullName", "role" }` | `officer`, `admin` only |
+  | Reissue activation code | `invited` | `invited` (a new code; the old one stops working) | none, or `{}` | `officer`, `admin` (the only invited accounts) |
 
   **Rejected is final.** No action leads out of `rejected`. The person must request a new
   account under a different username.
@@ -612,7 +820,10 @@ accounts and changing a role are planned for a later step.
   administrator as the actor, their IP address, and `{ from, to }` plus the reason where
   there is one. The actions are `user.approve`, `user.reject`, `user.suspend` and
   `user.reactivate`. A key reset is recorded as `user.key_reset` with `{ reason,
-  keyFingerprint }`, naming the removed key by fingerprint.
+  keyFingerprint }`, naming the removed key by fingerprint. A created account is recorded
+  as `user.create` with `{ source: "admin", role, activationExpiresAt }`, and a new code as
+  `user.activation_reissue` with `{ activationExpiresAt }`. An activation code is never
+  recorded.
 - **`{id}`** is the user's id, a UUID. Upper- or lower-case letters are both accepted.
 
 **Reasons.** Reject, suspend and reset key need a reason: 3 to 500 characters after surrounding spaces
@@ -621,10 +832,10 @@ audit log, where it can never be edited or removed. Keep it short and factual, f
 `Licence number could not be verified`, and do not add personal details that are not needed.
 The reason is shown to administrators only, never to the account's owner.
 
-**The admin view of a user.** All six endpoints return users in this form. Unlike
-[`GET /auth/me`](#get-authme), it includes the status reason and the approval. It never
-contains the password hash, the on-chain reference or the device key itself, only the key's
-fingerprint.
+**The admin view of a user.** All eight endpoints return users in this form. Unlike
+[`GET /auth/me`](#get-authme), it includes the status reason, the approval and the
+activation expiry. It never contains the password hash, the on-chain reference, the
+activation code or its hash, or the device key itself, only the key's fingerprint.
 
 | Field | Meaning |
 |---|---|
@@ -635,6 +846,7 @@ fingerprint.
 | `approvedAt` | When it was approved; `null` with `approvedBy` |
 | `createdAt`, `updatedAt` | When the account was requested, and when it last changed |
 | `publicKeyFingerprint` | The SHA-256 fingerprint of the registered device key, as in [`/auth/me`](#get-authme); `null` when there is none. Lets an administrator see whether there is a key to reset, and compare it with the one the user's phone shows |
+| `activationExpiresAt` | For an invited account with a code: when the code stops working. A time in the past means it has expired and a new one is needed. `null` for every other account, and for an invited account whose code was erased after 5 wrong attempts. A time, never a secret |
 
 **Errors these endpoints can return**, on top of the [token errors](#authentication):
 
@@ -644,8 +856,10 @@ fingerprint.
 | 403 | `FORBIDDEN` | Logged in and active, but not an administrator | You do not have permission to do this. |
 | 403 | `CANNOT_SUSPEND_SELF` | An administrator tried to suspend their own account | You cannot suspend your own account. |
 | 404 | `USER_NOT_FOUND` | No user has this id | No user has this id. |
-| 409 | `INVALID_STATUS_TRANSITION` | The account is not in the status this action starts from (for example approving an active account, resetting the key of an account that is not suspended, or anything on a rejected one) | Only a pending account can be approved. This account is active. (The wording names the action and the actual status.) |
+| 400 | `ROLE_NOT_CREATABLE` | Create with a role other than `officer` or `admin`. The request schema refuses it first (`VALIDATION_FAILED`, "must be officer or admin"); the service checks again for any other caller | Only officer and administrator accounts are created by an administrator. Miners, transporters and buyers register themselves. |
+| 409 | `INVALID_STATUS_TRANSITION` | The account is not in the status this action starts from (for example approving an active account, resetting the key of an account that is not suspended, reissuing a code for an account that is not invited, or anything on a rejected one) | Only a pending account can be approved. This account is active. (The wording names the action and the actual status, with "an" before `active` and `invited`.) |
 | 409 | `ROLE_NOT_APPROVABLE` | Approve or reject on an officer or administrator account. Those are created by an administrator, never requested | Officer and administrator accounts are created by an administrator, not approved or rejected. |
+| 409 | `USERNAME_TAKEN` | Create with a username that exists already, in any letter case, whatever that account's status (invited, pending and rejected included) | That username is already taken. Please choose another. |
 | 409 | `LAST_ACTIVE_ADMIN` | Suspending this administrator would leave no other active administrator | At least one other active administrator must remain, so this account cannot be suspended. |
 | 409 | `NO_PUBLIC_KEY` | Reset key on a suspended account that has no device key | This account has no device key to reset. |
 | 500 | `INTERNAL_ERROR` | Unexpected server fault | Something went wrong |
@@ -667,7 +881,7 @@ of pending requests: the queue an administrator works through (FR-12).
 
 | Parameter | Default | Rules |
 |---|---|---|
-| `status` | `pending` | `pending`, `active`, `suspended` or `rejected` |
+| `status` | `pending` | `pending`, `active`, `suspended`, `rejected` or `invited` |
 | `limit` | `20` | Whole number, 1 to 100 |
 | `offset` | `0` | Whole number, 0 to 10 000: how many matching accounts to skip |
 
@@ -696,7 +910,8 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
       "approvedAt": null,
       "createdAt": "2026-11-05T09:00:00.000Z",
       "updatedAt": "2026-11-05T09:00:00.000Z",
-      "publicKeyFingerprint": null
+      "publicKeyFingerprint": null,
+      "activationExpiresAt": null
     }
   ],
   "total": 1,
@@ -707,6 +922,76 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
 
 `total` counts every account with that status, not only this page, so the app can show
 "page 1 of 3". An `offset` past the end gives an empty `users` list with the real `total`.
+
+---
+
+## POST /admin/users
+
+Creates an officer or administrator account (FR-10). The account is `invited`: it has no
+password and cannot log in until its owner [activates](#post-authactivate) it with the
+activation code in this response and chooses their own password. Miners, transporters and
+buyers request their own accounts with [`/auth/register`](#post-authregister) instead.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | None yet |
+
+**Request body**
+
+| Field | Type | Required | Rules |
+|---|---|---|---|
+| `username` | string | yes | As at [registration](#post-authregister): surrounding spaces are trimmed, 3–32 characters from `A–Z a–z 0–9 _ . -`, unique ignoring letter case |
+| `fullName` | string | yes | Surrounding spaces are trimmed. 1–100 characters |
+| `role` | string | yes | `officer` or `admin` ("must be officer or admin") |
+
+Any other field is refused with `VALIDATION_FAILED`, including `password` (only the owner
+ever chooses one) and `status` (a created account is always `invited`).
+
+```json
+{ "username": "chanda_mwale", "fullName": "Chanda Mwale", "role": "officer" }
+```
+
+**201 Created**
+
+```json
+{
+  "user": {
+    "id": "3f2b6c1e-0000-4000-8000-000000000002",
+    "username": "chanda_mwale",
+    "fullName": "Chanda Mwale",
+    "licenceNumber": null,
+    "role": "officer",
+    "status": "invited",
+    "statusReason": null,
+    "approvedBy": null,
+    "approvedAt": null,
+    "createdAt": "2026-11-11T09:00:00.000Z",
+    "updatedAt": "2026-11-11T09:00:00.000Z",
+    "publicKeyFingerprint": null,
+    "activationExpiresAt": "2026-11-14T09:00:00.000Z"
+  },
+  "activation": {
+    "code": "7KQ4-M2XD-9TNE",
+    "expiresAt": "2026-11-14T09:00:00.000Z"
+  }
+}
+```
+
+- **`activation.code` is shown here once and never again.** Only its SHA-256 hash is
+  stored, so nobody, the administrator included, can read it back later. Hand it to the
+  person directly (in person or by phone). A lost code is replaced with
+  [`/activation-code`](#post-adminusersidactivation-code), not recovered.
+- **It works for 72 hours** (`expiresAt`, worked out by the database's clock) and for at
+  most 5 wrong attempts. The format, and how it may be typed, are under
+  [`POST /auth/activate`](#post-authactivate).
+- **`approvedBy` stays `null`:** nobody approved a request. The `user.create` audit entry
+  records which administrator created the account.
+- **Any active administrator may create another administrator.** There is no second
+  approval; the creation is recorded.
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `ROLE_NOT_CREATABLE` and `USERNAME_TAKEN`.
+See [the shared table](#admin-account-management).
 
 ---
 
@@ -742,7 +1027,8 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
     "approvedAt": "2026-11-06T10:15:00.000Z",
     "createdAt": "2026-11-05T09:00:00.000Z",
     "updatedAt": "2026-11-06T10:15:00.000Z",
-    "publicKeyFingerprint": null
+    "publicKeyFingerprint": null,
+    "activationExpiresAt": null
   }
 }
 ```
@@ -889,6 +1175,39 @@ reason, and now `"publicKeyFingerprint": null`.
 `INVALID_STATUS_TRANSITION` (the account is not suspended: "Only a suspended account can
 have its device key reset. This account is active.") and `NO_PUBLIC_KEY` (the account has
 no key, so nothing was changed). See [the shared table](#admin-account-management).
+
+---
+
+## POST /admin/users/{id}/activation-code
+
+Issues a new activation code for an **invited** account (FR-10): the old code was lost,
+has expired, or was erased after 5 wrong attempts. The old code stops working at once,
+the wrong-attempt count starts again at 0, and the new code works for 72 hours.
+
+This is also how a mistaken invitation is withdrawn: reissue, and do not pass the new code
+on. Nobody can then activate the account.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | None yet |
+| **Request body** | None, or `{}`. Any field is refused |
+
+```
+POST /admin/users/3f2b6c1e-0000-4000-8000-000000000002/activation-code
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+```
+
+**200 OK**: `{ "user": …, "activation": { "code": …, "expiresAt": … } }`, the same shape as
+[creation](#post-adminusers), with the account still `invited`. As there, the new code is
+shown once and never again.
+
+**Recorded** in the audit log as `user.activation_reissue` with `{ activationExpiresAt }`,
+never the code.
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `USER_NOT_FOUND` and
+`INVALID_STATUS_TRANSITION` ("Only an invited account can get a new activation code. This
+account is active."). See [the shared table](#admin-account-management).
 
 ---
 
@@ -1429,7 +1748,7 @@ Neither id, or both, is refused with `"field": "query"`.
 | `alert_raised` | An anomaly check raised an alert on a step | both |
 | `step_anchored` | The step's Sepolia transaction was mined (the block's time) | both |
 | `alert_reviewed`, `alert_dismissed` | An officer closed an alert. Officer review is still to be built; these rows appear once alerts can be closed | both |
-| `account_event` | A change to the actor's account: `user.create`, `user.register`, `user.approve`, `user.reject`, `user.suspend`, `user.reactivate`, `user.key_register` or `user.key_reset`. Logins and failed logins are not included | actor only |
+| `account_event` | A change to the actor's account: `user.create`, `user.register`, `user.approve`, `user.reject`, `user.suspend`, `user.reactivate`, `user.key_register`, `user.key_reset`, `user.activation_reissue`, `user.activate` or `user.password_change`. Logins, and failed logins, activations and password changes, are not included | actor only |
 
 - **An actor's trail** contains the steps that actor recorded, the alerts and anchoring of
   those steps, and their account events. Steps by other people on the same consignments are
