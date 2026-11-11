@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import request from 'supertest';
+import { decodeJwt } from 'jose';
 import { createApp } from '../src/app.js';
 import { createTokenService } from '../src/services/tokenService.js';
 import { createUserService } from '../src/services/userService.js';
@@ -157,8 +158,9 @@ describe('requireAuth on GET /auth/me', () => {
   describe('success', () => {
     it('answers 200 with the user as the database has it, not as the token says', async () => {
       const { app, lookup } = setup();
+      const token = await validToken();
 
-      const res = await me(app, `Bearer ${await validToken()}`);
+      const res = await me(app, `Bearer ${token}`);
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual({
@@ -173,7 +175,8 @@ describe('requireAuth on GET /auth/me', () => {
           publicKeyFingerprint: null,
         },
       });
-      expect(lookup).toHaveBeenCalledWith(USER_ID, 'miner');
+      // The token's iat goes too, for the password-change cut-off.
+      expect(lookup).toHaveBeenCalledWith(USER_ID, 'miner', decodeJwt(token).iat);
     });
 
     it('tells every cache not to keep the response', async () => {

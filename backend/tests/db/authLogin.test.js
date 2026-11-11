@@ -41,7 +41,7 @@ describe('POST /auth/login through the real stack', () => {
 
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ tokenType: 'Bearer', expiresIn: 3600, user: { id: userId, status: 'active' } });
-    expect(await services.tokens.verify(res.body.token)).toEqual({ userId, role: 'miner' });
+    expect(await services.tokens.verify(res.body.token)).toEqual({ userId, role: 'miner', iat: expect.any(Number) });
     expect(res.text).not.toContain('argon2');
     expect(res.headers['cache-control']).toBe('no-store');
   });

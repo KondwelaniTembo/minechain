@@ -36,9 +36,10 @@ export function createRequireAuth({ tokens, users }) {
 
     try {
       // Signature, algorithm, issuer, audience and expiry: TOKEN_EXPIRED or TOKEN_INVALID.
-      const { userId, role } = await tokens.verify(match[1]);
-      // The account as it is now: refused if gone, no longer active, or with another role.
-      req.user = await users.getAuthenticatedUser(userId, role);
+      const { userId, role, iat } = await tokens.verify(match[1]);
+      // The account as it is now: refused if gone, no longer active, with another role, or if
+      // this token was issued before the account's last password change.
+      req.user = await users.getAuthenticatedUser(userId, role, iat);
       return next();
     } catch (err) {
       // Only refused credentials get the challenge. A 403 (the account is not allowed in)

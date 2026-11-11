@@ -5,7 +5,7 @@ import { AppError } from '../errors.js';
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 
-// DEV-SHORTCUT: in-memory rate-limit stores (register, login IP, login username, activation, sync and reports) | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
+// DEV-SHORTCUT: in-memory rate-limit stores (register, login IP, login username, activation, password change, sync and reports) | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
 //
 // Shared settings for every limiter. Each limiter is made by a function rather than created
 // once at import, so each createApp call, and so each test, gets its own counter.
@@ -108,6 +108,25 @@ export function createSyncLimiter({ limit = 60, windowMs = FIFTEEN_MINUTES_MS } 
       if (!req.user?.id) throw new Error('createSyncLimiter ran without requireAuth before it on this route');
       return `user:${req.user.id}`;
     },
+  });
+}
+
+// Failed password changes per logged-in user (POST /auth/me/password). Someone holding a
+// stolen phone or token is logged in already, and could otherwise guess the current password
+// without limit to take the account over. Successful changes are given back, as at login, so
+// only failures count: 10 per 15 minutes is far beyond honest typing mistakes. Keyed by user
+// id for the same reasons as sync. Must run after requireAuth.
+export function createPasswordChangeLimiter({ limit = 10, windowMs = FIFTEEN_MINUTES_MS } = {}) {
+  return createLimiter({
+    limit,
+    windowMs,
+    message: 'Too many failed password changes. Please wait 15 minutes and try again.',
+    keyGenerator: (req) => {
+      // Fail closed, as in createSyncLimiter.
+      if (!req.user?.id) throw new Error('createPasswordChangeLimiter ran without requireAuth before it on this route');
+      return `user:${req.user.id}`;
+    },
+    skipSuccessfulRequests: true,
   });
 }
 

@@ -27,6 +27,8 @@ export function createTokenService({ secret, expiresInSeconds, now = () => Date.
   return {
     // Only the user id and role go in the token. The payload is signed, not encrypted, so
     // anyone holding the token can read it: no names, usernames or other personal data.
+    // issuedAt (the token's iat, whole seconds from this server's clock) is returned so a
+    // password change can store it as the cut-off for older tokens: one clock decides both.
     async sign({ userId, role }) {
       const issuedAt = Math.floor(now() / 1000);
       const token = await new SignJWT({ role })
@@ -37,10 +39,12 @@ export function createTokenService({ secret, expiresInSeconds, now = () => Date.
         .setIssuedAt(issuedAt)
         .setExpirationTime(issuedAt + expiresInSeconds)
         .sign(key);
-      return { token, expiresIn: expiresInSeconds };
+      return { token, expiresIn: expiresInSeconds, issuedAt };
     },
 
-    // Returns { userId, role }, or throws a 401 AppError.
+    // Returns { userId, role, iat }, or throws a 401 AppError. iat goes to
+    // getAuthenticatedUser, which refuses a token issued before the account's last password
+    // change.
     async verify(token) {
       let payload;
       try {
@@ -64,10 +68,12 @@ export function createTokenService({ secret, expiresInSeconds, now = () => Date.
         throw new AppError(401, 'TOKEN_INVALID', 'Your session is not valid. Please log in again.');
       }
 
-      if (typeof payload.role !== 'string') {
+      // jose has checked that iat is a number; a whole number is what sign() writes, and what
+      // the cut-off comparison in SQL expects.
+      if (typeof payload.role !== 'string' || !Number.isSafeInteger(payload.iat)) {
         throw new AppError(401, 'TOKEN_INVALID', 'Your session is not valid. Please log in again.');
       }
-      return { userId: payload.sub, role: payload.role };
+      return { userId: payload.sub, role: payload.role, iat: payload.iat };
     },
   };
 }

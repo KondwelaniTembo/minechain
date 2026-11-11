@@ -60,6 +60,17 @@ export const loginSchema = z
   })
   .strict();
 
+// POST /auth/me/password. Presence and size only, as at login: the policy on the new
+// password runs in userService.changePassword, and the current one is only verified, so an
+// older, weaker password can still be replaced. Neither is trimmed (spaces are part of a
+// passphrase). The account is the logged-in user, so no id or username is accepted here.
+export const changePasswordBodySchema = z
+  .object({
+    currentPassword: z.string().min(1, 'is required').max(1024, 'must be at most 1024 characters'),
+    newPassword: z.string().min(1, 'is required').max(1024, 'must be at most 1024 characters'),
+  })
+  .strict();
+
 // POST /auth/activate (FR-10). Like login, the schema checks presence and size only.
 // - username: as at login. A malformed one cannot be invited, so it gets the usual 401.
 // - code: any short string. Whether it can be a code (lower case, hyphens, spaces, O for 0)

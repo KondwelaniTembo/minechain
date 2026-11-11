@@ -41,7 +41,7 @@ describe('userService.authenticate against PostgreSQL', () => {
 
       const result = await users().authenticate('mutale_banda', PASSWORD);
 
-      expect(await tokens.verify(result.token)).toEqual({ userId: user.id, role: 'miner' });
+      expect(await tokens.verify(result.token)).toEqual({ userId: user.id, role: 'miner', iat: expect.any(Number) });
       expect(result.expiresIn).toBe(3600);
       expect(result.user).toMatchObject({ id: user.id, status: 'active' });
       expect(JSON.stringify(result.user)).not.toContain('argon2');

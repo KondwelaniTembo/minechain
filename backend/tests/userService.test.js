@@ -476,15 +476,17 @@ describe('userService.getAuthenticatedUser', () => {
     return { service, db };
   }
 
-  it('looks the user up by id, as a parameter, without selecting the password hash', async () => {
+  it('looks the user up by id, with the token iat for the cut-off, as parameters, without the password hash', async () => {
     const { service, db } = setupLookup([dbRow]);
 
-    await service.getAuthenticatedUser('user-1', 'miner');
+    await service.getAuthenticatedUser('user-1', 'miner', 1794470400);
 
     const [text, params] = db.query.mock.calls[0];
     expect(text).toMatch(/WHERE id = \$1/);
+    // The comparison itself runs in SQL; tests/db/authMe.test.js proves its edges.
+    expect(text).toMatch(/\$2::bigint >= extract\(epoch FROM tokens_valid_after\)/);
     expect(text).not.toMatch(/password_hash/);
-    expect(params).toEqual(['user-1']);
+    expect(params).toEqual(['user-1', 1794470400]);
   });
 
   it('returns the safe user for an active account whose role matches', async () => {

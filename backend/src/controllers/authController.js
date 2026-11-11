@@ -36,6 +36,22 @@ export function createAuthController({ users }) {
       res.status(200).json({ token, tokenType: 'Bearer', expiresIn, user });
     },
 
+    // By the time this runs, noStore, requireAuth, the limiter and
+    // validate(changePasswordBodySchema) have passed. The account is req.user.id, never one
+    // from the body. Same answer shape as login: the app swaps in the fresh token, because
+    // every older one, including the one that made this request, is now refused.
+    async changePassword(req, res) {
+      const { currentPassword, newPassword } = req.validated.body;
+      const { user, token, expiresIn } = await users.changePassword({
+        userId: req.user.id,
+        currentPassword,
+        newPassword,
+        ipAddress: req.ip,
+      });
+
+      res.status(200).json({ token, tokenType: 'Bearer', expiresIn, user });
+    },
+
     // requireAuth has already checked the token and loaded the current user.
     me(req, res) {
       // Personal details: no cache may keep a copy.

@@ -83,4 +83,43 @@ describe('userService.getAuthenticatedUser against PostgreSQL', () => {
 
     await expect(service().getAuthenticatedUser(user.id, 'miner')).rejects.toMatchObject({ status: 401, code: 'TOKEN_INVALID' });
   });
+
+  // The password-change cut-off. The comparison is in SQL, so it is tested against
+  // PostgreSQL rather than a fake. A fixed second, as a token iat would carry it.
+  describe('the tokens_valid_after cut-off', () => {
+    const CUT_OFF = 1794470400; // 2026-11-11 00:00:00 UTC
+
+    async function userWithCutOff(seconds) {
+      const user = await insertUser(t.db, { role: 'miner', status: 'active' });
+      await t.db.query('UPDATE users SET tokens_valid_after = to_timestamp($1::bigint) WHERE id = $2', [seconds, user.id]);
+      return user;
+    }
+
+    it('refuses a token issued one second before it, with the same 401 as a deleted account', async () => {
+      const user = await userWithCutOff(CUT_OFF);
+
+      const err = await service().getAuthenticatedUser(user.id, 'miner', CUT_OFF - 1).catch((e) => e);
+
+      expect(err).toMatchObject({ status: 401, code: 'TOKEN_INVALID', message: 'Your session is not valid. Please log in again.' });
+    });
+
+    it('accepts a token issued in the very second of the cut-off (the fresh token from the change)', async () => {
+      const user = await userWithCutOff(CUT_OFF);
+
+      expect(await service().getAuthenticatedUser(user.id, 'miner', CUT_OFF)).toMatchObject({ id: user.id });
+      expect(await service().getAuthenticatedUser(user.id, 'miner', CUT_OFF + 1)).toMatchObject({ id: user.id });
+    });
+
+    it('accepts a token of any age when there is no cut-off', async () => {
+      const user = await insertUser(t.db, { role: 'miner', status: 'active' });
+
+      expect(await service().getAuthenticatedUser(user.id, 'miner', 0)).toMatchObject({ id: user.id });
+    });
+
+    it('fails closed: with a cut-off, a lookup without an iat is refused', async () => {
+      const user = await userWithCutOff(CUT_OFF);
+
+      await expect(service().getAuthenticatedUser(user.id, 'miner')).rejects.toMatchObject({ status: 401, code: 'TOKEN_INVALID' });
+    });
+  });
 });

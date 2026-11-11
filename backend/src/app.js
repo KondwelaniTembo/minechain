@@ -11,6 +11,7 @@ import {
   createLoginIpLimiter,
   createLoginUsernameLimiter,
   createActivationLimiter,
+  createPasswordChangeLimiter,
   createSyncLimiter,
   createReportLimiter,
 } from './middleware/rateLimits.js';
@@ -22,8 +23,9 @@ import { errorHandler } from './middleware/errorHandler.js';
 // listens on a port. Tests pass fakes and hand the app straight to Supertest.
 //
 //   trustProxyHops: how many proxies sit in front of the app (config TRUST_PROXY)
-//   rateLimits:     { registerPerHour, loginPerIp, loginPerUsername, activationPerIp, syncPerUser,
-//                   reportsPerUser } to override the limits, for tests
+//   rateLimits:     { registerPerHour, loginPerIp, loginPerUsername, activationPerIp,
+//                   passwordChangePerUser, syncPerUser, reportsPerUser } to override the
+//                   limits, for tests
 export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } = {}) {
   if (!db || typeof db.query !== 'function') {
     throw new TypeError('createApp needs a db object with a query() method');
@@ -60,6 +62,7 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   const loginIpLimiter = createLoginIpLimiter({ limit: rateLimits.loginPerIp });
   const loginUsernameLimiter = createLoginUsernameLimiter({ limit: rateLimits.loginPerUsername });
   const activationLimiter = createActivationLimiter({ limit: rateLimits.activationPerIp });
+  const passwordChangeLimiter = createPasswordChangeLimiter({ limit: rateLimits.passwordChangePerUser });
   const syncLimiter = createSyncLimiter({ limit: rateLimits.syncPerUser });
   const reportLimiter = createReportLimiter({ limit: rateLimits.reportsPerUser });
 
@@ -68,7 +71,15 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
 
   app.use(
     '/auth',
-    authRoutes({ users: services.users, registerLimiter, loginIpLimiter, loginUsernameLimiter, activationLimiter, requireAuth }),
+    authRoutes({
+      users: services.users,
+      registerLimiter,
+      loginIpLimiter,
+      loginUsernameLimiter,
+      activationLimiter,
+      passwordChangeLimiter,
+      requireAuth,
+    }),
   );
 
   // FR-10 and FR-12 account management. services.accounts is not in the checks above, so

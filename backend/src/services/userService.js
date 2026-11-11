@@ -108,15 +108,35 @@ function activationInvalid() {
 }
 
 // The policy's codes and messages only: the password itself is never sent back. Shared by
-// registration and activation, so both refuse a weak password in exactly the same words.
-function weakPassword(problems) {
+// registration, activation and password change, so all refuse a weak password in exactly
+// the same words. field names the request field the password came in.
+function weakPassword(problems, field = 'password') {
   return new AppError(
     400,
     'WEAK_PASSWORD',
     'Choose a stronger password.',
-    problems.map(({ code, message }) => ({ field: 'password', code, message })),
+    problems.map(({ code, message }) => ({ field, code, message })),
   );
 }
+
+// 400, not 401: the person is logged in, and a 401 would make the app throw away their
+// session over a typing mistake.
+function currentPasswordIncorrect() {
+  return new AppError(400, 'CURRENT_PASSWORD_INCORRECT', 'Your current password is not correct.', [
+    { field: 'currentPassword', message: 'is not correct' },
+  ]);
+}
+
+// A password change ends every other session. The fresh token's iat becomes the cut-off, so
+// the change and the cut-off are one statement. AND password_hash = $4: if the password was
+// changed in the moment since it was checked, this matches nothing rather than overwriting
+// a change the person did not see.
+const CHANGE_PASSWORD = `
+  UPDATE users
+     SET password_hash = $2,
+         tokens_valid_after = to_timestamp($3::bigint)
+   WHERE id = $1 AND password_hash = $4
+  RETURNING id, username, full_name, licence_number, role, status, created_at, public_key`;
 
 // A token that no longer matches the database: the user is gone, or their role changed.
 // 401, because logging in again is the fix (it issues a fresh token with the current role).
@@ -160,6 +180,18 @@ export function createUserService({ db, passwords, passwordPolicy, audit, tokens
       entityType: userId ? 'user' : null,
       entityId: userId,
       details: { reason, ...extra },
+      ipAddress,
+    });
+
+  // Kept for the same reason as failed logins: a run of wrong current passwords on a
+  // logged-in session is a stolen phone or token trying to take the account over.
+  const recordFailedPasswordChange = (reason, { userId, ipAddress }) =>
+    audit.record(db, {
+      action: 'user.password_change_failed',
+      actorId: userId,
+      entityType: 'user',
+      entityId: userId,
+      details: { reason },
       ipAddress,
     });
 
@@ -349,17 +381,85 @@ export function createUserService({ db, passwords, passwordPolicy, audit, tokens
       return { user: toSafeUser(user), token, expiresIn };
     },
 
+    // Changes the logged-in user's password and ends every other session (FR-06). userId is
+    // req.user.id, which requireAuth loaded from the database, never a value from the body.
+    // Returns { user, token, expiresIn } like a login: the phone that made the change swaps
+    // to the fresh token and stays logged in; every older token is refused from now on.
+    async changePassword({ userId, currentPassword, newPassword, ipAddress = null }) {
+      const { rows } = await db.query(
+        `SELECT id, username, full_name, licence_number, role, status, created_at, public_key, password_hash
+           FROM users
+          WHERE id = $1`,
+        [userId],
+      );
+      const account = rows[0];
+      // requireAuth loaded this user a moment ago; gone now gets what requireAuth would say.
+      if (!account) throw staleToken();
+
+      // The new password's policy first, as at activation: a weak choice is refused without
+      // the current password being tried, so it never adds to the failed attempts.
+      const problems = passwordPolicy(newPassword, { username: account.username });
+      if (problems.length > 0) throw weakPassword(problems, 'newPassword');
+
+      if (!(await passwords.verify(account.password_hash, currentPassword))) {
+        await recordFailedPasswordChange('wrong_current_password', { userId, ipAddress });
+        throw currentPasswordIncorrect();
+      }
+
+      // Compared with Argon2 against the stored hash, not as text, because the NFKC form is
+      // what counts: a password typed with different but equivalent characters is the same.
+      if (await passwords.verify(account.password_hash, newPassword)) {
+        throw new AppError(400, 'PASSWORD_UNCHANGED', 'Choose a password different from your current one.', [
+          { field: 'newPassword', message: 'must be different from your current password' },
+        ]);
+      }
+
+      // Both before the transaction: Argon2 takes about 50 ms. The token is signed first so
+      // its iat can become the cut-off, which the token then passes by construction.
+      const newHash = await passwords.hash(newPassword);
+      const { token, expiresIn, issuedAt } = await tokens.sign({ userId: account.id, role: account.role });
+
+      const user = await db.transaction(async (tx) => {
+        const { rows: changed } = await tx.query(CHANGE_PASSWORD, [account.id, newHash, issuedAt, account.password_hash]);
+        // The password changed in between: the current password just checked is no longer
+        // current. Nothing was written, so the throw rolls back nothing.
+        if (changed.length === 0) throw currentPasswordIncorrect();
+        // Same transaction: the change and its record are saved together. No password or
+        // hash in details, only the fact that other sessions ended.
+        await audit.record(tx, {
+          action: 'user.password_change',
+          actorId: account.id,
+          entityType: 'user',
+          entityId: account.id,
+          details: { sessionsEnded: true },
+          ipAddress,
+        });
+        return changed[0];
+      });
+
+      return { user: toSafeUser(user), token, expiresIn };
+    },
+
     // Called by requireAuth on every request, after the token's signature and expiry have
     // been checked. The token says who the user *was* when it was issued; this checks who
     // they are *now*, so a suspension or role change takes effect at once rather than when
     // the token expires. Returns the safe user, read fresh from the database.
-    async getAuthenticatedUser(userId, tokenRole) {
+    //
+    // iat is the token's issue time in whole seconds. A token issued before the account's
+    // tokens_valid_after (set by a password change) matches no row, so it gets exactly the
+    // answer a deleted account gets: no new message tells anyone a password was changed.
+    // The cut-off is the iat of the token the change itself issued, so that token passes
+    // (equal is allowed) and only the server's clock is ever involved. NULL: no cut-off.
+    // A missing iat is NULL in SQL and fails the comparison, so it is refused whenever
+    // there is a cut-off.
+    async getAuthenticatedUser(userId, tokenRole, iat) {
       // password_hash is not even selected: nothing on this path needs it.
       const { rows } = await db.query(
         `SELECT id, username, full_name, licence_number, role, status, created_at, public_key
            FROM users
-          WHERE id = $1`,
-        [userId],
+          WHERE id = $1
+            AND (tokens_valid_after IS NULL OR $2::bigint >= extract(epoch FROM tokens_valid_after))`,
+        [userId, iat],
       );
       const user = rows[0];
 
