@@ -637,3 +637,30 @@ describe('resetKey', () => {
     expect((await storedKey(target.id)).equals(key)).toBe(true);
   });
 });
+
+// One row per action, pinning the whole sentence an administrator reads. The article
+// follows the starting status: "a pending", "an active", "a suspended", "an invited".
+describe('refusal messages', () => {
+  it.each([
+    ['approve', activeUser, (s, target, admin) => s.approve({ targetId: target.id, actorId: admin.id }),
+      'Only a pending account can be approved. This account is active.'],
+    ['reject', activeUser, (s, target, admin) => s.reject({ targetId: target.id, actorId: admin.id, reason: 'Licence not found' }),
+      'Only a pending account can be rejected. This account is active.'],
+    ['suspend', suspendedUser, (s, target, admin) => s.suspend({ targetId: target.id, actorId: admin.id, reason: 'Under investigation' }),
+      'Only an active account can be suspended. This account is suspended.'],
+    ['reactivate', activeUser, (s, target, admin) => s.reactivate({ targetId: target.id, actorId: admin.id }),
+      'Only a suspended account can be reactivated. This account is active.'],
+    ['resetKey', activeUser, (s, target, admin) => s.resetKey({ targetId: target.id, actorId: admin.id, reason: 'Lost device reported' }),
+      'Only a suspended account can have its device key reset. This account is active.'],
+    ['reissueActivation', activeUser, (s, target, admin) => s.reissueActivation({ userId: target.id, actorId: admin.id }),
+      'Only an invited account can get a new activation code. This account is active.'],
+  ])('%s', async (_action, make, start, message) => {
+    const admin = await activeAdmin();
+    const target = await make();
+
+    const err = await start(accounts(), target, admin).catch((e) => e);
+
+    expect(err).toMatchObject({ status: 409, code: 'INVALID_STATUS_TRANSITION' });
+    expect(err.message).toBe(message);
+  });
+});

@@ -114,7 +114,8 @@ const RESET_KEY = `
    WHERE id = $1
   RETURNING ${ADMIN_COLUMNS}`;
 
-// For the 409 message: "Only a pending account can be approved."
+// For the 409 message: "Only a pending account can be approved.", "Only an active account
+// can be suspended."
 const ACTIONS = {
   approve: { from: 'pending', to: 'active', verb: 'approved', audit: 'user.approve' },
   reject: { from: 'pending', to: 'rejected', verb: 'rejected', audit: 'user.reject' },
@@ -152,6 +153,12 @@ function toAdminUser(row) {
 // (a string comparison) would miss it, while the UPDATE would still find the row.
 const normalizeId = (id) => id.toLowerCase();
 
+// zoneService can write "an" into its template because both of its starting statuses
+// begin with a vowel; account actions start from pending, active or suspended, so the
+// article follows the word. Statuses are fixed lower-case words, so the first letter is
+// enough.
+const withArticle = (word) => `${/^[aeiou]/.test(word) ? 'an' : 'a'} ${word}`;
+
 function userNotFound() {
   return new AppError(404, 'USER_NOT_FOUND', 'No user has this id.');
 }
@@ -182,7 +189,7 @@ export function createAccountService({ db, audit }) {
     return new AppError(
       409,
       'INVALID_STATUS_TRANSITION',
-      `Only a ${from} account can be ${verb}. This account is ${user.status}.`,
+      `Only ${withArticle(from)} account can be ${verb}. This account is ${user.status}.`,
     );
   }
 
