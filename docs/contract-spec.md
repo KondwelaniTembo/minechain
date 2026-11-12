@@ -135,6 +135,39 @@ it. The 10% quantity discrepancy check runs in the backend.
 transporters. `recordPurchase` is rejected from `Registered`, because a purchase with no
 transport step would leave a gap in the custody chain.
 
+### Gas used per write
+
+Measured, replacing the earlier estimate of about 95,000 for a registration and 45,000 to
+50,000 for the other two:
+
+| Function | Local, Osaka rules | Sepolia, Glamsterdam (live run, 9 Nov 2026) |
+|---|---|---|
+| `registerConsignment` | 96,645 | 352,951 |
+| `recordHandoff` | 45,449 (median; 45,449–45,515) | 59,299 |
+| `recordPurchase` | 45,336 | 59,182 |
+| Deployment | 1,204,173 (5,201 bytes of bytecode) | — |
+
+The local figures come from `npx hardhat test --gas-stats` in `contracts/` (37 tests
+passing). The Sepolia figures are the three transactions of the first live run, recorded in
+[live-run-2026-11-09.md](live-run-2026-11-09.md).
+
+**Why a registration costs about six handoffs on Sepolia.** All three writes do the same
+work: one role check, one stage read, one three-slot `Consignment` write and one event. The
+difference is that a registration creates three new storage slots, while a handoff or
+purchase updates existing ones. Sepolia activated the Glamsterdam upgrade on 6 Oct 2026, and
+its EIP-8037 (state creation gas) charges every zero-to-non-zero SSTORE 64 state bytes ×
+1,530 = 97,920 extra. So 352,951 − 3 × 97,920 = 59,191, the cost of a handoff. EIP-8038
+(state access repricing) explains the rest: the handoff and purchase are each about 13,850
+dearer than under Osaka. Under Osaka the same pattern holds with the old premium: creating a
+slot costs 20,000 where updating costs 2,900, and 96,645 − 3 × 17,100 = 45,345, about a local
+handoff.
+
+**Caveats.** EIP-8037 is still in Review, so its cost per state byte may change, and
+Glamsterdam is not on mainnet yet: costs depend on the network's gas schedule, not only on
+this code. The backend never relies on these numbers to send: it uses each transaction's own
+`estimateGas` × 1.2. Only the startup balance check uses a fixed ceiling,
+`MAX_GAS_PER_STEP` = 450,000 in `backend/src/chain/preflight.js`.
+
 ## 6. Events and errors
 
 ### Events
@@ -237,5 +270,9 @@ Results:
 - **One admin key.** If the admin renounces its role, no one can grant or revoke recorders
   again. There is also no pause or upgrade, so fixing a contract bug means a new deployment
   at a new address.
+- **Gas depends on the network's schedule.** Creating a consignment's three storage slots
+  dominates the cost of a registration under Glamsterdam's state creation gas (EIP-8037, still
+  in Review). Mainnet or a layer 2 may price it differently; see
+  [Gas used per write](#gas-used-per-write).
 - **Testnet only.** Sepolia is for this prototype. A production system would need a mainnet
   or layer-2 deployment and a security audit.

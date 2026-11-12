@@ -138,6 +138,25 @@ describe('db.transaction on a pool', () => {
     expect(client.release).toHaveBeenCalledWith(expect.objectContaining({ message: 'ROLLBACK failed' }));
   });
 
+  it('opens a REPEATABLE READ transaction when asked', async () => {
+    const { pool, statements } = fakePoolWithClient();
+
+    await createDb(pool).transaction(async (tx) => tx.query('SELECT 1'), { isolation: 'repeatable read' });
+
+    expect(statements).toEqual(['BEGIN ISOLATION LEVEL REPEATABLE READ', 'SELECT 1', 'COMMIT']);
+  });
+
+  it.each([
+    ['SQL appended to a level', 'serializable; DROP TABLE users'],
+    // Inherited from Object.prototype: a plain lookup would find a function and accept it.
+    ['a name inherited from Object.prototype', 'toString'],
+  ])('refuses %s as an unknown isolation level, before opening anything', async (_label, isolation) => {
+    const { pool } = fakePoolWithClient();
+
+    await expect(createDb(pool).transaction(async () => {}, { isolation })).rejects.toThrow(TypeError);
+    expect(pool.connect).not.toHaveBeenCalled();
+  });
+
   it('gives fn a db whose own transaction() uses a savepoint', async () => {
     const { pool, statements } = fakePoolWithClient();
 

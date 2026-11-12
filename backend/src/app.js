@@ -2,7 +2,21 @@ import express from 'express';
 import helmet from 'helmet';
 import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
-import { createRegisterLimiter, createLoginIpLimiter, createLoginUsernameLimiter } from './middleware/rateLimits.js';
+import { adminUserRoutes } from './routes/adminUsers.js';
+import { adminZoneRoutes } from './routes/adminZones.js';
+import { adminAnchoringRoutes } from './routes/adminAnchoring.js';
+import { syncRoutes } from './routes/sync.js';
+import { reportRoutes } from './routes/reports.js';
+import {
+  createRegisterLimiter,
+  createLoginIpLimiter,
+  createLoginUsernameLimiter,
+  createActivationLimiter,
+  createPasswordChangeLimiter,
+  createSyncLimiter,
+  createReportLimiter,
+  createAnchoringActionLimiter,
+} from './middleware/rateLimits.js';
 import { createRequireAuth } from './middleware/requireAuth.js';
 import { notFound } from './middleware/notFound.js';
 import { errorHandler } from './middleware/errorHandler.js';
@@ -11,8 +25,9 @@ import { errorHandler } from './middleware/errorHandler.js';
 // listens on a port. Tests pass fakes and hand the app straight to Supertest.
 //
 //   trustProxyHops: how many proxies sit in front of the app (config TRUST_PROXY)
-//   rateLimits:     { registerPerHour, loginPerIp, loginPerUsername } to override the
-//                   limits, for tests
+//   rateLimits:     { registerPerHour, loginPerIp, loginPerUsername, activationPerIp,
+//                   passwordChangePerUser, syncPerUser, reportsPerUser,
+//                   anchoringActionsPerAdmin } to override the limits, for tests
 export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } = {}) {
   if (!db || typeof db.query !== 'function') {
     throw new TypeError('createApp needs a db object with a query() method');
@@ -48,11 +63,51 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   const registerLimiter = createRegisterLimiter({ limit: rateLimits.registerPerHour });
   const loginIpLimiter = createLoginIpLimiter({ limit: rateLimits.loginPerIp });
   const loginUsernameLimiter = createLoginUsernameLimiter({ limit: rateLimits.loginPerUsername });
+  const activationLimiter = createActivationLimiter({ limit: rateLimits.activationPerIp });
+  const passwordChangeLimiter = createPasswordChangeLimiter({ limit: rateLimits.passwordChangePerUser });
+  const syncLimiter = createSyncLimiter({ limit: rateLimits.syncPerUser });
+  const reportLimiter = createReportLimiter({ limit: rateLimits.reportsPerUser });
+  const anchoringActionLimiter = createAnchoringActionLimiter({ limit: rateLimits.anchoringActionsPerAdmin });
 
   app.use('/health', healthRoutes({ db }));
   const requireAuth = createRequireAuth({ tokens: services.tokens, users: services.users });
 
-  app.use('/auth', authRoutes({ users: services.users, registerLimiter, loginIpLimiter, loginUsernameLimiter, requireAuth }));
+  app.use(
+    '/auth',
+    authRoutes({
+      users: services.users,
+      registerLimiter,
+      loginIpLimiter,
+      loginUsernameLimiter,
+      activationLimiter,
+      passwordChangeLimiter,
+      requireAuth,
+    }),
+  );
+
+  // FR-10 and FR-12 account management. services.accounts is not in the checks above, so
+  // existing tests that build the app with only users and tokens keep working. If it were
+  // ever missing, these routes would fail closed: a logged 500, never an open route.
+  app.use('/admin/users', adminUserRoutes({ accounts: services.accounts, requireAuth }));
+
+  // FR-11 licensed GPS zones. Like accounts, services.zones is not in the checks above; if it
+  // were missing, these routes would fail closed with a logged 500.
+  app.use('/admin/zones', adminZoneRoutes({ zones: services.zones, requireAuth }));
+
+  // Anchoring status and recovery (FR-03 support, plan §5). Like zones, services.anchoring is
+  // not in the checks above; if it were missing, these routes would fail closed with a
+  // logged 500. With ANCHOR_ENABLED false the service still answers, from the database.
+  app.use('/admin/anchoring', adminAnchoringRoutes({ anchoring: services.anchoring, requireAuth, anchoringActionLimiter }));
+
+  // Signed custody steps from the phone's offline queue (FR-03, FR-07). Like accounts,
+  // services.sync is not in the checks above; if it were missing, the route would fail
+  // closed with a logged 500.
+  app.use('/sync', syncRoutes({ sync: services.sync, requireAuth, syncLimiter }));
+
+  // FR-09 transaction reports and FR-13 audit trails, as CSV. Like sync, services.reports is
+  // not in the checks above; if it were missing, these routes would fail closed with a
+  // logged 500.
+  app.use('/reports', reportRoutes({ reports: services.reports, requireAuth, reportLimiter }));
 
   // Order matters: these two must come after every route.
   app.use(notFound);

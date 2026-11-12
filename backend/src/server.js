@@ -3,6 +3,7 @@ import { loadConfig } from './config.js';
 import { createPool, createDb } from './db.js';
 import { createApp } from './app.js';
 import { createServices } from './services/index.js';
+import { createAnchorWorkerFromConfig, describeError } from './anchorWorker.js';
 
 // Loads backend/.env into process.env for local development. On Render there is no .env
 // file, and the variables come from the dashboard instead, so this quietly does nothing.
@@ -17,11 +18,25 @@ try {
   process.exit(1);
 }
 
-const db = createDb(createPool(config.databaseUrl));
-const app = createApp({ db, services: createServices({ db, config }), trustProxyHops: config.trustProxyHops });
+const pool = createPool(config.databaseUrl);
+const db = createDb(pool);
+
+// Only when ANCHOR_ENABLED is true. The worker needs the pool itself for its advisory lock,
+// which must sit on a connection of its own. Created before the app (creating it makes no
+// network call and starts no timer; start() below does that), so the admin anchoring routes
+// get this same instance: their run-now shares its stopped flag and lock, and their status
+// reads its snapshot. null means anchoring is off, and the status says so.
+const anchorWorker = config.anchor.enabled
+  ? createAnchorWorkerFromConfig({ db, pool, anchorConfig: config.anchor })
+  : null;
+
+const app = createApp({ db, services: createServices({ db, config, anchorWorker }), trustProxyHops: config.trustProxyHops });
 
 const server = app.listen(config.port, () => {
   console.log(`MineChain API listening on http://localhost:${config.port} (${config.nodeEnv})`);
+  console.log(anchorWorker ? 'Anchoring: enabled, running preflight' : 'Anchoring: disabled (ANCHOR_ENABLED is not true)');
+  // Not awaited: the API serves requests whatever the worker's preflight finds.
+  anchorWorker?.start().catch((err) => console.error(`Anchoring worker could not start: ${describeError(err)}`));
 });
 
 // For example EADDRINUSE when another process already uses the port. Exiting with a clear
@@ -50,9 +65,14 @@ function shutdown(signal) {
     process.exit(1);
   }, SHUTDOWN_TIMEOUT_MS).unref();
 
+  // The worker's timer stops at once, so no new tick begins while requests drain. A tick
+  // already running is waited for below, before the pool closes under it.
+  const workerStopped = anchorWorker ? anchorWorker.stop() : Promise.resolve();
+
   // Stop accepting new connections and wait for open requests to finish.
   server.close(async (serverErr) => {
     try {
+      await workerStopped;
       await db.close();
     } catch (dbErr) {
       console.error('Closing the database pool failed:', dbErr.message);

@@ -19,6 +19,17 @@ export function createPool(connectionString) {
   return pool;
 }
 
+// The statement that opens a transaction, per isolation level. Fixed text, never built from
+// input: an isolation level cannot be sent as a $1 parameter.
+//   read committed:  PostgreSQL's default. Each statement sees what was committed before it
+//                    started.
+//   repeatable read: every statement sees the same snapshot, taken at the first query. Used
+//                    by reports, so an export and its row count describe one moment.
+const BEGIN_STATEMENTS = Object.freeze({
+  'read committed': 'BEGIN',
+  'repeatable read': 'BEGIN ISOLATION LEVEL REPEATABLE READ',
+});
+
 // The app depends on this small object rather than on pg itself, so tests can swap in a
 // fake with the same methods and never need a running database.
 //
@@ -46,8 +57,19 @@ export function createDb(executor, { inTransaction = false } = {}) {
     // Runs fn(tx) so that everything it does through tx is saved together or not at all.
     // If fn throws, every change is undone and the error is passed on. Example: a new user
     // and its audit row, where saving one without the other would be wrong.
-    async transaction(fn) {
+    // isolation: 'read committed' (the default) or 'repeatable read'.
+    async transaction(fn, { isolation = 'read committed' } = {}) {
+      // Object.hasOwn, not a truthy lookup: BEGIN_STATEMENTS.toString exists (inherited from
+      // Object.prototype), so 'toString' or 'constructor' would otherwise pass as a level.
+      if (typeof isolation !== 'string' || !Object.hasOwn(BEGIN_STATEMENTS, isolation)) {
+        throw new TypeError(`Unknown isolation level; expected one of ${Object.keys(BEGIN_STATEMENTS).join(', ')}`);
+      }
+      const begin = BEGIN_STATEMENTS[isolation];
+
       if (inTransaction) {
+        // A savepoint cannot change the isolation level: PostgreSQL only accepts it at the
+        // start of a transaction, so the outer transaction's level applies. In the DB tests
+        // that is the test's own READ COMMITTED transaction.
         // Already inside a transaction: a savepoint gives the same all-or-nothing result
         // for this part, and leaves the outer transaction usable after a failure.
         // One fixed name, written out in full: savepoint names cannot be sent as $1
@@ -75,7 +97,7 @@ export function createDb(executor, { inTransaction = false } = {}) {
       const client = await executor.connect();
       let brokenConnection;
       try {
-        await client.query('BEGIN');
+        await client.query(begin);
         const result = await fn(createDb(client, { inTransaction: true }));
         await client.query('COMMIT');
         return result;

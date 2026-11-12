@@ -1,0 +1,138 @@
+{
+  "format": "minechain-signing-vectors",
+  "formatVersion": 1,
+  "payloadVersion": 1,
+  "anchorHashVersion": 1,
+  "note": "Generated once by backend/scripts/make-signing-vectors.js and committed. NEVER regenerate it: the Flutter and backend tests compare against these exact values. The private key was discarded; only the public key is stored. All ids and codes are fake. See docs/signing-spec.md, section 9.",
+  "generatedAt": "2026-11-07T19:08:02.280Z",
+  "positive": [
+    {
+      "name": "registration",
+      "fields": {
+        "type": "registration",
+        "stepId": "6f1d2c3a-0000-4000-8000-000000000101",
+        "actorId": "3f2b6c1e-0000-4000-8000-000000000101",
+        "qrCode": "MC-DEMO-000001",
+        "mineral": "gold",
+        "weightMg": "1500000",
+        "latitude": "-15.419012",
+        "longitude": "28.288105",
+        "capturedAt": "2026-11-10T08:00:00.000Z"
+      },
+      "payload": "minechain-step/1/registration\nstep_id=6f1d2c3a-0000-4000-8000-000000000101\nactor_id=3f2b6c1e-0000-4000-8000-000000000101\nqr_code=MC-DEMO-000001\nmineral=gold\nweight_mg=1500000\nlatitude=-15.419012\nlongitude=28.288105\ncaptured_at=2026-11-10T08:00:00.000Z\n",
+      "payloadHex": "6d696e65636861696e2d737465702f312f726567697374726174696f6e0a737465705f69643d36663164326333612d303030302d343030302d383030302d3030303030303030303130310a6163746f725f69643d33663262366331652d303030302d343030302d383030302d3030303030303030303130310a71725f636f64653d4d432d44454d4f2d3030303030310a6d696e6572616c3d676f6c640a7765696768745f6d673d313530303030300a6c617469747564653d2d31352e3431393031320a6c6f6e6769747564653d32382e3238383130350a63617074757265645f61743d323032362d31312d31305430383a30303a30302e3030305a0a",
+      "payloadSha256": "e484def67914f3b2ee500d9ebb8a2aa5b00a468795af956eebcd3886b4e4ea3f",
+      "publicKey": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERjx8p7BZ4emRjVOLc9Pva5z3jwwlSipNaiIRYJrzALXXKMDJ0h785rhE9pGAMAVi8QHUtnI37I/a4cy0n1QYgA==",
+      "signature": "MEQCIBpgih5TeSyiMcdmZ4s+hsMI4qJ891qBxX5mtFPKYPM7AiAktYyjWnQ7pas+uJIfyA/NI98vG720eKbzTKFPx037WQ==",
+      "anchorHash": "c893d17683bdb52abbd231c7077651dc986162b11eb1fca18e1bca234dd9d366"
+    },
+    {
+      "name": "handoff",
+      "fields": {
+        "type": "handoff",
+        "stepId": "6f1d2c3a-0000-4000-8000-000000000102",
+        "actorId": "3f2b6c1e-0000-4000-8000-000000000102",
+        "qrCode": "MC-DEMO-000001",
+        "weightMg": "1495000",
+        "latitude": "-15.418900",
+        "longitude": "28.288700",
+        "capturedAt": "2026-11-10T14:30:05.250Z"
+      },
+      "payload": "minechain-step/1/handoff\nstep_id=6f1d2c3a-0000-4000-8000-000000000102\nactor_id=3f2b6c1e-0000-4000-8000-000000000102\nqr_code=MC-DEMO-000001\nweight_mg=1495000\nlatitude=-15.418900\nlongitude=28.288700\ncaptured_at=2026-11-10T14:30:05.250Z\n",
+      "payloadHex": "6d696e65636861696e2d737465702f312f68616e646f66660a737465705f69643d36663164326333612d303030302d343030302d383030302d3030303030303030303130320a6163746f725f69643d33663262366331652d303030302d343030302d383030302d3030303030303030303130320a71725f636f64653d4d432d44454d4f2d3030303030310a7765696768745f6d673d313439353030300a6c617469747564653d2d31352e3431383930300a6c6f6e6769747564653d32382e3238383730300a63617074757265645f61743d323032362d31312d31305431343a33303a30352e3235305a0a",
+      "payloadSha256": "2bf779244392c76d7e9863d41c945f92353a0c637c83e679d7fb330009a09906",
+      "publicKey": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERjx8p7BZ4emRjVOLc9Pva5z3jwwlSipNaiIRYJrzALXXKMDJ0h785rhE9pGAMAVi8QHUtnI37I/a4cy0n1QYgA==",
+      "signature": "MEUCIBjvuNzGqWgIW3nrJPe8A4fgrTj4fjbRuL13xskSsVpxAiEAxKCSwlPGq2dI3x3XNeSLKAQG/ueIiglUiovON84zHEc=",
+      "anchorHash": "e52940c6a3d33796f4ac1d28542d39ea75e7755d81fe320cb39777b43bd4f5c9"
+    },
+    {
+      "name": "purchase",
+      "fields": {
+        "type": "purchase",
+        "stepId": "6f1d2c3a-0000-4000-8000-000000000103",
+        "actorId": "3f2b6c1e-0000-4000-8000-000000000103",
+        "qrCode": "MC-DEMO-000001",
+        "weightMg": "1494500",
+        "latitude": "-15.419300",
+        "longitude": "28.287800",
+        "capturedAt": "2026-11-11T09:15:00.000Z"
+      },
+      "payload": "minechain-step/1/purchase\nstep_id=6f1d2c3a-0000-4000-8000-000000000103\nactor_id=3f2b6c1e-0000-4000-8000-000000000103\nqr_code=MC-DEMO-000001\nweight_mg=1494500\nlatitude=-15.419300\nlongitude=28.287800\ncaptured_at=2026-11-11T09:15:00.000Z\n",
+      "payloadHex": "6d696e65636861696e2d737465702f312f70757263686173650a737465705f69643d36663164326333612d303030302d343030302d383030302d3030303030303030303130330a6163746f725f69643d33663262366331652d303030302d343030302d383030302d3030303030303030303130330a71725f636f64653d4d432d44454d4f2d3030303030310a7765696768745f6d673d313439343530300a6c617469747564653d2d31352e3431393330300a6c6f6e6769747564653d32382e3238373830300a63617074757265645f61743d323032362d31312d31315430393a31353a30302e3030305a0a",
+      "payloadSha256": "2fccef018a147867560f0e526b2449493e378f50567c484f4f1c75ed9fcf28c8",
+      "publicKey": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERjx8p7BZ4emRjVOLc9Pva5z3jwwlSipNaiIRYJrzALXXKMDJ0h785rhE9pGAMAVi8QHUtnI37I/a4cy0n1QYgA==",
+      "signature": "MEUCIQCWWDnM8mrL1fDeE3SsjDDINpCPNeGqpAuP82YcJJGQCQIgYAXGvN/pmJG4r93t6tGCQ3DmYe8hOZFHDCwRSskcnQU=",
+      "anchorHash": "c10d339f1db6299f7f4f757c317e03a3f90f21c5212816f757cce5d35760f299"
+    }
+  ],
+  "negativePayloads": [
+    {
+      "name": "upper-case step_id",
+      "payload": "minechain-step/1/registration\nstep_id=6F1D2C3A-0000-4000-8000-000000000101\nactor_id=3f2b6c1e-0000-4000-8000-000000000101\nqr_code=MC-DEMO-000001\nmineral=gold\nweight_mg=1500000\nlatitude=-15.419012\nlongitude=28.288105\ncaptured_at=2026-11-10T08:00:00.000Z\n",
+      "expectedError": "PAYLOAD_MALFORMED"
+    },
+    {
+      "name": "negative zero latitude",
+      "payload": "minechain-step/1/registration\nstep_id=6f1d2c3a-0000-4000-8000-000000000101\nactor_id=3f2b6c1e-0000-4000-8000-000000000101\nqr_code=MC-DEMO-000001\nmineral=gold\nweight_mg=1500000\nlatitude=-0.000000\nlongitude=28.288105\ncaptured_at=2026-11-10T08:00:00.000Z\n",
+      "expectedError": "PAYLOAD_MALFORMED"
+    },
+    {
+      "name": "latitude with 7 decimals",
+      "payload": "minechain-step/1/registration\nstep_id=6f1d2c3a-0000-4000-8000-000000000101\nactor_id=3f2b6c1e-0000-4000-8000-000000000101\nqr_code=MC-DEMO-000001\nmineral=gold\nweight_mg=1500000\nlatitude=-15.4190123\nlongitude=28.288105\ncaptured_at=2026-11-10T08:00:00.000Z\n",
+      "expectedError": "PAYLOAD_MALFORMED"
+    },
+    {
+      "name": "captured_at without milliseconds",
+      "payload": "minechain-step/1/registration\nstep_id=6f1d2c3a-0000-4000-8000-000000000101\nactor_id=3f2b6c1e-0000-4000-8000-000000000101\nqr_code=MC-DEMO-000001\nmineral=gold\nweight_mg=1500000\nlatitude=-15.419012\nlongitude=28.288105\ncaptured_at=2026-11-10T08:00:00Z\n",
+      "expectedError": "PAYLOAD_MALFORMED"
+    },
+    {
+      "name": "captured_at on 30 February",
+      "payload": "minechain-step/1/registration\nstep_id=6f1d2c3a-0000-4000-8000-000000000101\nactor_id=3f2b6c1e-0000-4000-8000-000000000101\nqr_code=MC-DEMO-000001\nmineral=gold\nweight_mg=1500000\nlatitude=-15.419012\nlongitude=28.288105\ncaptured_at=2026-02-30T08:00:00.000Z\n",
+      "expectedError": "PAYLOAD_MALFORMED"
+    },
+    {
+      "name": "missing final LF",
+      "payload": "minechain-step/1/registration\nstep_id=6f1d2c3a-0000-4000-8000-000000000101\nactor_id=3f2b6c1e-0000-4000-8000-000000000101\nqr_code=MC-DEMO-000001\nmineral=gold\nweight_mg=1500000\nlatitude=-15.419012\nlongitude=28.288105\ncaptured_at=2026-11-10T08:00:00.000Z",
+      "expectedError": "PAYLOAD_MALFORMED"
+    },
+    {
+      "name": "CRLF line endings",
+      "payload": "minechain-step/1/registration\r\nstep_id=6f1d2c3a-0000-4000-8000-000000000101\r\nactor_id=3f2b6c1e-0000-4000-8000-000000000101\r\nqr_code=MC-DEMO-000001\r\nmineral=gold\r\nweight_mg=1500000\r\nlatitude=-15.419012\r\nlongitude=28.288105\r\ncaptured_at=2026-11-10T08:00:00.000Z\r\n",
+      "expectedError": "PAYLOAD_MALFORMED"
+    },
+    {
+      "name": "mineral line on a handoff",
+      "payload": "minechain-step/1/handoff\nstep_id=6f1d2c3a-0000-4000-8000-000000000102\nactor_id=3f2b6c1e-0000-4000-8000-000000000102\nqr_code=MC-DEMO-000001\nmineral=gold\nweight_mg=1495000\nlatitude=-15.418900\nlongitude=28.288700\ncaptured_at=2026-11-10T14:30:05.250Z\n",
+      "expectedError": "PAYLOAD_MALFORMED"
+    },
+    {
+      "name": "version 2 header",
+      "payload": "minechain-step/2/registration\nstep_id=6f1d2c3a-0000-4000-8000-000000000101\nactor_id=3f2b6c1e-0000-4000-8000-000000000101\nqr_code=MC-DEMO-000001\nmineral=gold\nweight_mg=1500000\nlatitude=-15.419012\nlongitude=28.288105\ncaptured_at=2026-11-10T08:00:00.000Z\n",
+      "expectedError": "PAYLOAD_UNSUPPORTED_VERSION"
+    }
+  ],
+  "negativeSignatures": [
+    {
+      "name": "tampered weight with the original signature",
+      "payload": "minechain-step/1/registration\nstep_id=6f1d2c3a-0000-4000-8000-000000000101\nactor_id=3f2b6c1e-0000-4000-8000-000000000101\nqr_code=MC-DEMO-000001\nmineral=gold\nweight_mg=1600000\nlatitude=-15.419012\nlongitude=28.288105\ncaptured_at=2026-11-10T08:00:00.000Z\n",
+      "signature": "MEQCIBpgih5TeSyiMcdmZ4s+hsMI4qJ891qBxX5mtFPKYPM7AiAktYyjWnQ7pas+uJIfyA/NI98vG720eKbzTKFPx037WQ==",
+      "publicKey": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERjx8p7BZ4emRjVOLc9Pva5z3jwwlSipNaiIRYJrzALXXKMDJ0h785rhE9pGAMAVi8QHUtnI37I/a4cy0n1QYgA==",
+      "expectedVerify": false
+    },
+    {
+      "name": "handoff signature under a purchase header",
+      "payload": "minechain-step/1/purchase\nstep_id=6f1d2c3a-0000-4000-8000-000000000102\nactor_id=3f2b6c1e-0000-4000-8000-000000000102\nqr_code=MC-DEMO-000001\nweight_mg=1495000\nlatitude=-15.418900\nlongitude=28.288700\ncaptured_at=2026-11-10T14:30:05.250Z\n",
+      "signature": "MEUCIBjvuNzGqWgIW3nrJPe8A4fgrTj4fjbRuL13xskSsVpxAiEAxKCSwlPGq2dI3x3XNeSLKAQG/ueIiglUiovON84zHEc=",
+      "publicKey": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERjx8p7BZ4emRjVOLc9Pva5z3jwwlSipNaiIRYJrzALXXKMDJ0h785rhE9pGAMAVi8QHUtnI37I/a4cy0n1QYgA==",
+      "expectedVerify": false
+    },
+    {
+      "name": "raw r||s (IEEE P1363) signature instead of DER",
+      "payload": "minechain-step/1/registration\nstep_id=6f1d2c3a-0000-4000-8000-000000000101\nactor_id=3f2b6c1e-0000-4000-8000-000000000101\nqr_code=MC-DEMO-000001\nmineral=gold\nweight_mg=1500000\nlatitude=-15.419012\nlongitude=28.288105\ncaptured_at=2026-11-10T08:00:00.000Z\n",
+      "signature": "izo7PHpEJWMLLn6yB82eB+7OASZ79Ww71eV1v3143ykxfDhKaqAtXA2tmR/OJrAyvu+5Rn+kmxTV22gLrvULEQ==",
+      "publicKey": "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAERjx8p7BZ4emRjVOLc9Pva5z3jwwlSipNaiIRYJrzALXXKMDJ0h785rhE9pGAMAVi8QHUtnI37I/a4cy0n1QYgA==",
+      "expectedVerify": false
+    }
+  ]
+}

@@ -7,6 +7,13 @@ const NOT_ACTIVE = {
   pending: { code: 'ACCOUNT_PENDING', message: 'Your account is waiting for approval by an administrator.' },
   suspended: { code: 'ACCOUNT_SUSPENDED', message: 'Your account has been suspended. Please contact an administrator.' },
   rejected: { code: 'ACCOUNT_REJECTED', message: 'Your account request was not approved. Please contact an administrator.' },
+  // Created by an administrator, not activated yet. An invited account has no password, so
+  // login answers it with the generic 401 before any status is looked at; this entry is for
+  // any other path that meets one.
+  invited: {
+    code: 'ACCOUNT_NOT_ACTIVATED',
+    message: 'Your account has not been activated yet. Use the activation code from your administrator.',
+  },
 };
 // A status added later must never be mistaken for active.
 const UNKNOWN_STATUS = { code: 'ACCOUNT_NOT_ACTIVE', message: 'Your account is not active. Please contact an administrator.' };

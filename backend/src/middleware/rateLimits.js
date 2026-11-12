@@ -5,7 +5,7 @@ import { AppError } from '../errors.js';
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 
-// DEV-SHORTCUT: in-memory rate-limit stores | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
+// DEV-SHORTCUT: in-memory rate-limit stores (register, login IP, login username, activation, password change, sync, reports and anchoring actions) | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
 //
 // Shared settings for every limiter. Each limiter is made by a function rather than created
 // once at import, so each createApp call, and so each test, gets its own counter.
@@ -50,6 +50,19 @@ export function createLoginIpLimiter({ limit = 100, windowMs = FIFTEEN_MINUTES_M
   });
 }
 
+// Activation attempts per client IP (POST /auth/activate), counting everything. Each code
+// already allows only 5 wrong guesses; this stops one source working through many invited
+// usernames. 30 per 15 minutes, not lower, for the carrier-grade NAT reason above, and
+// because a real person needs only one or two tries. No per-username limiter: the 5-guess
+// erase is that limit, kept in the database rather than in memory.
+export function createActivationLimiter({ limit = 30, windowMs = FIFTEEN_MINUTES_MS } = {}) {
+  return createLimiter({
+    limit,
+    windowMs,
+    message: 'Too many activation attempts from this network. Please try again later.',
+  });
+}
+
 // The rate-limit key for a username. The store keeps its keys in memory, and a plain
 // username there would be a list of everything people typed, including passwords typed
 // into the username box by mistake. An HMAC is a keyed hash: the same username always gives
@@ -73,5 +86,83 @@ export function createLoginUsernameLimiter({ limit = 10, windowMs = FIFTEEN_MINU
     message: 'Too many failed login attempts for this username. Please try again in 15 minutes.',
     keyGenerator: (req) => loginUsernameKey(limiterKey, req.validated.body.username),
     skipSuccessfulRequests: true,
+  });
+}
+
+// Sync requests per logged-in user (POST /sync/steps). Keyed by user id, not by IP: many
+// phones at one mining site share an IP (carrier-grade NAT), and every sync request is
+// already authenticated. 60 per 15 minutes, each with up to 50 steps, is far beyond real
+// use; the limit is there to stop a runaway retry loop in the app, not normal syncing.
+//
+// The key is the user id, a random UUID, so unlike the login limiter there is nothing
+// sensitive to hide behind an HMAC. Must run after requireAuth.
+export function createSyncLimiter({ limit = 60, windowMs = FIFTEEN_MINUTES_MS } = {}) {
+  return createLimiter({
+    limit,
+    windowMs,
+    message: 'Too many sync requests. Please wait a few minutes and try again.',
+    keyGenerator: (req) => {
+      // Fail closed. Without requireAuth there is no user to count, and falling back to a
+      // shared key would let one client use up everyone's limit. A plain Error becomes a
+      // logged 500, as in requireRole.
+      if (!req.user?.id) throw new Error('createSyncLimiter ran without requireAuth before it on this route');
+      return `user:${req.user.id}`;
+    },
+  });
+}
+
+// Failed password changes per logged-in user (POST /auth/me/password). Someone holding a
+// stolen phone or token is logged in already, and could otherwise guess the current password
+// without limit to take the account over. Successful changes are given back, as at login, so
+// only failures count: 10 per 15 minutes is far beyond honest typing mistakes. Keyed by user
+// id for the same reasons as sync. Must run after requireAuth.
+export function createPasswordChangeLimiter({ limit = 10, windowMs = FIFTEEN_MINUTES_MS } = {}) {
+  return createLimiter({
+    limit,
+    windowMs,
+    message: 'Too many failed password changes. Please wait 15 minutes and try again.',
+    keyGenerator: (req) => {
+      // Fail closed, as in createSyncLimiter.
+      if (!req.user?.id) throw new Error('createPasswordChangeLimiter ran without requireAuth before it on this route');
+      return `user:${req.user.id}`;
+    },
+    skipSuccessfulRequests: true,
+  });
+}
+
+// Report downloads per logged-in user (GET /reports/...). Each export can be a query of up to
+// 10,000 rows, so the limit is lower than for sync: 20 per 15 minutes is far more than an
+// officer or buyer downloads by hand, and stops a script from pulling reports in a loop.
+// Keyed by user id for the same reasons as sync. Must run after requireAuth.
+export function createReportLimiter({ limit = 20, windowMs = FIFTEEN_MINUTES_MS } = {}) {
+  return createLimiter({
+    limit,
+    windowMs,
+    message: 'Too many report downloads. Please wait a few minutes and try again.',
+    keyGenerator: (req) => {
+      // Fail closed, as in createSyncLimiter: a shared fallback key would let one client use
+      // up everyone's limit.
+      if (!req.user?.id) throw new Error('createReportLimiter ran without requireAuth before it on this route');
+      return `user:${req.user.id}`;
+    },
+  });
+}
+
+// Anchoring actions per administrator (POST /admin/anchoring/run and .../steps/{id}/retry),
+// one count for both. A run is one tick on the shared worker and a retry rewrites a step, so
+// a script calling them in a loop would hammer the RPC provider or the audit log. 20 per 15
+// minutes is far more than an admin clicks while fixing something. The status (GET) is not
+// limited: it only reads. Keyed by user id for the same reasons as sync. Must run after
+// requireAuth.
+export function createAnchoringActionLimiter({ limit = 20, windowMs = FIFTEEN_MINUTES_MS } = {}) {
+  return createLimiter({
+    limit,
+    windowMs,
+    message: 'Too many anchoring actions. Please wait a few minutes and try again.',
+    keyGenerator: (req) => {
+      // Fail closed, as in createSyncLimiter.
+      if (!req.user?.id) throw new Error('createAnchoringActionLimiter ran without requireAuth before it on this route');
+      return `user:${req.user.id}`;
+    },
   });
 }

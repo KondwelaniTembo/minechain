@@ -40,11 +40,32 @@ async function expectRefused(token, code = 'TOKEN_INVALID') {
 
 describe('tokenService', () => {
   describe('sign and verify', () => {
-    it('gives back the user id and role from a token it signed', async () => {
+    it('gives back the user id, role and issue time from a token it signed', async () => {
       const tokens = service();
       const { token } = await tokens.sign({ userId: USER_ID, role: 'miner' });
 
-      expect(await tokens.verify(token)).toEqual({ userId: USER_ID, role: 'miner' });
+      expect(await tokens.verify(token)).toEqual({ userId: USER_ID, role: 'miner', iat: decodeJwt(token).iat });
+    });
+
+    it('takes iat from its own clock, in whole seconds, and reports it from sign', async () => {
+      // A fixed clock half a second into a second: iat is rounded down.
+      const fixedMs = Date.UTC(2026, 10, 11, 9, 0, 0) + 500;
+      const tokens = service({ now: () => fixedMs });
+
+      const { token, issuedAt } = await tokens.sign({ userId: USER_ID, role: 'officer' });
+
+      expect(issuedAt).toBe(Math.floor(fixedMs / 1000));
+      expect(decodeJwt(token).iat).toBe(issuedAt);
+      expect((await tokens.verify(token)).iat).toBe(issuedAt);
+    });
+
+    it('lets tests sign a token that is exactly a minute older, with no waiting', async () => {
+      const older = service({ now: () => Date.now() - 60 * 1000 });
+      const { issuedAt: olderIat } = await older.sign({ userId: USER_ID, role: 'miner' });
+      const { issuedAt: nowIat } = await service().sign({ userId: USER_ID, role: 'miner' });
+
+      // 59 or 60, depending on where the second boundary falls between the two calls.
+      expect(nowIat - olderIat).toBeGreaterThanOrEqual(59);
     });
 
     it('uses an HS256 header and only the agreed claims, with no personal data', async () => {
@@ -66,7 +87,7 @@ describe('tokenService', () => {
     it('accepts a correct token built by hand (control: the forging helper itself is right)', async () => {
       const token = forge(HS256, validClaims());
 
-      expect(await service().verify(token)).toEqual({ userId: USER_ID, role: 'miner' });
+      expect(await service().verify(token)).toEqual({ userId: USER_ID, role: 'miner', iat: decodeJwt(token).iat });
     });
   });
 
@@ -121,6 +142,10 @@ describe('tokenService', () => {
 
     it('a token whose role is not text', async () => {
       await expectRefused(forge(HS256, validClaims({ role: 1 })));
+    });
+
+    it('a token whose iat is not a whole number, which sign never writes', async () => {
+      await expectRefused(forge(HS256, validClaims({ iat: nowSeconds() + 0.5 })));
     });
 
     it.each(['not-a-token', 'a.b.c', '', 'eyJhbGciOiJIUzI1NiJ9'])('the string %j', async (token) => {

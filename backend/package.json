@@ -16,7 +16,11 @@
     "migrate": "node-pg-migrate up -m migrations -d DATABASE_URL",
     "migrate:down": "node-pg-migrate down -m migrations -d DATABASE_URL",
     "migrate:test": "node-pg-migrate up -m migrations -d TEST_DATABASE_URL",
-    "migrate:create": "node-pg-migrate create -m migrations -j sql"
+    "migrate:create": "node-pg-migrate create -m migrations -j sql",
+    "seed": "node scripts/seed.js",
+    "make:signing-vectors": "node scripts/make-signing-vectors.js",
+    "anchor:once": "node scripts/anchor-once.js",
+    "demo:journey": "node scripts/demo-journey.js"
   },
   "keywords": [],
   "author": "",
@@ -24,6 +28,7 @@
   "dependencies": {
     "argon2": "^0.45.2",
     "dotenv": "^18.0.9",
+    "ethers": "6.17.0",
     "express": "^5.3.0",
     "express-rate-limit": "^8.7.3",
     "helmet": "^8.3.0",
