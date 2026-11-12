@@ -4,10 +4,14 @@
 // Every row returned has exactly the columns buildAnchorCall needs (type, chain_id,
 // actor_ref, weight_mg, data_hash) plus the ids the worker writes back with.
 
+// The SQL fragments below are exported for the admin status (anchorStatusService.js), so it
+// counts held and blocked steps by exactly the rules the worker sends by, never a copy that
+// could drift. Each takes only a fixed SQL alias or expression from our own code, never input.
+
 // The queue index's own condition (transactions_anchor_queue_idx), repeated word for word.
 // PostgreSQL only uses a partial index when it can see that the query's WHERE implies the
-// index's WHERE, and repeating it makes that obvious.
-const QUEUE_INDEX_PREDICATE = `
+// index's WHERE, and repeating it makes that obvious. The alias is always t.
+export const QUEUE_INDEX_PREDICATE = `
       t.anchor_status IN ('pending', 'submitted')
   AND t.review_status IN ('passed', 'cleared')`;
 
@@ -33,8 +37,8 @@ const DUPLICATE_OF_ACCEPTED = (step) => `(
 
 // D3, "held", written once: an open alert, of any type, on any step of the consignment,
 // except a step that is a flagged duplicate of an accepted registration (rule 1 below).
-// consignment is a fixed SQL expression from this file, never input.
-const HELD = (consignment) => `EXISTS (
+// consignment is a fixed SQL expression from our own code, never input.
+export const HELD = (consignment) => `EXISTS (
       SELECT 1
       FROM alerts a
       JOIN transactions held ON held.id = a.transaction_id
@@ -70,12 +74,32 @@ const HELD = (consignment) => `EXISTS (
 //    a consignment the chain has never heard of. Known limit: such a handoff stays pending
 //    until officer review decides what happens to it.
 //
-// FOR UPDATE OF t SKIP LOCKED: the chosen row is locked until the caller's transaction
-// ends, and a row someone else has locked is passed over instead of waited for. Only t is
-// locked; the consignment and user rows are only read. The advisory lock below already
-// keeps a second worker away; this also covers anything else that ever takes rows from the
-// queue. LIMIT applies after locked rows are skipped, so it still returns one free row.
-const NEXT_ELIGIBLE_STEP = `
+// Rule 2, "an earlier step of the same consignment is still on its way to the chain", for
+// the step aliased `step`. onlyFailed narrows it to an earlier step that has FAILED, which
+// is what the admin status counts as "behind a failed step" (a failed step is always passed
+// or cleared, never a flagged duplicate, so the narrowing never changes who is excused).
+const EARLIER_UNANCHORED_STEP = (step, { onlyFailed }) => `EXISTS (
+      SELECT 1
+      FROM transactions earlier
+      WHERE earlier.consignment_id = ${step}.consignment_id
+        AND (earlier.received_at, earlier.id) < (${step}.received_at, ${step}.id)
+        AND earlier.review_status IN ('passed', 'cleared', 'flagged')
+        AND earlier.anchor_status <> 'confirmed'${onlyFailed ? `
+        AND earlier.anchor_status = 'failed'` : ''}
+        AND NOT ${DUPLICATE_OF_ACCEPTED('earlier')})`;
+export const EARLIER_UNANCHORED = (step) => EARLIER_UNANCHORED_STEP(step, { onlyFailed: false });
+export const EARLIER_FAILED = (step) => EARLIER_UNANCHORED_STEP(step, { onlyFailed: true });
+
+// Rule 3 for the step aliased `step`.
+export const REGISTRATION_ANCHORED = (step) => `(${step}.type = 'registration' OR EXISTS (
+      SELECT 1
+      FROM transactions reg
+      WHERE reg.consignment_id = ${step}.consignment_id
+        AND reg.type = 'registration'
+        AND reg.review_status IN ('passed', 'cleared')
+        AND reg.anchor_status = 'confirmed'))`;
+
+const ELIGIBLE_STEP = `
   SELECT ${STEP_COLUMNS}
   FROM transactions t
   JOIN consignments c ON c.id = t.consignment_id
@@ -83,23 +107,17 @@ const NEXT_ELIGIBLE_STEP = `
   WHERE ${QUEUE_INDEX_PREDICATE}
     AND t.anchor_status = 'pending'
     AND NOT ${HELD('t.consignment_id')}
-    AND NOT EXISTS (
-      SELECT 1
-      FROM transactions earlier
-      WHERE earlier.consignment_id = t.consignment_id
-        AND (earlier.received_at, earlier.id) < (t.received_at, t.id)
-        AND earlier.review_status IN ('passed', 'cleared', 'flagged')
-        AND earlier.anchor_status <> 'confirmed'
-        AND NOT ${DUPLICATE_OF_ACCEPTED('earlier')})
-    AND (t.type = 'registration' OR EXISTS (
-      SELECT 1
-      FROM transactions reg
-      WHERE reg.consignment_id = t.consignment_id
-        AND reg.type = 'registration'
-        AND reg.review_status IN ('passed', 'cleared')
-        AND reg.anchor_status = 'confirmed'))
+    AND NOT ${EARLIER_UNANCHORED('t')}
+    AND ${REGISTRATION_ANCHORED('t')}
   ORDER BY t.received_at, t.id
-  LIMIT 1
+  LIMIT 1`;
+
+// FOR UPDATE OF t SKIP LOCKED: the chosen row is locked until the caller's transaction
+// ends, and a row someone else has locked is passed over instead of waited for. Only t is
+// locked; the consignment and user rows are only read. The advisory lock below already
+// keeps a second worker away; this also covers anything else that ever takes rows from the
+// queue. LIMIT applies after locked rows are skipped, so it still returns one free row.
+const NEXT_ELIGIBLE_STEP = `${ELIGIBLE_STEP}
   FOR UPDATE OF t SKIP LOCKED`;
 
 // tx: a db object inside a transaction (db.transaction's callback argument). Outside one,
@@ -107,6 +125,14 @@ const NEXT_ELIGIBLE_STEP = `
 // Returns the row, or null when nothing may be sent now.
 export async function nextEligibleStep(tx) {
   const { rows } = await tx.query(NEXT_ELIGIBLE_STEP);
+  return rows[0] ?? null;
+}
+
+// The same choice without the row lock, for the admin status: "what would the worker send
+// next?" It locks nothing, so it never makes the worker skip a row, and its answer can be
+// out of date a moment later. Never use it to send.
+export async function peekEligibleStep(db) {
+  const { rows } = await db.query(ELIGIBLE_STEP);
   return rows[0] ?? null;
 }
 
