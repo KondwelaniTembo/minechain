@@ -1,5 +1,7 @@
 # Anchoring status and recovery — approved plan (12 Nov 2026)
 
+**Status: built 12 Nov 2026 in N1–N5.** N1 `88ded46`, N2 `de7003c`, N3 `3769508`, N4 `6c67172`; N5 is the docs commit that adds this line. What was built, and where it differs from this plan, is in `docs/api.md` ("Anchoring administration"), `docs/database-schema.md` ("Admin status and retry") and `docs/decisions.md` ("Anchoring admin (1)–(12)").
+
 Plan-only output reviewed in chat on 12 Nov 2026; built in sub-steps N1–N5.
 
 ## Decisions (12 Nov 2026)

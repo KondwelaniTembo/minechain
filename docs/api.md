@@ -31,6 +31,9 @@ and `FAKE-SIGNATURE`. None of them is a real identifier, password or token.
 | `POST` | [`/admin/zones/{id}/rename`](#post-adminzonesidrename) | Rename a zone (FR-11) | Yes, admin only |
 | `POST` | [`/admin/zones/{id}/deactivate`](#post-adminzonesiddeactivate) | Deactivate an active zone, with a reason (FR-11) | Yes, admin only |
 | `POST` | [`/admin/zones/{id}/reactivate`](#post-adminzonesidreactivate) | Reactivate an inactive zone (FR-11) | Yes, admin only |
+| `GET` | [`/admin/anchoring`](#get-adminanchoring) | Anchoring status: the worker, what is waiting, stuck or failed, and a list of problems (FR-03) | Yes, admin only |
+| `POST` | [`/admin/anchoring/run`](#post-adminanchoringrun) | Run one anchoring tick now (FR-03) | Yes, admin only |
+| `POST` | [`/admin/anchoring/steps/{id}/retry`](#post-adminanchoringstepsidretry) | Send a failed step back to the anchoring queue, with a reason (FR-03) | Yes, admin only |
 | `GET` | [`/reports/transactions`](#get-reportstransactions) | Download custody steps as a spreadsheet (CSV), filtered (FR-09) | Yes, officer, buyer (own purchases only) or admin |
 | `GET` | [`/reports/audit-trail`](#get-reportsaudit-trail) | Download the audit trail of one consignment or one actor as CSV (FR-13) | Yes, officer only |
 | `POST` | [`/sync/steps`](#post-syncsteps) | Upload signed custody steps from the phone's offline queue (FR-03, FR-07) | Yes, miner, transporter or buyer |
@@ -238,8 +241,9 @@ the endpoint sections below remain the source of truth for what exists.
 | Create officer and admin accounts, and reissue their activation codes (FR-10): `POST /admin/users`, `/admin/users/{id}/activation-code` | | | | | ✓ | **Built** |
 | Change an account's role; delete an account with no history (FR-10) | | | | | ✓ | Planned |
 | Manage licensed GPS extraction zones (FR-11): `/admin/zones` | | | | | ✓ | **Built** |
-| Monitor system health: API errors, blockchain sync failures, database capacity (System Administrator use case) | | | | | ✓ | Planned |
-| Trigger a manual re-synchronisation (System Administrator use case) | | | | | ✓ | Planned |
+| Monitor blockchain anchoring: the worker, stuck and failed steps, a list of problems (System Administrator use case): `GET /admin/anchoring` | | | | | ✓ | **Built** |
+| Trigger a manual re-synchronisation (System Administrator use case): `POST /admin/anchoring/run`, `/admin/anchoring/steps/{id}/retry` | | | | | ✓ | **Built** |
+| Monitor the rest of system health: API errors, database capacity (System Administrator use case) | | | | | ✓ | Planned |
 
 The administrator's rows follow the System Administrator use case: managing accounts and
 zones, checking and downloading reports, monitoring the system's health, and starting a
@@ -1554,6 +1558,319 @@ after this are checked against it.
 
 **Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `ZONE_NOT_FOUND` and
 `INVALID_STATUS_TRANSITION` (the zone is already active).
+
+---
+
+## Anchoring administration
+
+Three endpoints let an administrator see how anchoring on Sepolia is going (FR-03), and
+recover when it stops: a status page, a button that runs one tick of the worker now, and a
+retry for a step that failed for a reason that can be tried again. Anchoring failures are
+an administrator's concern, not officer alerts (decisions log, Anomaly rules (8)).
+
+**Rules shared by all three:**
+
+- **Admin only.** Every request needs a token, and the account must be an active `admin`.
+  Anyone else gets 401 or 403 (see [Roles and access](#roles-and-access)). This applies to
+  every path under `/admin/anchoring`, including paths that do not exist: a non-admin gets
+  403, not 404, so the paths cannot be discovered.
+- **No caching.** Every response, errors included, carries `Cache-Control: no-store`.
+- **Rate limit: 20 actions per 15 minutes per administrator**, run and retry together, one
+  count for both. It counts every request that passes the role check, including invalid
+  ones. A non-admin is refused before it and not counted. Over the limit: **429
+  `TOO_MANY_REQUESTS`**, "Too many anchoring actions. Please wait a few minutes and try
+  again.", with `Retry-After` (see [Rate limits](#rate-limits)). **The status is not
+  limited**: it only reads.
+- **No chain call inside a request.** The status is built from the database and the
+  worker's memory, and a retry changes the database only. Both answer even while the RPC
+  provider is down. Only a run talks to the chain, through the worker.
+- **No secret in any answer.** No RPC URL, key, `ANCHOR_*` setting or text from the RPC
+  provider. The two addresses shown are public on Sepolia.
+- **Every action is recorded** in the audit log, with the administrator as the actor and
+  their IP address. A refusal, and the status, record nothing.
+
+  | Action | Audit action | Entity | `details` |
+  |---|---|---|---|
+  | Run | `anchoring.run` | none | `{ outcome, code, stepId }` from the tick's summary |
+  | Retry | `transaction.anchor_retry` | the step (`transaction`) | `{ reason, previousError, previousAttempts, previousTxHash }` |
+
+- **`{id}`** is the step's id (the `transactions` row), a UUID. Upper- or lower-case letters
+  are both accepted.
+- **With `ANCHOR_ENABLED` not `true`** there is no worker. The status still answers from the
+  database, with `worker.state` `disabled`, and a run is refused with `ANCHORING_DISABLED`.
+
+### Problems
+
+The status lists what needs attention as `{ code, message }`, in this order. An empty list
+means nothing does.
+
+| Code | When | Message |
+|---|---|---|
+| `WORKER_DISABLED` | `worker.state` is `disabled` | Anchoring is switched off (ANCHOR_ENABLED is not true), so no step reaches the chain. |
+| `WORKER_NOT_STARTED` | `worker.state` is `not_started` | The anchoring worker has not started because its startup check did not pass. Fix the configuration, then restart. |
+| `WORKER_STOPPED` | `worker.state` is `stopped` | The anchoring worker has stopped: the recorder wallet lost its role, or the server is shutting down. |
+| `WORKER_BACKOFF` | `worker.state` is `backoff` | The anchoring worker cannot reach the chain and is trying again with growing delays. |
+| `WORKER_PAUSED` | `worker.state` is `paused` | The anchoring worker is paused: the wallet cannot pay, the fee is above the cap, or another transaction is waiting. |
+| `STUCK_SUBMITTED` | A step in `inFlight` has `stuck: true` | A sent step has not moved for more than 5 minutes. Nothing else can be anchored until it does. |
+| `FAILED_STEPS` | `counts.failed` is more than 0 | Some steps failed to anchor. Later steps of the same consignment wait behind them. |
+| `NO_RECENT_TICK` | The worker should be ticking (`running`, `paused` or `backoff`) but its last sign of life (the last tick, else the start, else the last preflight) is more than 3 × `ANCHOR_INTERVAL_SECONDS` old; while backing off, the 300 s backoff cap is added to that | The anchoring worker has not finished a tick for longer than expected. |
+
+The problems are only shown on this page. Nothing is pushed to an administrator's phone yet
+(push notifications need the device token table, D10).
+
+### Which failed steps can be retried
+
+A retry sends a step from `failed` back to `pending` by changing the database only, so it
+is allowed only for failures where nothing of ours can be on-chain. The allow-list matches
+the code, and the detail where there is one:
+
+| `anchor_error` code | Retry? | Why |
+|---|---|---|
+| `INVALID_STAGE:None` | Yes | The registration may be on-chain by now; the next dry run checks again |
+| `UNKNOWN` | Yes | Often a passing fault; the next dry run checks again |
+| `MAX_ATTEMPTS` | Yes | Every try was mined and reverted, and a reverted transaction changes nothing on-chain |
+| `INVALID_STAGE:Registered`, `INVALID_STAGE:InTransit`, `INVALID_STAGE:Purchased` | No | The chain's stage forbids the step; it would fail again |
+| `INVALID_INPUT:…`, `STEP_TYPE_UNKNOWN`, `BYTES32_INVALID`, `WEIGHT_INVALID` | No | Stored data the contract refuses: a backend bug |
+| `ID_ALREADY_ANCHORED` | No | The consignment id is on-chain with another hash; needs investigating |
+| `RECEIPT_MISMATCH:…` | Never | Something was written on-chain; a retry could anchor the step twice |
+
+Anything else, including text not in the `CODE[:detail]: reason` format, is refused.
+
+**A stuck `submitted` step has no endpoint.** Its transaction may still be mined, and a
+handoff can be anchored twice, so it is never released by hand. The status shows it
+(`stuck`, `lastRefusal`). Then:
+
+- **`FEE_TOO_HIGH` or `INSUFFICIENT_FUNDS`:** raise `ANCHOR_MAX_FEE_GWEI` or fund the
+  recorder wallet. The worker resends with the same nonce by itself, or at once with
+  [a run](#post-adminanchoringrun).
+- **A refused dry run** (any other code): a bug. Stop and investigate.
+
+**Errors these endpoints can return**, on top of the [token errors](#authentication):
+
+| Status | Code | When | Message |
+|---|---|---|---|
+| 400 | `VALIDATION_FAILED` | The status was sent any query parameter; a run was sent a body field; `{id}` is not a UUID ("must be a valid step id", checked before the body); the reason is missing, under 3 or over 500 characters after trimming, or comes with another field | Some fields are missing or invalid. |
+| 403 | `FORBIDDEN` | Logged in and active, but not an administrator | You do not have permission to do this. |
+| 404 | `STEP_NOT_FOUND` | Retry: no step has this id | No step has this id. |
+| 409 | `INVALID_STATUS_TRANSITION` | Retry: the step is `pending`, `submitted` or `confirmed` | Only a failed step can be retried. This step is pending. (The wording names the actual status.) |
+| 409 | `ANCHOR_NOT_RETRYABLE` | Retry: the step failed for a reason not on the allow-list above | This step failed for a reason a retry cannot fix (RECEIPT_MISMATCH). It needs investigating. (The wording names the code.) |
+| 409 | `ANCHORING_DISABLED` | Run: `ANCHOR_ENABLED` is not `true` | Anchoring is switched off on this server (ANCHOR_ENABLED is not true), so there is nothing to run. |
+| 409 | `ANCHORING_NOT_STARTED` | Run: the worker's startup check has not passed (it failed, or is still being retried) | The anchoring worker has not started, because its startup check has not passed. The status shows which check; it may still be retrying. |
+| 409 | `ANCHORING_STOPPED` | Run: the recorder wallet lost `RECORDER_ROLE`, or the server is shutting down | The anchoring worker has stopped: the recorder wallet lost its role, or the server is shutting down. It runs again only after a restart. |
+| 409 | `ANCHORING_BUSY` | Run: a tick is already running in this server, or another process (such as `anchor:once`) holds the anchoring lock | Anchoring is already running a tick. Try again in a moment. |
+| 429 | `TOO_MANY_REQUESTS` | More than 20 runs and retries in 15 minutes | Too many anchoring actions. Please wait a few minutes and try again. |
+| 500 | `INTERNAL_ERROR` | Unexpected server fault, including a run whose tick finished but whose audit entry could not be written | Something went wrong |
+
+---
+
+## GET /admin/anchoring
+
+The anchoring status. Read from the database in one consistent snapshot (`REPEATABLE READ`,
+no locks, so the worker is never held up) and from the worker's memory.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | None |
+| **Query** | None. Any parameter is refused |
+
+**200 OK**, for example while a step is stuck behind a fee above the cap (all values fake):
+
+```json
+{
+  "worker": {
+    "state": "running",
+    "startedAt": "2026-11-12T08:00:00.000Z",
+    "preflight": { "at": "2026-11-12T08:00:00.000Z", "passed": true, "retrying": false, "checks": [] },
+    "lastTick": { "at": "2026-11-12T09:59:45.000Z", "outcome": "waiting", "code": null, "stepId": null },
+    "recorderAddress": "0x25E19030C6cdb1e2608819BceF797a23eb0738fA",
+    "contractAddress": "0x6419cB5268706E2aA4713AB3bCFc336248Ed158a"
+  },
+  "counts": { "pending": 2, "submitted": 1, "confirmed": 41, "failed": 0 },
+  "inFlight": [
+    {
+      "stepId": "9d4e5f60-0000-4000-8000-000000000001",
+      "consignmentId": "5c0d7e21-0000-4000-8000-000000000001",
+      "type": "handoff",
+      "chainTxHash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "nonce": "41",
+      "submittedAt": "2026-11-12T09:50:00.000Z",
+      "ageSeconds": 600,
+      "stuck": true,
+      "lastRefusal": {
+        "code": "FEE_TOO_HIGH",
+        "detail": null,
+        "error": "FEE_TOO_HIGH: the network fee is above the configured maximum"
+      }
+    }
+  ],
+  "failed": [],
+  "pending": {
+    "oldestReceivedAt": "2026-11-12T09:40:00.000Z",
+    "oldestAgeSeconds": 1200,
+    "onHeldConsignments": 0,
+    "behindFailedStep": 0,
+    "sendableNow": "9d4e5f60-0000-4000-8000-000000000002"
+  },
+  "held": [],
+  "lastConfirmed": { "stepId": "9d4e5f60-0000-4000-8000-000000000003", "anchoredAt": "2026-11-12T09:49:36.000Z" },
+  "lastSubmitted": { "stepId": "9d4e5f60-0000-4000-8000-000000000001", "submittedAt": "2026-11-12T09:50:00.000Z" },
+  "problems": [
+    { "code": "STUCK_SUBMITTED", "message": "A sent step has not moved for more than 5 minutes. Nothing else can be anchored until it does." }
+  ]
+}
+```
+
+**`worker`**, from the worker's memory in this server process:
+
+| Field | Meaning |
+|---|---|
+| `state` | `running`; `backoff` (the last tick, or the startup check, could not reach the chain, or the tick failed unexpectedly; retrying with growing delays); `paused` (the last tick could not send: funds, fee, or another transaction from the wallet waiting); `stopped` (the wallet lost `RECORDER_ROLE`, or the server is shutting down); `not_started` (the startup check failed, or has not run); `disabled` (`ANCHOR_ENABLED` is not `true`) |
+| `startedAt` | When the startup check passed and the timer started; `null` before |
+| `preflight` | `null` until the first startup check, then `{ at, passed, retrying, checks }`. `retrying` is `true` when the check could not be made (the RPC was down) and will be tried again. `checks` lists only the checks that did not pass, as `{ name, status }`: `name` is `chainId`, `code` or `role`, `status` is `failed` (a person must fix the configuration), `error` (could not be checked) or `skipped` (an earlier check did not pass). Never the problem text, which names RPC hosts |
+| `lastTick` | `null` until the first tick, then `{ at, outcome, code, stepId }` of the last one, from the timer or a run. `outcome` is `idle`, `sent`, `waiting`, `refused`, `paused`, `backoff`, `busy`, `stopped`, or `error` for a tick that failed unexpectedly (its `code` is then always `INTERNAL_ERROR`, never the error's text) |
+| `recorderAddress`, `contractAddress` | The recorder wallet (fund this one) and the MineChain contract; `null` when disabled |
+
+Ticks run by the `anchor:once` script happen in another process and are not in `worker`;
+they show in the rows (`lastSubmitted`, `lastConfirmed`).
+
+**`counts`**: steps by `anchor_status`, counting **approved steps only** (`review_status`
+`passed` or `cleared`). A flagged step is waiting for an officer, not for the chain.
+
+**`inFlight`**: every approved `submitted` step, in nonce order (normally at most one).
+
+| Field | Meaning |
+|---|---|
+| `stepId`, `consignmentId`, `type` | The step |
+| `chainTxHash` | The transaction last sent for it |
+| `nonce` | The recorder wallet's nonce, as text (a big integer) |
+| `submittedAt`, `ageSeconds` | When it was last sent (a same-nonce resend refreshes it), and how long ago |
+| `stuck` | `true` when `ageSeconds` is more than 300 (5 minutes) |
+| `lastRefusal` | `null`, or why the last resend was refused: `{ code, detail, error }`, where `error` is the stored text. Cleared when a resend goes through |
+
+**`failed`**: the newest 50 failed steps (by when the row last changed), each with
+`stepId`, `consignmentId`, `type`, `code` and `detail` (split from `error`, the stored
+reason), `attempts`, `chainTxHash` (the reverted or mismatched transaction, or `null`),
+`updatedAt`, and `retryable` (on the [allow-list](#which-failed-steps-can-be-retried)).
+`counts.failed` has the full number.
+
+**`pending`**, over the approved `pending` steps, by the queue's own rules:
+
+| Field | Meaning |
+|---|---|
+| `oldestReceivedAt`, `oldestAgeSeconds` | The oldest one, and how long it has waited; `null` when none |
+| `onHeldConsignments` | How many are on a consignment held by an open alert (an officer releases it) |
+| `behindFailedStep` | How many wait behind an earlier failed step of their consignment (retrying that step frees them) |
+| `sendableNow` | The step the worker would send next, or `null`. A hint: it can be out of date a moment later |
+
+**`held`**: up to 50 held consignments with approved steps waiting, oldest first, each as
+`{ consignmentId, qrCode, pendingSteps, openAlerts }`. `openAlerts` counts every open alert
+on the consignment's steps.
+
+**`lastConfirmed`**, **`lastSubmitted`**: the most recently anchored step (`anchoredAt`, the
+block's time) and the most recently sent one (`submittedAt`), from the rows; `null` when
+none.
+
+**`problems`**: see [Problems](#problems).
+
+**Errors:** `VALIDATION_FAILED` (a query parameter) and `FORBIDDEN`.
+
+---
+
+## POST /admin/anchoring/run
+
+Runs **one** tick of the anchoring worker now, on the same worker as the timer: it
+reconciles every `submitted` step, then sends at most one new step. Useful straight after a
+fix, such as funding the wallet. It never runs "until idle", and does not move the timer's
+next tick. It does not wake a service that Render has spun down; the request itself does
+that.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | 20 runs and retries per 15 minutes per administrator, together |
+| **Request body** | None, or `{}`. Any field is refused |
+
+**200 OK**: the tick's summary.
+
+```json
+{
+  "summary": {
+    "outcome": "sent",
+    "reconciled": { "confirmed": 1, "waiting": 0, "resent": 0, "returnedToPending": 0, "failed": 0 },
+    "stepId": "9d4e5f60-0000-4000-8000-000000000002",
+    "code": null
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `outcome` | `idle` (nothing to send), `sent`, `waiting` (a step is still in flight), `refused` (the dry run refused a step; it was retried or failed), `paused` (funds, fee, or another transaction waiting), `backoff` (the RPC could not be reached), or `stopped` (this tick found the wallet has lost its role) |
+| `reconciled` | What happened to the steps that were in flight: confirmed, still waiting, resent with the same nonce, returned to pending, failed |
+| `stepId`, `code` | The step the outcome is about, and its code, or `null` |
+
+The run is recorded as `anchoring.run`. If the tick finished but its audit entry could not
+be written, the answer is 500: whatever the tick did stays done (it is what the next timer
+tick would have done), and one server log line names the administrator and the outcome.
+
+**Errors:** `VALIDATION_FAILED` (a body field), `FORBIDDEN`, `ANCHORING_DISABLED`,
+`ANCHORING_NOT_STARTED`, `ANCHORING_STOPPED`, `ANCHORING_BUSY` and `TOO_MANY_REQUESTS`.
+
+---
+
+## POST /admin/anchoring/steps/{id}/retry
+
+Sends a `failed` step back to `pending`, so the worker tries it again from the start: no
+attempts, no hash, a fresh nonce. Only for codes on the
+[allow-list](#which-failed-steps-can-be-retried). Steps after it on the same consignment,
+which were waiting behind it, are freed too.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | 20 runs and retries per 15 minutes per administrator, together |
+
+**Request body**: `reason`, with the same rules as for
+[rejecting an account](#post-adminusersidreject): 3–500 characters after trimming. It is
+kept only in the audit log, permanently, with the step's previous error, attempts and
+transaction hash, which the step itself loses.
+
+```
+POST /admin/anchoring/steps/9d4e5f60-0000-4000-8000-000000000004/retry
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+Content-Type: application/json
+```
+
+```json
+{ "reason": "The RPC provider was down during the first try" }
+```
+
+**200 OK**: the step as it is now.
+
+```json
+{
+  "step": {
+    "stepId": "9d4e5f60-0000-4000-8000-000000000004",
+    "consignmentId": "5c0d7e21-0000-4000-8000-000000000002",
+    "type": "registration",
+    "anchorStatus": "pending",
+    "code": "RETRY_REQUESTED",
+    "detail": null,
+    "error": "RETRY_REQUESTED: an administrator asked for this step to be tried again",
+    "attempts": 0,
+    "chainTxHash": null,
+    "updatedAt": "2026-11-12T10:05:00.000Z"
+  }
+}
+```
+
+The step is locked while it is checked and changed, so two administrators retrying it at
+the same moment cannot both succeed: the second gets 409 `INVALID_STATUS_TRANSITION`. The
+change and its audit entry are saved together, or not at all.
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `STEP_NOT_FOUND`, `INVALID_STATUS_TRANSITION`,
+`ANCHOR_NOT_RETRYABLE` and `TOO_MANY_REQUESTS`.
 
 ---
 

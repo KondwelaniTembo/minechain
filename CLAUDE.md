@@ -36,11 +36,11 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 11 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
+Updated 12 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
 
-- **Branch:** `feature/backend-logic`. Latest code commit `071c00e` (password change),
-  followed by the FR-10 docs commit (A6). `main` has Days 1–3 (PR #4).
-- **Test totals (confirmed, run 11 Nov 21:11):** `npm test` 1759, `npm run test:db` 736,
+- **Branch:** `feature/backend-logic`. Latest code commit `6c67172` (anchoring admin
+  routes), followed by the anchoring admin docs commit (N5). `main` has Days 1–3 (PR #4).
+- **Test totals (confirmed, run 12 Nov 14:05):** `npm test` 1841, `npm run test:db` 787,
   contract 37.
 - **Dev database** (`minechain_dev`) is migrated to `1794441600000_users-activation`.
   `npm run test:db` migrates `minechain_test` itself (`tests/db/globalSetup.js`).
@@ -157,12 +157,37 @@ their known limitations):
 - A5 `071c00e`: `POST /auth/me/password`: cut-off `tokens_valid_after` = the fresh token's
   `iat` (one clock, the app server's); older tokens get `TOKEN_INVALID`; 400 refusals;
   `createPasswordChangeLimiter` (10 failures per 15 min per user). `verify()` returns `iat`.
-- A6: these docs.
+- A6 `5b6344c`: docs.
+
+**Anchoring admin, complete (N1–N5)**, plan `docs/plans/anchoring-admin-plan.md` (`1fa1a13`),
+with docs (`api.md` "Anchoring administration", `database-schema.md` "Admin status and
+retry" and the two meanings of `anchor_error`, `decisions.md` "Anchoring admin (1)–(12)" and
+their known limitations):
+
+- N1 `88ded46`: worker `snapshot()` and `runNow()` (refusals `ANCHORING_DISABLED`,
+  `NOT_STARTED`, `STOPPED`, `BUSY`; `runAnchoringNow` / `anchoringSnapshot` for `null`);
+  a refused resend stored on the `submitted` row (`NOTE_RESEND`, same hash only, cleared on a
+  good resend); balance checked before a resend is signed; `STUCK_AFTER_SECONDS` moved to
+  `anchorQueue.js`, shared with `anchor:once`.
+- N2 `de7003c`: `src/services/anchorStatusService.js` `status()` (database and worker memory
+  only, one `REPEATABLE READ` snapshot, the queue's exported SQL fragments and
+  `peekEligibleStep`), `RETRYABLE_ANCHOR_ERRORS`, `splitAnchorError`, `findProblems`; wired
+  as `services.anchoring`.
+- N3 `3769508`: `retry()` (`FOR UPDATE`, 404 / 409 `INVALID_STATUS_TRANSITION` /
+  409 `ANCHOR_NOT_RETRYABLE`, one `UPDATE`, `transaction.anchor_retry` in the same
+  transaction) and `run()` (409 refusals, `anchoring.run` after the tick; a failed audit
+  write leaves a log line); `withArticle` moved to `services/wording.js`.
+- N4 `6c67172`: `src/routes/adminAnchoring.js` at `/admin/anchoring` (GET status, POST
+  `/run`, POST `/steps/{id}/retry`), `createAnchoringActionLimiter` (20 per 15 min per admin,
+  both POSTs together, GET unlimited); `server.js` creates the worker before the app and
+  passes it to `createServices`; real-stack tests (failed → retry → confirmed; stuck → fee
+  lowered → same-nonce resend; no secrets in the body).
+- N5: these docs.
 
 **Next, in order:**
 
-1. Admin anchoring status endpoint with manual reset (Anomaly rules (8)). Plan only first.
-2. Render deploy, then open the PR.
+1. Merge `feature/backend-logic` into `main` (open the PR).
+2. Render deploy.
 3. Flutter app.
 
 **Working rules that held all weekend:**

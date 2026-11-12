@@ -460,10 +460,10 @@ state is kept on the step's own `transactions` row; there is no separate job tab
 
 | `anchor_status` | Meaning | Columns set |
 |---|---|---|
-| `pending` | Not on-chain yet; may be sent when the queue rules allow | `anchor_error` may hold the last refusal |
-| `submitted` | Signed and sent (or about to be); waiting to be mined and confirmed | `chain_tx_hash`, `anchor_nonce`, `anchor_submitted_at` |
+| `pending` | Not on-chain yet; may be sent when the queue rules allow | `anchor_error` may hold the last refusal, or `RETRY_REQUESTED` after an administrator's retry |
+| `submitted` | Signed and sent (or about to be); waiting to be mined and confirmed | `chain_tx_hash`, `anchor_nonce`, `anchor_submitted_at`; `anchor_error` may hold the last refused resend |
 | `confirmed` | Mined, with enough confirmations, and its event matches the step | `chain_tx_hash`, `block_number`, `anchored_at` |
-| `failed` | Will not be sent again without a person (a manual reset is future work) | `anchor_error` |
+| `failed` | Will not be sent again by the worker. An administrator can send it back to `pending` for some codes (see [Admin status and retry](#admin-status-and-retry)) | `anchor_error` |
 
 How a step moves:
 
@@ -481,6 +481,15 @@ How a step moves:
   so it is signed again with the **same nonce** and sent again. Two copies with one nonce can
   never both be mined, so a handoff can never be anchored twice. A row whose nonce is unused
   is never marked failed.
+
+  Before signing the resend, the worker checks the fee against `ANCHOR_MAX_FEE_GWEI` and the
+  wallet's balance against the gas limit times the fee, as it does before a first send. A
+  refusal at either check, or a refused dry run, changes nothing but `anchor_error` (see
+  [Columns](#columns)). The balance check comes first on purpose: the statement that stores
+  a resend refreshes `anchor_submitted_at`, so a wallet that cannot pay, found only when the
+  node refused the broadcast, would reset the row's age on every tick, and the row would
+  never show as stuck (found 12 Nov 2026). A broadcast refused for funds or fee after these
+  checks passed (the balance moved, or a node's own fee cap) is still noted on the row.
 - **`submitted` → `pending`.** Only when the transaction can never be mined: another
   transaction used its nonce, it was mined but reverted, or the node refused the broadcast
   outright (funds, fee, nonce). `chain_tx_hash`, `anchor_nonce` and `anchor_submitted_at`
@@ -492,6 +501,9 @@ How a step moves:
   does not match the step. The hash is kept as evidence.
 - **`pending` → `confirmed`.** A registration refused with `ConsignmentAlreadyExists` whose
   on-chain event matches the step: an earlier send succeeded without being recorded.
+- **`failed` → `pending`.** Only by an administrator's retry, and only for the codes on the
+  allow-list (see [Admin status and retry](#admin-status-and-retry)). The worker itself
+  never writes a `failed` row.
 
 ### Columns
 
@@ -506,9 +518,19 @@ How a step moves:
   each retryable refusal, and is given back when the cause was not the step (the wallet's
   funds, the fee, a nonce taken by someone else). Same-nonce resends and RPC outages never
   count.
-- `anchor_error`: our own code and a fixed reason only, for example
-  `INVALID_STAGE:None: the step is not allowed from the consignment stage on-chain`. Never
-  text from the RPC provider, whose messages can contain the API key.
+- `anchor_error`: our own code and a fixed reason only, as `CODE[:detail]: reason`, for
+  example `INVALID_STAGE:None: the step is not allowed from the consignment stage on-chain`.
+  Never text from the RPC provider, whose messages can contain the API key. What it means
+  depends on the state:
+  - on a **`failed`** row, why the step failed (the `transactions_failed_needs_error` CHECK
+    requires it);
+  - on a **`submitted`** row, why the last resend was refused, for example
+    `FEE_TOO_HIGH: the network fee is above the configured maximum`. It is written only
+    while the row is still `submitted` with the same `chain_tx_hash`, is not rewritten when
+    the text is already there, and is cleared to `NULL` once a resend goes through. Moving
+    to `submitted` clears it too, so on a `submitted` row it never means anything else;
+  - on a **`pending`** row, the last refusal, or after an administrator's retry
+    `RETRY_REQUESTED: an administrator asked for this step to be tried again`.
 
 ### Which step goes next
 
@@ -562,10 +584,39 @@ new steps, which are checked and stored normally; they simply wait to be anchore
 A tick starts by taking a session advisory lock, `pg_try_advisory_lock(5567365368752131922)`
 (the bytes of "MCANCHOR"), on a connection of its own. A second process, such as
 `anchor:once` while the server's worker runs, gets "busy" and does nothing. The lock ends
-with its connection, so a crashed worker can never leave it held.
+with its connection, so a crashed worker can never leave it held. An administrator's
+run-now (below) takes the same lock, and is refused as busy rather than waiting.
+
+### Admin status and retry
+
+`GET /admin/anchoring` ([api.md](api.md#anchoring-administration)) reads these columns and
+the worker's memory; it never calls the chain and writes nothing. It uses the queue's own
+SQL (`HELD`, the ordering rule, and the queue query without its row lock), exported from
+`anchorQueue.js`, so it counts held and blocked steps exactly as the worker sends them.
+
+- **Stuck.** A `submitted` row whose `anchor_submitted_at` is more than
+  `STUCK_AFTER_SECONDS` (300, 5 minutes) old. The constant lives in `anchorQueue.js`, and
+  both the status and the `anchor:once` script use it, so they always call the same row
+  stuck.
+- **Retry** (`POST /admin/anchoring/steps/{id}/retry`) locks the row `FOR UPDATE`, checks it
+  is `failed` with a code on the allow-list (`INVALID_STAGE:None`, `UNKNOWN`,
+  `MAX_ATTEMPTS`), then runs one statement:
+
+  ```sql
+  UPDATE transactions
+     SET anchor_status = 'pending', anchor_attempts = 0, chain_tx_hash = NULL, anchor_nonce = NULL,
+         anchor_submitted_at = NULL, anchor_error = 'RETRY_REQUESTED: an administrator asked for this step to be tried again'
+   WHERE id = $1 AND anchor_status = 'failed'
+  ```
+
+  The previous `anchor_error`, `anchor_attempts` and `chain_tx_hash` go into the
+  `transaction.anchor_retry` audit entry in the same transaction, since the row loses them.
+- **A stuck `submitted` row is never released by an administrator.** Its transaction may
+  still be mined, and a handoff can be anchored twice.
 
 Known limitations of anchoring (a stuck row blocks the queue, the one-in-flight throughput,
-Render's spin-down) are listed in [decisions.md](decisions.md).
+Render's spin-down, and those of the admin endpoints) are listed in
+[decisions.md](decisions.md).
 
 ## Reports
 
