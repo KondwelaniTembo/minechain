@@ -20,13 +20,17 @@ try {
 
 const pool = createPool(config.databaseUrl);
 const db = createDb(pool);
-const app = createApp({ db, services: createServices({ db, config }), trustProxyHops: config.trustProxyHops });
 
 // Only when ANCHOR_ENABLED is true. The worker needs the pool itself for its advisory lock,
-// which must sit on a connection of its own.
+// which must sit on a connection of its own. Created before the app (creating it makes no
+// network call and starts no timer; start() below does that), so the admin anchoring routes
+// get this same instance: their run-now shares its stopped flag and lock, and their status
+// reads its snapshot. null means anchoring is off, and the status says so.
 const anchorWorker = config.anchor.enabled
   ? createAnchorWorkerFromConfig({ db, pool, anchorConfig: config.anchor })
   : null;
+
+const app = createApp({ db, services: createServices({ db, config, anchorWorker }), trustProxyHops: config.trustProxyHops });
 
 const server = app.listen(config.port, () => {
   console.log(`MineChain API listening on http://localhost:${config.port} (${config.nodeEnv})`);

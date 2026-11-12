@@ -5,7 +5,7 @@ import { AppError } from '../errors.js';
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 
-// DEV-SHORTCUT: in-memory rate-limit stores (register, login IP, login username, activation, password change, sync and reports) | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
+// DEV-SHORTCUT: in-memory rate-limit stores (register, login IP, login username, activation, password change, sync, reports and anchoring actions) | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
 //
 // Shared settings for every limiter. Each limiter is made by a function rather than created
 // once at import, so each createApp call, and so each test, gets its own counter.
@@ -143,6 +143,25 @@ export function createReportLimiter({ limit = 20, windowMs = FIFTEEN_MINUTES_MS 
       // Fail closed, as in createSyncLimiter: a shared fallback key would let one client use
       // up everyone's limit.
       if (!req.user?.id) throw new Error('createReportLimiter ran without requireAuth before it on this route');
+      return `user:${req.user.id}`;
+    },
+  });
+}
+
+// Anchoring actions per administrator (POST /admin/anchoring/run and .../steps/{id}/retry),
+// one count for both. A run is one tick on the shared worker and a retry rewrites a step, so
+// a script calling them in a loop would hammer the RPC provider or the audit log. 20 per 15
+// minutes is far more than an admin clicks while fixing something. The status (GET) is not
+// limited: it only reads. Keyed by user id for the same reasons as sync. Must run after
+// requireAuth.
+export function createAnchoringActionLimiter({ limit = 20, windowMs = FIFTEEN_MINUTES_MS } = {}) {
+  return createLimiter({
+    limit,
+    windowMs,
+    message: 'Too many anchoring actions. Please wait a few minutes and try again.',
+    keyGenerator: (req) => {
+      // Fail closed, as in createSyncLimiter.
+      if (!req.user?.id) throw new Error('createAnchoringActionLimiter ran without requireAuth before it on this route');
       return `user:${req.user.id}`;
     },
   });

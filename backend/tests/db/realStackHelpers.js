@@ -85,8 +85,10 @@ export function bindRealStack(t) {
   // The whole stack as server.js wires it, on the test's own connection, so the test's
   // ROLLBACK undoes everything. Requests go one at a time: one connection, one query at once.
   // Fixture users cannot log in (fake hash), so tokens are signed as a login would issue them.
-  function realStack() {
-    const services = createServices({ db: t.db, config: FAKE_CONFIG });
+  // options (all optional, for the anchoring admin tests): config, a worker as server.js
+  // passes it (createServices' anchorWorker), and the clock the status measures ages with.
+  function realStack({ config = FAKE_CONFIG, anchorWorker = null, clock } = {}) {
+    const services = createServices({ db: t.db, config, anchorWorker, clock });
     const app = createApp({ db: t.db, services });
     const tokenFor = async (user) => (await services.tokens.sign({ userId: user.id, role: user.role })).token;
     return { app, tokenFor };

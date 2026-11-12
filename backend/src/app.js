@@ -4,6 +4,7 @@ import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
 import { adminUserRoutes } from './routes/adminUsers.js';
 import { adminZoneRoutes } from './routes/adminZones.js';
+import { adminAnchoringRoutes } from './routes/adminAnchoring.js';
 import { syncRoutes } from './routes/sync.js';
 import { reportRoutes } from './routes/reports.js';
 import {
@@ -14,6 +15,7 @@ import {
   createPasswordChangeLimiter,
   createSyncLimiter,
   createReportLimiter,
+  createAnchoringActionLimiter,
 } from './middleware/rateLimits.js';
 import { createRequireAuth } from './middleware/requireAuth.js';
 import { notFound } from './middleware/notFound.js';
@@ -24,8 +26,8 @@ import { errorHandler } from './middleware/errorHandler.js';
 //
 //   trustProxyHops: how many proxies sit in front of the app (config TRUST_PROXY)
 //   rateLimits:     { registerPerHour, loginPerIp, loginPerUsername, activationPerIp,
-//                   passwordChangePerUser, syncPerUser, reportsPerUser } to override the
-//                   limits, for tests
+//                   passwordChangePerUser, syncPerUser, reportsPerUser,
+//                   anchoringActionsPerAdmin } to override the limits, for tests
 export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } = {}) {
   if (!db || typeof db.query !== 'function') {
     throw new TypeError('createApp needs a db object with a query() method');
@@ -65,6 +67,7 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   const passwordChangeLimiter = createPasswordChangeLimiter({ limit: rateLimits.passwordChangePerUser });
   const syncLimiter = createSyncLimiter({ limit: rateLimits.syncPerUser });
   const reportLimiter = createReportLimiter({ limit: rateLimits.reportsPerUser });
+  const anchoringActionLimiter = createAnchoringActionLimiter({ limit: rateLimits.anchoringActionsPerAdmin });
 
   app.use('/health', healthRoutes({ db }));
   const requireAuth = createRequireAuth({ tokens: services.tokens, users: services.users });
@@ -90,6 +93,11 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   // FR-11 licensed GPS zones. Like accounts, services.zones is not in the checks above; if it
   // were missing, these routes would fail closed with a logged 500.
   app.use('/admin/zones', adminZoneRoutes({ zones: services.zones, requireAuth }));
+
+  // Anchoring status and recovery (FR-03 support, plan §5). Like zones, services.anchoring is
+  // not in the checks above; if it were missing, these routes would fail closed with a
+  // logged 500. With ANCHOR_ENABLED false the service still answers, from the database.
+  app.use('/admin/anchoring', adminAnchoringRoutes({ anchoring: services.anchoring, requireAuth, anchoringActionLimiter }));
 
   // Signed custody steps from the phone's offline queue (FR-03, FR-07). Like accounts,
   // services.sync is not in the checks above; if it were missing, the route would fail
