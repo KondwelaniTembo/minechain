@@ -4,6 +4,7 @@ import { SELF_REGISTER_ROLES } from '../schemas/auth.js';
 import { CREATABLE_ROLES } from '../schemas/adminUsers.js';
 import { spkiFingerprint } from './signatureService.js';
 import { generate as generateCode, hash as hashCode } from './activationCode.js';
+import { withArticle } from './wording.js';
 
 // How long an activation code works. Long enough for an administrator to hand it over in
 // person or by phone and for the officer to find a signal, short enough that a code written
@@ -155,9 +156,7 @@ const normalizeId = (id) => id.toLowerCase();
 
 // zoneService can write "an" into its template because both of its starting statuses
 // begin with a vowel; account actions start from pending, active or suspended, so the
-// article follows the word. Statuses are fixed lower-case words, so the first letter is
-// enough.
-const withArticle = (word) => `${/^[aeiou]/.test(word) ? 'an' : 'a'} ${word}`;
+// article follows the word (withArticle, wording.js).
 
 function userNotFound() {
   return new AppError(404, 'USER_NOT_FOUND', 'No user has this id.');

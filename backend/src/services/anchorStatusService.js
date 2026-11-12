@@ -6,8 +6,10 @@
 // Nothing secret can reach the body. The worker part is copied field by field from the
 // snapshot (never spread), the chain part is two public addresses, and every text is a
 // fixed code or our own anchor_error format (chainErrors.js), never provider text.
-import { BACKOFF_MAX_SECONDS, anchoringSnapshot } from '../anchorWorker.js';
+import { AppError } from '../errors.js';
+import { BACKOFF_MAX_SECONDS, RUN_NOW_REFUSALS, anchoringSnapshot, describeError, runAnchoringNow } from '../anchorWorker.js';
 import { EARLIER_FAILED, HELD, QUEUE_INDEX_PREDICATE, STUCK_AFTER_SECONDS, peekEligibleStep } from './anchorQueue.js';
+import { withArticle } from './wording.js';
 
 // ---------- anchor_error: split and retry allow-list (N3's retry reuses both) ----------
 
@@ -172,12 +174,75 @@ const LAST_SUBMITTED = `
 
 const toHex = (bytes) => (bytes ? `0x${Buffer.from(bytes).toString('hex')}` : null);
 
+// ---------- retry (plan §2, §4) ----------
+
+// What the admin sees in anchor_error once a step is sent back: our own format, like every
+// other anchor_error, so splitAnchorError reads it as RETRY_REQUESTED. The next SUBMIT
+// clears it.
+export const RETRY_REQUESTED = 'RETRY_REQUESTED: an administrator asked for this step to be tried again';
+
+// FOR UPDATE: the row cannot change between this read and the UPDATE, and a second admin's
+// retry waits here, then reads 'pending' and is refused. The read is needed (not only the
+// UPDATE's WHERE) because the refusal must say why, and the audit entry must keep the
+// previous error, attempts and hash, which the UPDATE overwrites.
+const LOCK_STEP = `
+  SELECT t.id, t.anchor_status, t.anchor_error, t.anchor_attempts, t.chain_tx_hash
+  FROM transactions t
+  WHERE t.id = $1
+  FOR UPDATE`;
+
+const STEP_VIEW_COLUMNS = 'id, consignment_id, type, anchor_status, anchor_error, anchor_attempts, chain_tx_hash, updated_at';
+
+// The single statement from the plan. The worker never writes a failed row, so this is the
+// only change a failed row can ever see; the WHERE repeats the check the lock made. The
+// nonce and hash are cleared: an allowed code means nothing of ours is waiting on-chain, so
+// the next send takes a fresh nonce.
+const RETRY = `
+  UPDATE transactions
+     SET anchor_status = 'pending', anchor_attempts = 0, chain_tx_hash = NULL, anchor_nonce = NULL,
+         anchor_submitted_at = NULL, anchor_error = $2
+   WHERE id = $1 AND anchor_status = 'failed'
+  RETURNING ${STEP_VIEW_COLUMNS}`;
+
+function toStepView(row) {
+  const split = splitAnchorError(row.anchor_error);
+  return Object.freeze({
+    stepId: row.id,
+    consignmentId: row.consignment_id,
+    type: row.type,
+    anchorStatus: row.anchor_status,
+    code: split?.code ?? null,
+    detail: split?.detail ?? null,
+    error: row.anchor_error,
+    attempts: row.anchor_attempts,
+    chainTxHash: toHex(row.chain_tx_hash),
+    updatedAt: row.updated_at,
+  });
+}
+
+const stepNotFound = () => new AppError(404, 'STEP_NOT_FOUND', 'No step has this id.');
+
+// ---------- run (plan §3) ----------
+
+// One fixed message for each refusal, all 409: the request was fine, the worker's state
+// does not allow it now.
+export const RUN_REFUSAL_MESSAGES = Object.freeze({
+  [RUN_NOW_REFUSALS.DISABLED]: 'Anchoring is switched off on this server (ANCHOR_ENABLED is not true), so there is nothing to run.',
+  [RUN_NOW_REFUSALS.NOT_STARTED]:
+    "The anchoring worker has not started, because its startup check has not passed. The status shows which check; it may still be retrying.",
+  [RUN_NOW_REFUSALS.STOPPED]:
+    'The anchoring worker has stopped: the recorder wallet lost its role, or the server is shutting down. It runs again only after a restart.',
+  [RUN_NOW_REFUSALS.BUSY]: 'Anchoring is already running a tick. Try again in a moment.',
+});
+
 // ---------- the service ----------
 
-// db: the app's db object. anchorWorker: the worker from createAnchorWorkerFromConfig, or
-// null when ANCHOR_ENABLED is false. intervalSeconds: config.anchor.intervalSeconds, needed
-// only when there is a worker. clock: the time ages are measured to, injectable for tests.
-export function createAnchorStatusService({ db, anchorWorker = null, intervalSeconds, clock = () => new Date() }) {
+// db: the app's db object. audit: the audit service (record), for retry and run.
+// anchorWorker: the worker from createAnchorWorkerFromConfig, or null when ANCHOR_ENABLED is
+// false. intervalSeconds: config.anchor.intervalSeconds, needed only when there is a worker.
+// clock: the time ages are measured to, injectable for tests. log: one line when a run's
+// audit entry cannot be written (see run).
+export function createAnchorStatusService({ db, audit, anchorWorker = null, intervalSeconds, clock = () => new Date(), log = console }) {
   if (anchorWorker !== null && !(Number.isInteger(intervalSeconds) && intervalSeconds > 0)) {
     throw new TypeError('createAnchorStatusService needs intervalSeconds when there is a worker');
   }
@@ -281,6 +346,87 @@ export function createAnchorStatusService({ db, anchorWorker = null, intervalSec
           rows.lastSubmitted && Object.freeze({ stepId: rows.lastSubmitted.id, submittedAt: rows.lastSubmitted.anchor_submitted_at }),
         problems: findProblems({ worker, inFlight, failedCount: counts.failed, now, intervalSeconds }),
       });
+    },
+
+    // failed -> pending, allow-list only (plan §2). The database only: no chain read inside
+    // the request (decision 2, 12 Nov), which is safe because an allowed code means nothing
+    // of ours can be on-chain. The change and its audit entry are one transaction: if the
+    // entry cannot be written, the step stays failed. reason has passed reasonBodySchema.
+    async retry({ stepId, reason, actorId, ipAddress = null }) {
+      // PostgreSQL ignores case in a uuid, but the audit entry and any later string
+      // comparison should see one spelling.
+      const id = stepId.toLowerCase();
+      return db.transaction(async (tx) => {
+        const { rows } = await tx.query(LOCK_STEP, [id]);
+        const step = rows[0];
+        if (!step) throw stepNotFound();
+        if (step.anchor_status !== 'failed') {
+          throw new AppError(
+            409,
+            'INVALID_STATUS_TRANSITION',
+            `Only ${withArticle('failed')} step can be retried. This step is ${step.anchor_status}.`,
+          );
+        }
+        if (!isRetryableAnchorError(step.anchor_error)) {
+          throw new AppError(
+            409,
+            'ANCHOR_NOT_RETRYABLE',
+            `This step failed for a reason a retry cannot fix (${splitAnchorError(step.anchor_error).code}). It needs investigating.`,
+          );
+        }
+
+        const updated = await tx.query(RETRY, [id, RETRY_REQUESTED]);
+        // Cannot happen under the row lock; refused rather than audited if it ever does.
+        if (updated.rows.length !== 1) throw stepNotFound();
+
+        await audit.record(tx, {
+          action: 'transaction.anchor_retry',
+          actorId,
+          entityType: 'transaction',
+          entityId: id,
+          details: {
+            reason,
+            previousError: step.anchor_error,
+            previousAttempts: step.anchor_attempts,
+            // The hash of a reverted try (MAX_ATTEMPTS) is evidence: kept here, since the
+            // row loses it.
+            previousTxHash: toHex(step.chain_tx_hash),
+          },
+          ipAddress,
+        });
+        return toStepView(updated.rows[0]);
+      });
+    },
+
+    // One tick now (plan §3), on the worker's own service, so it shares the stopped flag and
+    // the advisory lock. Refusals are 409 and not audited.
+    //
+    // The tick and the audit entry CANNOT be one transaction: a tick makes network calls and
+    // writes its own short statements, and must never hold a transaction open across them.
+    // So if the audit write fails AFTER the tick ran, whatever the tick did stays done (it
+    // is exactly what the next timer tick would have done, by the worker's own rules), the
+    // admin gets an error (500) instead of the summary, and there is no anchoring.run entry
+    // for it. One log line records that it happened, by whom and with what outcome, so the
+    // gap in the audit trail can be explained; the worker's snapshot also shows the tick.
+    async run({ actorId, ipAddress = null }) {
+      const result = await runAnchoringNow(anchorWorker);
+      if (!result.ran) throw new AppError(409, result.code, RUN_REFUSAL_MESSAGES[result.code]);
+
+      const { summary } = result;
+      try {
+        await audit.record(db, {
+          action: 'anchoring.run',
+          actorId,
+          details: { outcome: summary.outcome, code: summary.code, stepId: summary.stepId },
+          ipAddress,
+        });
+      } catch (err) {
+        log.error(
+          `Anchoring run by user ${actorId} ran (outcome ${summary.outcome}) but its audit entry could not be written: ${describeError(err)}`,
+        );
+        throw err;
+      }
+      return summary;
     },
   });
 }
