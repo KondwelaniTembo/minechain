@@ -7,14 +7,11 @@
 // balance, step ids, and Etherscan links. Never an RPC URL or the key: nothing here ever
 // receives them.
 import { etherscanTxUrl, preflightLines } from '../chain/describe.js';
+import { STUCK_AFTER_SECONDS } from '../services/anchorQueue.js';
 
 export const UNTIL_IDLE_FLAG = '--until-idle';
 export const TICK_SPACING_SECONDS = 15;
 export const MAX_RUN_SECONDS = 10 * 60;
-// A healthy submitted row is mined, or resent (which refreshes anchor_submitted_at), within
-// a few minutes. One older than this is not moving: its resend dry run keeps being refused
-// or the fee is above the cap. While it stays submitted, nothing else can be anchored.
-export const STUCK_AFTER_SECONDS = 5 * 60;
 
 export const EXIT = Object.freeze({
   IDLE: 0, //        nothing left to anchor

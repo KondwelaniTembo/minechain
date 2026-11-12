@@ -119,13 +119,20 @@ export async function isConsignmentHeld(db, consignmentId) {
   return rows[0].held;
 }
 
+// A healthy submitted row is mined, or resent (which refreshes anchor_submitted_at), within
+// a few minutes. One older than this is not moving: its resend dry run keeps being refused
+// or the fee is above the cap. While it stays submitted, nothing else can be anchored.
+// Shared by anchor:once and the admin status, so both call the same row stuck.
+export const STUCK_AFTER_SECONDS = 5 * 60;
+
 // Steps already sent but not yet confirmed or failed. The worker reconciles these before
 // sending anything new, oldest nonce first, which is the order the chain mines them in.
 // Holds are not applied: a transaction that has been sent may be mined whatever an alert
 // says now, and reconciling only records what the chain did.
+// anchor_error on a submitted row is only ever the reason its last resend was refused.
 const SUBMITTED_STEPS = `
   SELECT ${STEP_COLUMNS},
-         t.chain_tx_hash, t.anchor_nonce, t.anchor_submitted_at
+         t.chain_tx_hash, t.anchor_nonce, t.anchor_submitted_at, t.anchor_error
   FROM transactions t
   JOIN consignments c ON c.id = t.consignment_id
   JOIN users u ON u.id = t.actor_id

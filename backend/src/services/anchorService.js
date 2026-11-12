@@ -16,7 +16,7 @@
 //   pause (funds, fee)  nothing is sent this tick; not an attempt
 //   fail / retry        recorded on the step, which counts as an attempt
 import { ChainClientError } from '../chain/chainClient.js';
-import { toAnchorError } from '../chain/chainErrors.js';
+import { feeTooHigh, insufficientFunds, toAnchorError } from '../chain/chainErrors.js';
 import { DEPLOY_BLOCK } from '../chain/mineChainAbi.js';
 import { AnchorCallError, buildAnchorCall, receiptEventMismatches } from './anchorCall.js';
 import { nextEligibleStep, submittedSteps, tryAnchorLock } from './anchorQueue.js';
@@ -100,6 +100,18 @@ const FAIL_SUBMITTED = `
   UPDATE transactions
      SET anchor_status = 'failed', anchor_error = $3
    WHERE id = $1 AND anchor_status = 'submitted' AND chain_tx_hash = $2`;
+
+// U7: why the last resend of a submitted row was refused ($3, our fixed text from
+// toAnchorError), or NULL once a resend goes through. Without it a stuck row only leaves a
+// log line, and the admin status could not say why it is not moving. The state does not
+// change: the nonce is unused, so the row stays submitted (a stuck step is safe, a double
+// anchor is not). IS DISTINCT FROM skips the write when the text is already there, so a
+// row refused on every tick is not rewritten every 30 s.
+const NOTE_RESEND = `
+  UPDATE transactions
+     SET anchor_error = $3
+   WHERE id = $1 AND anchor_status = 'submitted' AND chain_tx_hash = $2
+     AND anchor_error IS DISTINCT FROM $3`;
 
 const toHex = (bytes) => `0x${Buffer.from(bytes).toString('hex')}`;
 const fromHex = (hex) => Buffer.from(hex.slice(2), 'hex');
@@ -224,21 +236,33 @@ export function createAnchorService({ db, pool, chain, config, clock = () => new
       // The nonce is unused, so the row stays submitted rather than risk a second copy
       // later: a stuck step is safe, a double anchor is not.
       log.warn(`Anchoring: step ${row.id} cannot be resent yet: ${err.code}`);
+      await db.query(NOTE_RESEND, [row.id, row.chain_tx_hash, toAnchorError(err)]);
       return 'waiting';
     }
+    // The money checks come before RESEND, which refreshes anchor_submitted_at: a refusal
+    // here leaves the row's age alone, so a row that cannot be paid for still shows as stuck.
     const fees = await chain.getFeeData();
-    if (fees.maxFeePerGas > config.maxFeePerGasWei) return 'waiting';
+    if (fees.maxFeePerGas > config.maxFeePerGasWei) {
+      await db.query(NOTE_RESEND, [row.id, row.chain_tx_hash, toAnchorError(feeTooHigh())]);
+      return 'waiting';
+    }
+    const gasLimit = withHeadroom(gas);
+    if ((await chain.getBalance()) < gasLimit * fees.maxFeePerGas) {
+      await db.query(NOTE_RESEND, [row.id, row.chain_tx_hash, toAnchorError(insufficientFunds())]);
+      return 'waiting';
+    }
 
     const signed = await chain.signTransaction({
       call,
       nonce,
-      gasLimit: withHeadroom(gas),
+      gasLimit,
       maxFeePerGas: fees.maxFeePerGas,
       maxPriorityFeePerGas: fees.maxPriorityFeePerGas,
     });
+    const signedHash = fromHex(signed.hash);
     // Stored before broadcast, as with the first send. Identical fees give identical bytes
     // (signatures are deterministic), so the hash may not change at all.
-    const { rowCount } = await db.query(RESEND, [row.id, fromHex(signed.hash), clock(), row.chain_tx_hash]);
+    const { rowCount } = await db.query(RESEND, [row.id, signedHash, clock(), row.chain_tx_hash]);
     if (rowCount !== 1) return 'waiting';
 
     try {
@@ -248,10 +272,17 @@ export function createAnchorService({ db, pool, chain, config, clock = () => new
       if (err.action === 'inspect' && signed.hash !== storedHash) {
         // The old copy is still waiting somewhere with a fee ours does not beat: keep
         // following the old one.
-        await db.query(RESEND, [row.id, row.chain_tx_hash, clock(), fromHex(signed.hash)]);
+        await db.query(RESEND, [row.id, row.chain_tx_hash, clock(), signedHash]);
+      } else if (err.action === 'pause') {
+        // The node refused it for funds or fee after the checks above passed (the balance
+        // moved, or a node's own fee cap), so nothing new is waiting anywhere. The row now
+        // holds the new hash (stored before broadcast), so the note goes against that.
+        await db.query(NOTE_RESEND, [row.id, signedHash, toAnchorError(err)]);
       }
       return 'waiting';
     }
+    // A resend that went through: an old refusal no longer explains anything.
+    if (row.anchor_error !== null) await db.query(NOTE_RESEND, [row.id, signedHash, null]);
     return 'resent';
   }
 

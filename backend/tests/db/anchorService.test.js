@@ -11,6 +11,7 @@ import { classifyChainError } from '../../src/chain/chainErrors.js';
 import { DEPLOY_BLOCK } from '../../src/chain/mineChainAbi.js';
 import { createFakeChainClient } from '../fakes/fakeChainClient.js';
 import { freeLock, silentLog } from './realStackHelpers.js';
+import { createAnchorWorker, RUN_NOW_REFUSALS } from '../../src/anchorWorker.js';
 
 // The worker against the in-memory chain: every row of the crash table and the error table
 // from the Step 8 plan. Each test builds its own fake chain; the database is the usual
@@ -550,5 +551,137 @@ describe('runOnce: the advisory lock', () => {
 
     await expect(service.runOnce()).rejects.toThrow(SIMULATED_CRASH);
     expect(released).toBe(1);
+  });
+
+  it('run-now on the worker uses the same service and lock: busy while another process holds it', async () => {
+    const pool = createPool(testDatabaseUrl());
+    const holder = await tryAnchorLock(pool);
+    try {
+      const fake = createFakeChainClient();
+      const step = await (await journey()).registration();
+      const service = createAnchorService({ db: t.db, chain: fake.client, config: CONFIG, lock: () => tryAnchorLock(pool), log: silentLog() });
+      // Timers that never fire: only run-now ticks, so nothing else uses the test's connection.
+      const worker = createAnchorWorker({
+        runOnce: service.runOnce,
+        preflight: async () => ({ startable: true, canSend: true, checks: [], warnings: [], facts: { recorderAddress: fake.client.recorderAddress } }),
+        intervalSeconds: 30,
+        log: { info: () => {}, warn: () => {}, error: () => {} },
+        timers: { setTimeout: () => 1, clearTimeout: () => {} },
+      });
+      expect(await worker.start()).toBe(true);
+
+      expect(await worker.runNow()).toEqual({ ran: false, code: RUN_NOW_REFUSALS.BUSY });
+      expect(fake.control.records.calls).toEqual([]);
+      expect(await load(step.id)).toMatchObject({ anchor_status: 'pending' });
+
+      await holder.release();
+      expect(await worker.runNow()).toMatchObject({ ran: true, summary: { outcome: 'sent', stepId: step.id } });
+      expect(await load(step.id)).toMatchObject({ anchor_status: 'submitted' });
+      await worker.stop();
+    } finally {
+      await holder.release();
+      await pool.end();
+    }
+  });
+});
+
+// Plan §2, "stuck submitted": a row whose nonce is unused but whose resend is refused stays
+// submitted, and now keeps the refusal as our fixed text, so the admin status can show it.
+describe('runOnce: a refused resend is kept on the submitted row', () => {
+  // Sent, then forgotten by the node, then past the grace period: the next tick resends.
+  async function droppedStep(fake, clock, tick) {
+    const step = await (await journey()).registration();
+    await tick();
+    const sent = await load(step.id);
+    expect(fake.control.dropTransaction(hex(sent.chain_tx_hash))).toBe(true);
+    clock.advance(PAST_GRACE);
+    return sent;
+  }
+
+  it('a refused dry run: stays submitted with our text only, never provider text', async () => {
+    const { fake, clock, tick } = setup();
+    const sent = await droppedStep(fake, clock, tick);
+    const estimateGas = async () => {
+      throw chainError(new Error('boom at https://rpc.example/v3/secret-api-key'));
+    };
+
+    expect(await tick({ ...fake.client, estimateGas })).toMatchObject({ outcome: 'waiting', reconciled: { waiting: 1 } });
+    const row = await load(sent.id);
+    expect(row).toMatchObject({ anchor_status: 'submitted', anchor_attempts: 1, anchor_nonce: '0' });
+    expect(row.chain_tx_hash.equals(sent.chain_tx_hash)).toBe(true);
+    expect(row.anchor_error).toBe('UNKNOWN: an unrecognised error');
+    expect(row.anchor_error).not.toContain('secret-api-key');
+    expect(fake.control.records.sent).toHaveLength(1);
+  });
+
+  it('fee above the cap: kept as FEE_TOO_HIGH; once the fee falls, the same nonce is resent, the note cleared, and it confirms once', async () => {
+    const { fake, clock, tick } = setup();
+    const sent = await droppedStep(fake, clock, tick);
+    fake.control.setFeeData({ maxFeePerGas: 60n * GWEI });
+
+    expect((await tick()).reconciled.waiting).toBe(1);
+    expect(await load(sent.id)).toMatchObject({
+      anchor_status: 'submitted',
+      anchor_error: 'FEE_TOO_HIGH: the network fee is above the configured maximum',
+    });
+    expect(fake.control.records.signed).toHaveLength(1);
+
+    fake.control.setFeeData({ maxFeePerGas: 2n * GWEI });
+    expect((await tick()).reconciled.resent).toBe(1);
+    expect(await load(sent.id)).toMatchObject({ anchor_status: 'submitted', anchor_error: null, anchor_nonce: '0' });
+
+    fake.control.mine(2);
+    expect((await tick()).reconciled.confirmed).toBe(1);
+    const row = await load(sent.id);
+    expect(row).toMatchObject({ anchor_status: 'confirmed', anchor_nonce: '0', anchor_attempts: 1, anchor_error: null });
+    const events = await fake.client.getLogs(buildAnchorCall(row).args[0], 0, await fake.client.getBlockNumber());
+    expect(events).toHaveLength(1);
+  });
+
+  it('a wallet that cannot pay: kept as INSUFFICIENT_FUNDS before signing, so hash and age stay as they were', async () => {
+    const { fake, clock, tick } = setup();
+    const sent = await droppedStep(fake, clock, tick);
+    fake.control.runOutOfFunds();
+
+    expect((await tick()).reconciled.waiting).toBe(1);
+    const row = await load(sent.id);
+    expect(row).toMatchObject({ anchor_status: 'submitted', anchor_error: 'INSUFFICIENT_FUNDS: the recorder wallet cannot pay for the transaction' });
+    expect(row.chain_tx_hash.equals(sent.chain_tx_hash)).toBe(true);
+    // Unchanged, so the status can still tell that the row has stopped moving.
+    expect(row.anchor_submitted_at.getTime()).toBe(sent.anchor_submitted_at.getTime());
+    expect(fake.control.records.signed).toHaveLength(1);
+  });
+
+  it('a resend the node refuses for funds after the checks passed: the note goes on the row with the new hash', async () => {
+    const { fake, clock, tick } = setup();
+    const sent = await droppedStep(fake, clock, tick);
+    // Other fees give another hash, which RESEND stores before broadcast.
+    fake.control.setFeeData({ maxFeePerGas: 3n * GWEI });
+    const broadcast = async () => {
+      throw chainError({ code: 'INSUFFICIENT_FUNDS' });
+    };
+
+    expect((await tick({ ...fake.client, broadcast })).reconciled.waiting).toBe(1);
+    const row = await load(sent.id);
+    expect(row.chain_tx_hash.equals(sent.chain_tx_hash)).toBe(false);
+    expect(hex(row.chain_tx_hash)).toBe(fake.control.records.signed.at(-1).hash);
+    expect(row).toMatchObject({ anchor_status: 'submitted', anchor_error: 'INSUFFICIENT_FUNDS: the recorder wallet cannot pay for the transaction' });
+    expect(fake.control.mempoolSize()).toBe(0);
+  });
+
+  it('writes nothing when the row changed underneath (its hash no longer matches)', async () => {
+    const { fake, clock, tick } = setup();
+    const sent = await droppedStep(fake, clock, tick);
+    const otherHash = randomBytes(32);
+    const estimateGas = async () => {
+      // As if another process resent the step during this tick's dry run.
+      await t.db.query('UPDATE transactions SET chain_tx_hash = $2 WHERE id = $1', [sent.id, otherHash]);
+      throw chainError(new Error('something odd'));
+    };
+
+    await tick({ ...fake.client, estimateGas });
+    const row = await load(sent.id);
+    expect(row).toMatchObject({ anchor_status: 'submitted', anchor_error: null });
+    expect(row.chain_tx_hash.equals(otherHash)).toBe(true);
   });
 });

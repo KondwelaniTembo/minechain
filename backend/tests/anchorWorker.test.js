@@ -3,8 +3,12 @@ import {
   createAnchorWorker,
   nextBackoffSeconds,
   describeError,
+  runAnchoringNow,
+  anchoringSnapshot,
   BACKOFF_INITIAL_SECONDS,
   BACKOFF_MAX_SECONDS,
+  RUN_NOW_REFUSALS,
+  WORKER_STATES,
 } from '../src/anchorWorker.js';
 
 // The worker's scheduling, with vitest's fake timers: time only moves when a test moves it,
@@ -250,6 +254,233 @@ describe('createAnchorWorker: stop', () => {
     expect(stopped).toBe(true);
     await advance(3600);
     expect(runOnce).toHaveBeenCalledTimes(1);
+  });
+});
+
+// A runOnce call that stays running until the test lets it finish.
+function holdNextTick(runOnce, result = summary('sent', { stepId: 's1' })) {
+  let finish;
+  runOnce.mockImplementationOnce(() => new Promise((resolve) => (finish = () => resolve(result))));
+  return () => finish();
+}
+
+describe('createAnchorWorker: snapshot', () => {
+  it('before start: not_started, with nothing seen yet', () => {
+    const { worker } = setup();
+    expect(worker.snapshot()).toEqual({ state: 'not_started', startedAt: null, preflight: null, lastTick: null });
+  });
+
+  it('after a passing preflight and a tick: running, with the start time and the last tick', async () => {
+    const { worker } = setup({ outcomes: [summary('sent', { stepId: 's1' })] });
+    const startedAt = new Date(Date.now());
+
+    await worker.start();
+    await advance(0);
+
+    const snap = worker.snapshot();
+    expect(snap).toEqual({
+      state: 'running',
+      startedAt,
+      preflight: { at: startedAt, passed: true, retrying: false, checks: [] },
+      lastTick: { at: startedAt, outcome: 'sent', code: null, stepId: 's1' },
+    });
+    expect(WORKER_STATES).toContain(snap.state);
+    await worker.stop();
+  });
+
+  it('a failed check: not_started, naming the check and its status but never its problem text', async () => {
+    const { worker } = setup({ preflight: async () => notStartable('failed') });
+    await worker.start();
+
+    const snap = worker.snapshot();
+    expect(snap.state).toBe('not_started');
+    expect(snap.preflight).toMatchObject({ passed: false, retrying: false, checks: [{ name: 'chainId', status: 'failed' }] });
+    // The problem text names the RPC host.
+    expect(JSON.stringify(snap)).not.toContain('rpc.example');
+  });
+
+  it('a check that could not be made: backoff while preflight retries', async () => {
+    const { worker } = setup({ preflight: async () => notStartable('error') });
+    await worker.start();
+
+    expect(worker.snapshot()).toMatchObject({ state: 'backoff', startedAt: null, preflight: { retrying: true } });
+    await worker.stop();
+  });
+
+  it('follows the last tick: paused, backoff, then running again', async () => {
+    const { worker } = setup({
+      outcomes: [summary('paused', { code: 'FEE_TOO_HIGH' }), summary('backoff', { code: 'RPC_UNAVAILABLE' }), summary('idle')],
+    });
+    await worker.start();
+
+    await advance(0);
+    expect(worker.snapshot()).toMatchObject({ state: 'paused', lastTick: { outcome: 'paused', code: 'FEE_TOO_HIGH' } });
+    await advance(30);
+    expect(worker.snapshot()).toMatchObject({ state: 'backoff', lastTick: { code: 'RPC_UNAVAILABLE' } });
+    await advance(30);
+    expect(worker.snapshot()).toMatchObject({ state: 'running', lastTick: { outcome: 'idle' } });
+    await worker.stop();
+  });
+
+  it('a thrown error shows as backoff with a fixed code, never the error text', async () => {
+    const dbDown = Object.assign(new Error('connect ECONNREFUSED db.internal.example:5432'), { code: 'ECONNREFUSED' });
+    const { worker } = setup({ outcomes: [dbDown] });
+    await worker.start();
+    await advance(0);
+
+    const snap = worker.snapshot();
+    expect(snap).toMatchObject({ state: 'backoff', lastTick: { outcome: 'error', code: 'INTERNAL_ERROR', stepId: null } });
+    expect(JSON.stringify(snap)).not.toContain('db.internal.example');
+    await worker.stop();
+  });
+
+  it('stopped after ROLE_LOST, and after stop()', async () => {
+    const lost = setup({ outcomes: [summary('stopped', { code: 'ROLE_LOST' })] });
+    await lost.worker.start();
+    await advance(0);
+    expect(lost.worker.snapshot()).toMatchObject({ state: 'stopped', lastTick: { code: 'ROLE_LOST' } });
+
+    const shut = setup();
+    await shut.worker.start();
+    await shut.worker.stop();
+    expect(shut.worker.snapshot().state).toBe('stopped');
+  });
+});
+
+describe('createAnchorWorker: runNow', () => {
+  it('refuses NOT_STARTED before preflight has passed, without calling runOnce', async () => {
+    const before = setup();
+    await expect(before.worker.runNow()).resolves.toEqual({ ran: false, code: RUN_NOW_REFUSALS.NOT_STARTED });
+
+    const failed = setup({ preflight: async () => notStartable('failed') });
+    await failed.worker.start();
+    await expect(failed.worker.runNow()).resolves.toEqual({ ran: false, code: 'ANCHORING_NOT_STARTED' });
+
+    const retrying = setup({ preflight: async () => notStartable('error') });
+    await retrying.worker.start();
+    await expect(retrying.worker.runNow()).resolves.toEqual({ ran: false, code: 'ANCHORING_NOT_STARTED' });
+    await retrying.worker.stop();
+
+    expect(before.runOnce).not.toHaveBeenCalled();
+    expect(failed.runOnce).not.toHaveBeenCalled();
+    expect(retrying.runOnce).not.toHaveBeenCalled();
+  });
+
+  it('runs one tick, passes its summary back, notes it, and leaves the timer where it was', async () => {
+    const sent = summary('sent', { stepId: 's2' });
+    const { worker, gaps } = setup({ outcomes: [summary('idle'), sent] });
+    await worker.start();
+    await advance(10);
+
+    await expect(worker.runNow()).resolves.toEqual({ ran: true, summary: sent });
+    expect(worker.snapshot().lastTick).toMatchObject({ outcome: 'sent', stepId: 's2' });
+
+    await advance(20);
+    // Timer tick at 0, run-now at 10, timer tick at 30 as planned.
+    expect(gaps()).toEqual([10, 20]);
+    await worker.stop();
+  });
+
+  it('refuses BUSY while a timer tick or another run-now is running in this process', async () => {
+    const { worker, runOnce } = setup();
+    const finishTimerTick = holdNextTick(runOnce);
+    await worker.start();
+    await advance(0);
+
+    await expect(worker.runNow()).resolves.toEqual({ ran: false, code: RUN_NOW_REFUSALS.BUSY });
+    expect(runOnce).toHaveBeenCalledTimes(1);
+    finishTimerTick();
+    await advance(0);
+
+    const finishFirstRun = holdNextTick(runOnce);
+    const first = worker.runNow();
+    await expect(worker.runNow()).resolves.toEqual({ ran: false, code: 'ANCHORING_BUSY' });
+    finishFirstRun();
+    await expect(first).resolves.toMatchObject({ ran: true });
+    expect(runOnce).toHaveBeenCalledTimes(2);
+    await worker.stop();
+  });
+
+  it('refuses BUSY when another process holds the lock, keeping the last real tick', async () => {
+    const { worker } = setup({ outcomes: [summary('idle'), summary('busy')] });
+    await worker.start();
+    await advance(0);
+
+    await expect(worker.runNow()).resolves.toEqual({ ran: false, code: 'ANCHORING_BUSY' });
+    expect(worker.snapshot().lastTick.outcome).toBe('idle');
+    await worker.stop();
+  });
+
+  it('refuses STOPPED after stop(), and after a run-now that finds ROLE_LOST, which also ends the timer', async () => {
+    const shut = setup();
+    await shut.worker.start();
+    await shut.worker.stop();
+    await expect(shut.worker.runNow()).resolves.toEqual({ ran: false, code: RUN_NOW_REFUSALS.STOPPED });
+
+    const lost = setup({ outcomes: [summary('idle'), summary('stopped', { code: 'ROLE_LOST' })] });
+    await lost.worker.start();
+    await advance(0);
+    await expect(lost.worker.runNow()).resolves.toMatchObject({ ran: true, summary: { outcome: 'stopped' } });
+    await expect(lost.worker.runNow()).resolves.toEqual({ ran: false, code: 'ANCHORING_STOPPED' });
+    await advance(3600);
+    expect(lost.runOnce).toHaveBeenCalledTimes(2);
+  });
+
+  it('notes a thrown error with the fixed code and passes the error on', async () => {
+    const { worker, runOnce } = setup();
+    await worker.start();
+    await advance(0);
+    runOnce.mockImplementationOnce(async () => {
+      throw new Error('bug at db.internal.example');
+    });
+
+    await expect(worker.runNow()).rejects.toThrow('bug at db.internal.example');
+    expect(worker.snapshot()).toMatchObject({ state: 'backoff', lastTick: { outcome: 'error', code: 'INTERNAL_ERROR' } });
+    await worker.stop();
+  });
+
+  it('stop() waits for a run-now tick, so the pool is not closed under it', async () => {
+    const { worker, runOnce } = setup();
+    await worker.start();
+    await advance(0);
+    const finish = holdNextTick(runOnce);
+    const run = worker.runNow();
+
+    let stopped = false;
+    const stopping = worker.stop().then(() => {
+      stopped = true;
+    });
+    await advance(0);
+    expect(stopped).toBe(false);
+
+    finish();
+    await stopping;
+    expect(stopped).toBe(true);
+    await expect(run).resolves.toMatchObject({ ran: true });
+  });
+});
+
+describe('with anchoring disabled (no worker)', () => {
+  it('run-now refuses ANCHORING_DISABLED and the snapshot says disabled', async () => {
+    await expect(runAnchoringNow(null)).resolves.toEqual({ ran: false, code: RUN_NOW_REFUSALS.DISABLED });
+    expect(anchoringSnapshot(null)).toEqual({
+      state: 'disabled',
+      startedAt: null,
+      preflight: null,
+      lastTick: null,
+      recorderAddress: null,
+      contractAddress: null,
+    });
+  });
+
+  it('passes through to the worker when there is one', async () => {
+    const { worker } = setup({ outcomes: [summary('idle'), summary('sent', { stepId: 's3' })] });
+    await worker.start();
+    await advance(0);
+
+    await expect(runAnchoringNow(worker)).resolves.toMatchObject({ ran: true, summary: { stepId: 's3' } });
+    expect(anchoringSnapshot(worker).state).toBe('running');
+    await worker.stop();
   });
 });
 

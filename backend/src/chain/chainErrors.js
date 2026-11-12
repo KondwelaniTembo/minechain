@@ -182,6 +182,11 @@ export function feeTooHigh() {
   return result('FEE_TOO_HIGH');
 }
 
+// Likewise when the worker's own balance check finds the wallet cannot pay.
+export function insufficientFunds() {
+  return result('INSUFFICIENT_FUNDS');
+}
+
 // The text stored in transactions.anchor_error: our code, the decoded detail if any, and the
 // fixed reason. Never the original message, so nothing from the provider reaches the database.
 export function toAnchorError(classified) {

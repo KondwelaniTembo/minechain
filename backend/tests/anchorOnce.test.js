@@ -5,8 +5,8 @@ import {
   UsageError,
   EXIT,
   TICK_SPACING_SECONDS,
-  STUCK_AFTER_SECONDS,
 } from '../src/cli/anchorOnce.js';
+import { STUCK_AFTER_SECONDS } from '../src/services/anchorQueue.js';
 import { runPreflight } from '../src/chain/preflight.js';
 import { SEPOLIA_CHAIN_ID } from '../src/chain/mineChainAbi.js';
 import { createFakeChainClient, FAKE_RECORDER_KEY } from './fakes/fakeChainClient.js';
