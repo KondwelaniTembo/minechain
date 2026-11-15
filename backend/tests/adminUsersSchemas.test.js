@@ -51,7 +51,7 @@ describe('listUsersQuerySchema', () => {
       expect(listUsersQuerySchema.parse({})).toEqual({ status: 'pending', limit: LIST_LIMIT_DEFAULT, offset: 0 });
     });
 
-    it.each(['pending', 'active', 'suspended', 'rejected', 'invited'])('the status %s', (status) => {
+    it.each(['pending', 'active', 'suspended', 'rejected', 'invited', 'deleted'])('the status %s', (status) => {
       expect(listUsersQuerySchema.parse({ status }).status).toBe(status);
     });
 
@@ -71,8 +71,9 @@ describe('listUsersQuerySchema', () => {
 
   describe('refuses', () => {
     it.each([
-      ['an unknown status', { status: 'deleted' }, 'status', 'must be pending, active, suspended, rejected or invited'],
-      ['a status in capitals', { status: 'PENDING' }, 'status', 'must be pending, active, suspended, rejected or invited'],
+      // Not 'deleted': that became a real status in the users-deleted migration (B3).
+      ['an unknown status', { status: 'archived' }, 'status', 'must be pending, active, suspended, rejected, invited or deleted'],
+      ['a status in capitals', { status: 'PENDING' }, 'status', 'must be pending, active, suspended, rejected, invited or deleted'],
       ['limit 0', { limit: '0' }, 'limit', 'must be at least 1'],
       ['a limit over the cap', { limit: String(LIST_LIMIT_MAX + 1) }, 'limit', `must be at most ${LIST_LIMIT_MAX}`],
       ['an offset over the cap', { offset: String(LIST_OFFSET_MAX + 1) }, 'offset', `must be at most ${LIST_OFFSET_MAX}`],

@@ -255,7 +255,8 @@ describe('admin user routes: validation', () => {
   });
 
   it.each([
-    ['an unknown status', '?status=deleted', 'status'],
+    // Not 'deleted': that became a real status in the users-deleted migration (B3).
+    ['an unknown status', '?status=archived', 'status'],
     ['a limit over the cap', '?limit=101', 'limit'],
     ['an unknown parameter', '?sort=password_hash', 'sort'],
   ])('list refuses %s', async (_label, query, field) => {

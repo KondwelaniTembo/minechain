@@ -115,6 +115,44 @@ const RESET_KEY = `
    WHERE id = $1
   RETURNING ${ADMIN_COLUMNS}`;
 
+// Rename and delete lock the row before deciding, like key reset: rename must compare the
+// current name, and delete must name the key it removes in the audit entry.
+const LOCK_FOR_EDIT = `SELECT ${ADMIN_COLUMNS} FROM users WHERE id = $1 FOR UPDATE`;
+
+const RENAME = `
+  UPDATE users
+     SET full_name = $2
+   WHERE id = $1
+  RETURNING ${ADMIN_COLUMNS}`;
+
+// One statement, so the database's rules hold at every moment: no password hash and no
+// device key on a deleted account (users_password_null_when_invited_or_deleted,
+// users_deleted_has_no_public_key), and no activation code outside 'invited'. The row stays,
+// so steps, alerts, approvals and audit entries keep pointing at it.
+//
+// tokens_valid_after = to_timestamp($3), the same cut-off a password change sets, judged by
+// the same check in getAuthenticatedUser. $3 is one second after now on the app server's
+// clock, the clock that writes every token's iat, so even a token issued earlier in this
+// very second is refused (that check lets iat equal to the cut-off through).
+const DELETE_ACCOUNT = `
+  UPDATE users
+     SET status = 'deleted',
+         status_reason = $2,
+         public_key = NULL,
+         password_hash = NULL,
+         activation_code_hash = NULL,
+         activation_expires_at = NULL,
+         activation_failed_attempts = 0,
+         tokens_valid_after = to_timestamp($3::bigint)
+   WHERE id = $1
+  RETURNING ${ADMIN_COLUMNS}`;
+
+// The statuses each edit may start from (B3, decisions of 15 Nov 2026). rejected and
+// deleted are final. pending is renamable (the admin may fix a typo before approving) but not
+// deletable: a request that should not go ahead is rejected, which tells the person why.
+export const RENAMABLE_STATUSES = Object.freeze(['pending', 'invited', 'active', 'suspended']);
+export const DELETABLE_STATUSES = Object.freeze(['active', 'suspended', 'invited']);
+
 // For the 409 message: "Only a pending account can be approved.", "Only an active account
 // can be suspended."
 const ACTIONS = {
@@ -162,11 +200,45 @@ function userNotFound() {
   return new AppError(404, 'USER_NOT_FOUND', 'No user has this id.');
 }
 
+// "A deleted account", "An invited account": withArticle at the start of a sentence.
+const sentenceStart = (word) => {
+  const phrase = withArticle(word);
+  return phrase[0].toUpperCase() + phrase.slice(1);
+};
+
+// Pure, so the wording of every refusal can be pinned by unit tests. null: the edit may go
+// ahead from this status.
+export function renameRefusal(status) {
+  if (RENAMABLE_STATUSES.includes(status)) return null;
+  return new AppError(409, 'INVALID_STATUS_TRANSITION', `${sentenceStart(status)} account cannot be changed.`);
+}
+
+export function deleteRefusal(status) {
+  if (DELETABLE_STATUSES.includes(status)) return null;
+  if (status === 'pending') {
+    return new AppError(
+      409,
+      'INVALID_STATUS_TRANSITION',
+      'A pending account cannot be deleted. Reject the request instead, so the person is told why.',
+    );
+  }
+  if (status === 'deleted') {
+    return new AppError(409, 'INVALID_STATUS_TRANSITION', 'This account has already been deleted.');
+  }
+  return new AppError(
+    409,
+    'INVALID_STATUS_TRANSITION',
+    `Only an active, suspended or invited account can be deleted. This account is ${status}.`,
+  );
+}
+
 // Dependencies are passed in, so DB tests can give a failing audit service to prove the
 // change and its entry are saved together.
 //   db:    the app's db object
 //   audit: the audit service (record)
-export function createAccountService({ db, audit }) {
+//   now:   milliseconds on the app server's clock, as in tokenService; used only for the
+//          delete's token cut-off, and replaceable so tests can pin it
+export function createAccountService({ db, audit, now = () => Date.now() }) {
   // Called only when the UPDATE matched no row: the decision is already made, and this
   // only reads the row to explain it. Throwing inside the transaction rolls it back, so a
   // refused action leaves nothing behind.
@@ -419,6 +491,88 @@ export function createAccountService({ db, audit }) {
       return db.transaction((tx) =>
         apply(tx, { action: 'reactivate', sql: REACTIVATE, params: [id], id, actorId, ipAddress }),
       );
+    },
+
+    // Changes the full name only (B3). fullName has already passed fullNameSchema. Role,
+    // username and licence number are never changed here: the statement names one column.
+    // The same name again answers 200 with nothing written and no audit entry, so a retried
+    // request after a lost response does not add a second entry.
+    rename({ userId, fullName, adminId, ipAddress = null }) {
+      const id = normalizeId(userId);
+      return db.transaction(async (tx) => {
+        const { rows } = await tx.query(LOCK_FOR_EDIT, [id]);
+        const user = rows[0];
+        if (!user) throw userNotFound();
+        const refused = renameRefusal(user.status);
+        if (refused) throw refused;
+        if (user.full_name === fullName) return toAdminUser(user);
+
+        const { rows: updated } = await tx.query(RENAME, [id, fullName]);
+        await audit.record(tx, {
+          action: 'user.rename',
+          actorId: adminId,
+          entityType: 'user',
+          entityId: id,
+          // Only which field changed (decision of 15 Nov 2026): the audit log is append-only,
+          // so a name written there could never be removed. The name itself is in the row.
+          details: { field: 'fullName' },
+          ipAddress,
+        });
+        return toAdminUser(updated[0]);
+      });
+    },
+
+    // Soft delete (B3): active, suspended or invited -> deleted, which is final. The row stays,
+    // and the username stays taken. The account loses its password hash, device key and any
+    // activation code, and every token issued so far stops working.
+    async deleteAccount({ userId, reason, adminId, ipAddress = null }) {
+      const id = normalizeId(userId);
+      // Checked before any SQL, as for suspend. 403: never allowed, whatever the state.
+      if (id === normalizeId(adminId)) {
+        throw new AppError(403, 'CANNOT_DELETE_SELF', 'You cannot delete your own account.');
+      }
+
+      return db.transaction(async (tx) => {
+        // The same lock and rule as suspend, so two admins deleting each other at the same
+        // moment cannot leave none: the second waits, re-reads, and finds itself no longer
+        // counted. Taken before the target's own lock, in the same order as suspend, so the
+        // two actions wait for each other instead of deadlocking.
+        const { rows: admins } = await tx.query(LOCK_ACTIVE_ADMINS);
+        const activeAdmins = new Set(admins.map((row) => row.id));
+        if (activeAdmins.has(id) && (!activeAdmins.has(normalizeId(adminId)) || activeAdmins.size < 2)) {
+          throw new AppError(
+            409,
+            'LAST_ACTIVE_ADMIN',
+            'At least one other active administrator must remain, so this account cannot be deleted.',
+          );
+        }
+
+        // FOR UPDATE: a sync reading this user's key (FOR SHARE) waits until the delete has
+        // committed, then finds no key and stores nothing.
+        const { rows } = await tx.query(LOCK_FOR_EDIT, [id]);
+        const user = rows[0];
+        if (!user) throw userNotFound();
+        const refused = deleteRefusal(user.status);
+        if (refused) throw refused;
+
+        const cutOffSeconds = Math.floor(now() / 1000) + 1;
+        const { rows: deleted } = await tx.query(DELETE_ACCOUNT, [id, reason, cutOffSeconds]);
+        await audit.record(tx, {
+          action: 'user.delete',
+          actorId: adminId,
+          entityType: 'user',
+          entityId: id,
+          // The key by fingerprint only, as for key reset: the log never holds the key itself.
+          details: {
+            from: user.status,
+            to: 'deleted',
+            reason,
+            keyFingerprint: user.public_key ? spkiFingerprint(user.public_key) : null,
+          },
+          ipAddress,
+        });
+        return toAdminUser(deleted[0]);
+      });
     },
   };
 }

@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { usernameSchema, fullNameSchema } from './auth.js';
 
-// The five statuses, exactly as the users_status_valid CHECK allows since the
-// users-activation migration. 'invited': created by an administrator, not activated yet.
-export const ACCOUNT_STATUSES = Object.freeze(['pending', 'active', 'suspended', 'rejected', 'invited']);
+// The six statuses, exactly as the users_status_valid CHECK allows since the users-deleted
+// migration. 'invited': created by an administrator, not activated yet. 'deleted': removed
+// by an administrator; the row is kept for the history.
+export const ACCOUNT_STATUSES = Object.freeze(['pending', 'active', 'suspended', 'rejected', 'invited', 'deleted']);
 
 // The roles an administrator creates (FR-10). Miners, transporters and buyers request their
 // own accounts (FR-12, SELF_REGISTER_ROLES), so they are never created here.
@@ -47,7 +48,7 @@ export function wholeNumber({ min, max, defaultValue }) {
 // which is what an admin opens the screen to do (FR-12).
 export const listUsersQuerySchema = z
   .object({
-    status: z.enum(ACCOUNT_STATUSES, { error: 'must be pending, active, suspended, rejected or invited' }).default('pending'),
+    status: z.enum(ACCOUNT_STATUSES, { error: 'must be pending, active, suspended, rejected, invited or deleted' }).default('pending'),
     limit: wholeNumber({ min: 1, max: LIST_LIMIT_MAX, defaultValue: LIST_LIMIT_DEFAULT }),
     offset: wholeNumber({ min: 0, max: LIST_OFFSET_MAX, defaultValue: 0 }),
   })
