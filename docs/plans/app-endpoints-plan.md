@@ -9,8 +9,13 @@ B3.1–B3.4:** B3.1 `6a85bbf`, B3.2 `677764e`, B3.3 `e9d9d40`; B3.4 is the docs 
 this sentence. Details in `docs/api.md` (`/admin/users/{id}/rename` and `/delete`),
 `docs/database-schema.md` (users, "Deleted accounts") and `docs/decisions.md` ("Accounts
 (21)–(30)" and their limitations). **Before the pull request with B3 is merged, the
-users-deleted migration must be run against the production database (see §5).** B2 is not
-built. Written on 15 Nov 2026 for review in chat, to be built in
+users-deleted migration must be run against the production database (see §5).** **B2
+(consignment view and verification) built 15 Nov 2026 in B2.1–B2.6:** B2.1 `963bdb5`, B2.2
+`4ca6b92`, B2.3 `e6ce0cc`, B2.4 `a063fab`, B2.5 `5c98e06`, the fix B2.5a `0ea38c2`; B2.6 is
+the docs commit that adds this sentence. Details in `docs/api.md`
+(`GET /consignments/by-qr/{qrCode}`), `docs/database-schema.md` (`record_tampered`),
+`docs/contract-spec.md` (section 7) and `docs/decisions.md` ("Verification (1)–(14)" and
+their limitations). All three parts of this plan are built. Written on 15 Nov 2026 for review in chat, to be built in
 sub-steps B1.1–B3.4 on the backend branch planned for Mon 16 Nov 2026. Based on
 `docs/decisions.md` Scope (2)–(9), `docs/api.md`, `docs/database-schema.md`,
 `docs/signing-spec.md` (sections 3, 5 and 7), `docs/contract-spec.md` (section 7) and the code
@@ -238,6 +243,26 @@ raising is recorded by the alert row, not an audit entry.
 - Tests use `tests/fakes/fakeChainReader.js` (or the fake chain client, which already has
   `getReceipt`), never Sepolia.
 
+**Built** (15 Nov 2026): B2.1 `963bdb5`, B2.2 `4ca6b92`, B2.3 `e6ce0cc`, B2.4 `a063fab`, B2.5
+`5c98e06`, B2.5a `0ea38c2` (a fix found while building B2.5), B2.6 the docs commit.
+Differences from the rows below, each recorded in `docs/decisions.md` (Verification):
+
+- **B2.1:** the network check also compares the contract's code hash with
+  `EXPECTED_CODE_HASH` (refusal `WRONG_CONTRACT_CODE`), not only "has code" (Verification (2)).
+- **B2.2:** the stored evidence is checked before any chain call, so a row that disagrees with
+  itself is a `mismatch` even with no reader (Verification (4)); the signature is verified again
+  (Verification (5)). `TX_NOT_FOUND` comes as `fields: ["chain_tx_hash"]` with `reason`.
+- **B2.3:** four readings of the role table, settled before building: no transaction hash for
+  a transporter before their own handoff, a zone name for transporters, no user ids (a `byYou`
+  flag), and any stored handoff unlocks (Verification (6)–(9)).
+- **B2.4:** `captured_at` is read as text so a microsecond edit is caught (Verification (13));
+  the write transaction takes the consignment lock first and, for an officer, re-reads the
+  alerts so the new one shows.
+- **B2.5:** the QR code rule is shared with sync (`QR_CODE_PATTERN` exported from
+  `stepPayload.js`).
+- **B2.5a:** a malformed percent-escape in any path parameter answers 400, not a logged 500
+  (Verification (14)).
+
 | Sub-step | Contents | Size |
 |---|---|---|
 | **B2.1** Reader | `src/chain/rpc.js` (moved helpers), `chainReader.js` with the chain-id and code guard, fake reader, `server.js` and `services/index.js` wiring | M |
@@ -356,7 +381,8 @@ commit. Differences from the rows below:
 2. **B3.1 → B3.4.** Small and independent; it lands the only migration early, so the dev,
    test and Render databases are migrated once.
 3. **B2.1 → B2.6.** The largest piece and the one with network risk; B2.1 can be built and
-   committed on its own if the day runs short.
+   committed on its own if the day runs short. **Built 15 Nov 2026** (hashes above §3's
+   sub-step table).
 
 Each sub-step is one commit with `npm test` and `npm run test:db` passing. Totals: about +110
 unit and +78 DB tests; one migration. Render needs `npm run migrate` against the production

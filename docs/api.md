@@ -40,6 +40,7 @@ and `FAKE-SIGNATURE`. None of them is a real identifier, password or token.
 | `GET` | [`/alerts/{id}`](#get-alertsid) | One alert, with the other alerts on its consignment (FR-08) | Yes, officer only |
 | `POST` | [`/alerts/{id}/review`](#post-alertsidreview) | "Confirm problem": close an alert as a real problem, with notes; its step is rejected (FR-08) | Yes, officer only |
 | `POST` | [`/alerts/{id}/dismiss`](#post-alertsiddismiss) | "Clear, no problem": close an alert as a false alarm, with notes; its step can be cleared and the hold released (FR-08) | Yes, officer only |
+| `GET` | [`/consignments/by-qr/{qrCode}`](#get-consignmentsby-qrqrcode) | Scan a consignment: its custody steps, what this role may see of them, and a live check of each anchored step against the blockchain (FR-04) | Yes, transporter, buyer or officer |
 | `GET` | [`/reports/transactions`](#get-reportstransactions) | Download custody steps as a spreadsheet (CSV), filtered (FR-09) | Yes, officer, buyer (own purchases only) or admin |
 | `GET` | [`/reports/audit-trail`](#get-reportsaudit-trail) | Download the audit trail of one consignment or one actor as CSV (FR-13) | Yes, officer only |
 | `POST` | [`/sync/steps`](#post-syncsteps) | Upload signed custody steps from the phone's offline queue (FR-03, FR-07) | Yes, miner, transporter or buyer |
@@ -96,10 +97,18 @@ appear in a response.
 |---|---|---|---|
 | 400 | `INVALID_JSON` | The body is not valid JSON | Request body is not valid JSON |
 | 400 | `VALIDATION_FAILED` | A field is missing, invalid, or not allowed | Some fields are missing or invalid. |
+| 400 | `VALIDATION_FAILED` | A path parameter has a malformed percent-escape, for example `/alerts/%E0` (see below). No `details` | The request path is not valid. |
 | 404 | `NOT_FOUND` | No such route | Route not found |
 | 413 | `PAYLOAD_TOO_LARGE` | The body is over 100 kB | Request body is too large |
 | 429 | `TOO_MANY_REQUESTS` | A rate limit was reached (see below) | Depends on the limit |
 | 500 | `INTERNAL_ERROR` | An unexpected server fault. Details are written to the server log, never sent | Something went wrong |
+
+**A malformed percent-escape in a path parameter.** Any `{id}` or `{qrCode}` in a path is
+percent-decoded by the server before it is checked. When the escape is broken (`%E0`, `%E0%A4`,
+`%ZZ`), the answer is 400 `VALIDATION_FAILED`, "The request path is not valid.", with
+`Cache-Control: no-store` and no `details`. The value sent is not echoed and not logged. The
+token and role checks on the route's group run first, so without a token the answer is still
+401. These requests are not counted by the per-user rate limits (see [Rate limits](#rate-limits)).
 
 ## Authentication
 
@@ -162,6 +171,12 @@ A 403 has no `WWW-Authenticate` header, because the credentials themselves were 
 | `POST /auth/me/password` | 10 per 15 minutes | logged-in user | failed attempts only (every error after the token check, including `VALIDATION_FAILED`). Successful changes are not counted. A request refused for its token never reaches the limiter |
 | `POST /alerts/{id}/review` and `POST /alerts/{id}/dismiss`, together | 60 per 15 minutes | logged-in officer | every request that passes the officer check, including invalid ones (`VALIDATION_FAILED`) and refused ones. Anyone who is not an officer is refused before it and not counted. `GET /alerts` and `GET /alerts/{id}` are not limited |
 | `POST /admin/users/{id}/rename` and `POST /admin/users/{id}/delete`, together | 20 per 15 minutes | logged-in administrator | every request that passes the admin check, including invalid ones (a malformed `{id}` or body, `VALIDATION_FAILED`) and refused ones. Anyone who is not an administrator is refused before it and not counted. The other `/admin/users` endpoints are not counted and have no limit yet. Message: "Too many account changes. Please wait a few minutes and try again." |
+| `GET /consignments/by-qr/{qrCode}` | 60 per 15 minutes | logged-in user | every request that passes the role check, including malformed QR codes (`VALIDATION_FAILED`) and unknown ones (`CONSIGNMENT_NOT_FOUND`). A miner or administrator is refused before it and not counted. Message: "Too many consignment scans. Please wait a few minutes and try again." |
+
+**Not counted by the per-user limits:** a request whose path parameter has a malformed
+percent-escape (see [Error format](#error-format)). It is refused while the route is being
+matched, before the route's own limiter runs. It still needs a valid token, and it reaches no
+service.
 
 The per-IP limits are high on purpose. Zambian mobile networks use carrier-grade NAT, so a
 whole mining site can share one public IP address. The per-username limit is what stops
@@ -237,8 +252,8 @@ the endpoint sections below remain the source of truth for what exists.
 | Record a handoff to a transporter (FR-02, FR-03) | | ✓ | | | | Planned |
 | Record a purchase (FR-02, FR-03) | | | ✓ | | | Planned |
 | Sync signed work recorded offline (FR-03, FR-07): `POST /sync/steps` | ✓ | ✓ | ✓ | | | **Built** |
-| Verify a consignment by QR code (FR-04) | | ✓ | ✓ | ✓ | | Planned |
-| View a consignment's full custody chain (FR-04, FR-05) | | | ✓ | ✓ | | Planned |
+| Verify a consignment by QR code (FR-04): `GET /consignments/by-qr/{qrCode}` (a buyer only in transit or after their own purchase) | | ✓ | ✓ | ✓ | | **Built** |
+| View a consignment's full custody chain, with GPS and signature evidence (FR-04, FR-05): the same endpoint (a buyer once they have an accepted purchase; officers also see flagged and rejected steps) | | | ✓ | ✓ | | **Built** |
 | Signed provenance certificate (FR-16) | | | ✓ | | | Planned |
 | Transaction reports and spreadsheet export (FR-09): `GET /reports/transactions` (a buyer sees only consignments they bought) | | | ✓ | ✓ | ✓ read-only | **Built** |
 | Review anomaly alerts, with case notes (FR-08): `GET /alerts`, `/alerts/{id}`, `POST /alerts/{id}/review`, `/dismiss` (officers only; administrators are refused) | | | | ✓ | | **Built** |
@@ -2040,8 +2055,9 @@ change and its audit entry are saved together, or not at all.
 
 ## Alerts (FR-08)
 
-Four endpoints give regulatory officers the anomaly alerts raised by the sync checks (and,
-later, by verification): a queue, one alert in detail, and two ways to close one. This is
+Four endpoints give regulatory officers the anomaly alerts raised by the sync checks and by
+verification (`record_tampered`, raised by the [consignment view](#get-consignmentsby-qrqrcode)):
+a queue, one alert in detail, and two ways to close one. This is
 the in-app alerts list that replaces push notifications in the prototype (decisions log,
 Scope (2)). The app refreshes it when it is opened and on pull-down.
 
@@ -2123,8 +2139,9 @@ decision closed the last one. Held is worked out each time, never stored.
 | A purchase on a consignment that already has an accepted purchase | Only one purchase per consignment can be accepted |
 | An alert of type `handoff_order`: a step recorded after the purchase | Nothing can follow a purchase on the blockchain, so the step could only fail |
 
-**`record_tampered`** alerts (raised by verification, still to be built) sit on a step that
-is already on the blockchain. That step's review status can never change, so either decision
+**`record_tampered`** alerts (raised by the chain check of the
+[consignment view](#get-consignmentsby-qrqrcode)) sit on a step that is already on the
+blockchain. That step's review status can never change, so either decision
 closes the alert and leaves the step as it is. Closing it releases the hold. The fix for a
 tampered record is restoring the row from a backup (a known limitation in the decisions log).
 
@@ -2334,6 +2351,181 @@ or purchase moves the stage (see [the two decisions](#the-two-decisions)).
 
 **Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `ALERT_NOT_FOUND`, `INVALID_STATUS_TRANSITION`,
 `STEP_CANNOT_BE_CLEARED` and `TOO_MANY_REQUESTS`.
+
+---
+
+## GET /consignments/by-qr/{qrCode}
+
+Scan a consignment's QR code (FR-04). One request returns the consignment, its custody steps
+in order, and a **live check of each anchored step against the blockchain**, cut down to what
+the viewer's role may see (decisions log, Scope (9) and Verification). The phone never talks
+to the blockchain; the server does the check.
+
+| | |
+|---|---|
+| **Login needed** | Yes, transporter, buyer or officer. A miner or administrator gets 403 `FORBIDDEN` on this path and on every other path under `/consignments`, including paths that do not exist |
+| **Rate limits** | 60 scans per 15 minutes per user, counted after the role check, malformed codes included (see [Rate limits](#rate-limits)) |
+| **Request body** | None |
+| **Caching** | Every response, errors included, carries `Cache-Control: no-store` |
+
+**The `{qrCode}` parameter.** 4–128 characters, each one of `A–Z a–z 0–9 . _ : / -`: the same
+rule sync stores a code by. **A `/` inside a code must be sent as `%2F`**, for example
+`MC%2F2026%2F001` for `MC/2026/001`. The server decodes the parameter before checking it. A raw
+`/` makes a different path, which gets 404 `NOT_FOUND`, not a lookup.
+
+```
+GET /consignments/by-qr/MC-2026-000123
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+```
+
+**200 OK**, here as an officer sees a purchased consignment (all values fake; one step shown):
+
+```json
+{
+  "consignment": {
+    "id": "5c0d7e21-0000-4000-8000-000000000001",
+    "qrCode": "MC-2026-000123",
+    "mineral": "gold",
+    "stage": "purchased",
+    "held": false,
+    "weightsHidden": false
+  },
+  "steps": [
+    {
+      "id": "9d4e5f60-0000-4000-8000-000000000001",
+      "type": "registration",
+      "byYou": false,
+      "actor": { "role": "miner", "username": "mutale_banda" },
+      "weightMg": "1500000",
+      "location": { "latitude": "-15.419012", "longitude": "28.288105" },
+      "zoneName": "ZCAS Campus (demo)",
+      "capturedAt": "2026-11-10T08:00:00.000Z",
+      "receivedAt": "2026-11-10T08:05:01.118Z",
+      "anchor": { "status": "confirmed", "chainTxHash": "0xccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0" },
+      "check": { "result": "match" },
+      "reviewStatus": "passed",
+      "alerts": [],
+      "evidence": {
+        "signedPayload": "minechain-step/1/registration\nstep_id=…\n",
+        "signature": "MEQCIF…FAKE…==",
+        "signerPublicKey": "MFkwEw…FAKE…=="
+      }
+    }
+  ]
+}
+```
+
+**The body.** A field a role may not see is **left out**, not sent as `null`.
+
+| Field | Meaning |
+|---|---|
+| `consignment.id`, `qrCode`, `mineral`, `stage` | The consignment. `stage` is `registered`, `in_transit` or `purchased` |
+| `consignment.held` | `true` means "under review": an open alert holds the consignment from anchoring (see [Held consignments](database-schema.md#held-consignments)). A mismatch found by this scan makes it `true` at once |
+| `consignment.weightsHidden` | `true` when the viewer may not see weights (a transporter before their own handoff), so the app can say "weigh first" |
+| `steps[]` | In custody order (received time, then id) |
+| `id`, `type` | The step: `registration`, `handoff` or `purchase` |
+| `byYou` | `true` on the viewer's own steps. No user id appears anywhere in the body |
+| `actor` | `{ role }`, or `{ role, username }` (see the table below). Never a full name or licence number |
+| `weightMg` | Whole milligrams, as text |
+| `location` | `{ latitude, longitude }`, decimal degrees as text with 6 places |
+| `zoneName` | The licensed zone the point fell in when the step was synced, or `null` outside every active zone |
+| `capturedAt`, `receivedAt` | The phone's signed capture time, and when the server stored the step; ISO 8601 with milliseconds |
+| `anchor.status` | `pending`, `submitted`, `confirmed` or `failed` |
+| `anchor.chainTxHash` | The public Sepolia transaction hash, `0x` and 64 hex characters; `null` while nothing has been sent |
+| `check` | `{ result }`; for an officer, on a mismatch, also `fields` and sometimes `reason` (see [The chain check](#the-chain-check)) |
+| `reviewStatus` | `passed`, `cleared`, `flagged` or `rejected` |
+| `alerts` | The step's alerts, `[{ id, type, status }]`; full details are in [`GET /alerts/{id}`](#get-alertsid) |
+| `evidence` | `{ signedPayload, signature, signerPublicKey }`: the exact signed text, and the DER signature and SPKI public key in standard base64, so the phone can re-check each signature itself ([signing spec](signing-spec.md)) |
+
+**Never in any body:** full names, licence numbers, user ids, the on-chain actor reference
+(`actor_ref`), `anchor_error`, nonces, block numbers or the stored `data_hash`.
+
+### What each viewer sees
+
+| | Officer | Buyer who owns it (accepted purchase) | Any other buyer | Transporter who has handed off | Transporter who has not (blind) |
+|---|---|---|---|---|---|
+| Can open | any consignment | that consignment | only while `in_transit`; otherwise 404 `CONSIGNMENT_NOT_FOUND`, the answer for an unknown code | any consignment | any consignment |
+| Steps listed | all, flagged and rejected included | accepted (`passed`, `cleared`) | accepted | accepted | accepted |
+| `reviewStatus`, `alerts` | ✓ | | | | |
+| `weightMg` | ✓ | ✓ | ✓ | ✓ | none (`weightsHidden: true`) |
+| `location` | ✓ | ✓ | | | |
+| `zoneName` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `actor` | `{ role, username }` | `{ role, username }` | `{ role, username }` | `{ role }` | `{ role }` |
+| `byYou` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `anchor.status` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `anchor.chainTxHash` | ✓ | ✓ | ✓ | ✓ | none |
+| `check.result` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `check.fields`, `check.reason` | ✓ (on a mismatch) | | | | |
+| `evidence` | ✓ | ✓ | | | |
+
+- **"Has handed off"** means the transporter has any handoff stored on this consignment,
+  whatever its review status, flagged or rejected included: their own measurement is then on
+  record. Another transporter's handoff unlocks nothing for someone who has not weighed.
+- **Why a blind transporter sees no transaction hash:** the hash leads to the on-chain event,
+  and the event carries the weight. A transporter must weigh without knowing the expected
+  figure, so the 10% rule cannot be gamed. This is enforced by the API and the app only; see
+  the known limitation in the decisions log (Verification).
+- **A buyer whose own purchase is flagged** has no accepted purchase yet, so they get the
+  "any other buyer" view while the consignment is `in_transit`. Their flagged step is not
+  listed, and `held: true` shows it is under review.
+
+### The chain check
+
+Every listed step gets a `check.result`:
+
+| Result | In plain words |
+|---|---|
+| `match` | The stored record is exactly what was signed, the signature still verifies, and the Sepolia transaction holds a MineChain event for this step with the same consignment, actor reference, weight and hash. Nothing has been changed since it was anchored |
+| `mismatch` | Something differs: the stored record no longer agrees with its own signature or hash, or with what the blockchain recorded. This is treated as tampering |
+| `not_anchored_yet` | The step is not confirmed on the blockchain yet (pending, submitted or failed, and every flagged or rejected step), so there is nothing to compare. The blockchain is not asked |
+| `chain_unavailable` | The server could not ask the blockchain this time, or could not trust the answer: the RPC provider was down or slow, it is on the wrong network or has the wrong contract, or no reader is configured. **Never shown as tampering, and it raises no alert.** Scanning again later may give a real result |
+
+**How a step is checked**, cheapest first:
+
+1. **The stored record against itself, with no network.** The anchor hash is recomputed from
+   the stored payload, public key and signature, and the signature is verified again with that
+   key. The signed payload is compared with the stored columns (type, step id, actor, QR code,
+   mineral for a registration, weight, latitude, longitude, capture time, all as text), and the
+   recomputed hash with the stored hash. Any difference is a `mismatch` at once, even when the
+   blockchain cannot be reached. The signature check matters most: someone who edits the
+   payload, the columns and the stored hash together cannot make the signature verify without
+   the phone's private key.
+2. **The receipt of the stored transaction hash.** It must have succeeded, be in the stored
+   block, and hold one MineChain event that matches the step, compared with the **recomputed**
+   hash, not the stored one.
+3. **A missing receipt** is a `mismatch` only when the server's RPC provider has already
+   reached the step's block plus the confirmations (`ANCHOR_CONFIRMATIONS`, 2 by default). The
+   officer then sees `fields: ["chain_tx_hash"]` and `reason: "TX_NOT_FOUND"`. Before that, the
+   provider may simply be behind, so the result is `chain_unavailable`.
+
+**On a mismatch**, officers see the names of what differs in `check.fields`, never the values.
+Column names (`weight_mg`, `captured_at`, `signature`, `data_hash`, …) mean the stored record
+disagrees with itself; `receipt.status` and `receipt.blockNumber` describe the receipt;
+`event.<name>` (for example `event.weightMilligrams`) names the event field that differs.
+
+**A scan can write.** Whoever scans, if any step is a `mismatch`, the server raises a
+`record_tampered` alert (severity `high`) on that step, and the consignment is held until an
+officer closes it ([Alerts](#alerts-fr-08)). There is at most one such alert per step, ever:
+scanning again adds none. A viewer refused with 404 causes no blockchain call and writes
+nothing. Scans themselves are not recorded in the audit log.
+
+**Timing.** At most 3 steps are checked at once, and each blockchain request gives up after
+8 seconds. The check works whether or not anchoring is enabled: the server reads the chain with
+a key-free reader whenever `SEPOLIA_RPC_URL` and `MINECHAIN_CONTRACT_ADDRESS` are set. Without
+them, every confirmed step is `chain_unavailable`. How the reader works is in
+[contract-spec.md, section 7](contract-spec.md).
+
+**Errors**, on top of the [token errors](#authentication):
+
+| Status | Code | When | Message |
+|---|---|---|---|
+| 400 | `VALIDATION_FAILED` | `{qrCode}` is shorter than 4 or longer than 128 characters, or has a character outside `A–Z a–z 0–9 . _ : / -` (details name `qrCode`) | Some fields are missing or invalid. |
+| 400 | `VALIDATION_FAILED` | `{qrCode}` has a malformed percent-escape | The request path is not valid. |
+| 401 | `TOKEN_MISSING`, `TOKEN_INVALID`, `TOKEN_EXPIRED` | See [Authentication](#authentication) | |
+| 403 | `FORBIDDEN` | A miner or administrator | You do not have permission to do this. |
+| 404 | `CONSIGNMENT_NOT_FOUND` | No consignment has this code, **or** this viewer may not see it: a buyer scanning a consignment that is still `registered`, or one another buyer has purchased. The two answers are identical, so a scan cannot tell them apart | No consignment has this QR code. |
+| 429 | `TOO_MANY_REQUESTS` | More than 60 scans in 15 minutes | Too many consignment scans. Please wait a few minutes and try again. |
+| 500 | `INTERNAL_ERROR` | Unexpected server fault | Something went wrong |
 
 ---
 

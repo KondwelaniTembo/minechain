@@ -202,20 +202,89 @@ sent in order, each after the previous one is confirmed.
 ## 7. How the backend verifies a record
 
 The contract stores hashes, not records, so checking a record means comparing the database
-copy against the hash anchored at the time.
+copy against the hash anchored at the time. The backend does this on every scan of a
+consignment ([api.md, the chain check](api.md#the-chain-check)), for each confirmed step.
+
+### 7.1 The key-free reader
+
+Verification reads the chain through `backend/src/chain/chainReader.js`, not through the
+anchoring worker's chain client. The reader has no wallet and never reads
+`RECORDER_PRIVATE_KEY`, so it works whether or not `ANCHOR_ENABLED` is true. The server
+creates it whenever `SEPOLIA_RPC_URL` and `MINECHAIN_CONTRACT_ADDRESS` are set (with
+`SEPOLIA_RPC_URL_FALLBACK` as a fallback, used only when the primary cannot be reached).
+Creating it makes no network call. It can do two things: fetch a transaction receipt, and
+read the latest block number. Each request gives up after 8 seconds.
+
+It shares the provider set-up, fallback rule and event decoding with the chain client
+(`backend/src/chain/rpc.js`), and the same secret rules: the RPC URLs stay inside the module,
+every provider error becomes a `ChainClientError` with a fixed code, and warnings name an
+endpoint only as `primary` or `fallback`, never by host or URL.
+
+**The network check.** Before an endpoint's first answer is trusted, the reader asks that
+endpoint, once:
+
+1. `eth_chainId`: it must be 11155111 (Sepolia);
+2. `eth_getCode` at the contract address: it must not be empty, and its keccak256 must equal
+   `EXPECTED_CODE_HASH`, the hash of the deployed runtime bytecode that the worker's preflight
+   also checks (`backend/src/chain/mineChainAbi.js`). The hash is worked out from the reply
+   already in hand, so this costs no extra request.
+
+| Refusal | When |
+|---|---|
+| `WRONG_CHAIN` | The endpoint reports another chain id |
+| `NO_CONTRACT_CODE` | There is no code at `MINECHAIN_CONTRACT_ADDRESS` on that endpoint |
+| `WRONG_CONTRACT_CODE` | There is code, but not the deployed MineChain |
+
+A refusal fails the request without trying the other endpoint: a wrong network is a
+configuration fault, as in the worker's preflight. A failed or refused check is not
+remembered, so the next request asks again; once passed, it is not asked again. Until it
+passes, every check result is `chain_unavailable`. Without this guard, an RPC on another
+network would honestly report "no such receipt" for every honest step.
+
+### 7.2 Comparing a step with the chain
+
+1. **The stored evidence first, with no network** (`backend/src/services/chainCheck.js`):
+   `hash_version` must be 1; the anchor hash is recomputed from the stored payload, signer
+   public key and signature ([signing spec](signing-spec.md), section 7); the signature is
+   verified again; and the signed payload is compared with the stored columns. Any difference
+   is a mismatch at once.
+2. **The receipt of the stored `chain_tx_hash`**, read with the reader. Its `status` must be 1
+   and its `blockNumber` must equal the stored `block_number`.
+3. **One event in the receipt must match the step**, by `receiptEventMismatches`, the same
+   function the worker uses to confirm a step: the contract address, the event name for the
+   step type (`ConsignmentRegistered`, `HandoffRecorded` or `PurchaseRecorded`), the
+   consignment `id`, the actor reference, `weightMilligrams` and `dataHash`. The `dataHash` is
+   compared with the **recomputed** hash, never the stored `data_hash` column, so the chain is
+   compared with the evidence itself.
+4. **No receipt** is a mismatch (`TX_NOT_FOUND`) only when the reader's latest block is at
+   least the stored `block_number` plus `ANCHOR_CONFIRMATIONS`; before that the RPC may be
+   behind, and the result is `chain_unavailable`.
+5. **Any reader error**, a network-check refusal included, or no reader configured, gives
+   `chain_unavailable`, never a mismatch.
+
+A mismatch raises a `record_tampered` alert on the step, which holds the consignment
+([database-schema.md, alerts](database-schema.md#alerts)).
+
+**Why the receipt and not `getLogs`.** The cost is fixed: one `eth_getTransactionReceipt` per
+step, plus `eth_blockNumber` only when a receipt is missing. A log search needs a block range
+from the deployment block, which grows every day. It is just as safe: the stored hash is only a
+pointer, and what is trusted is the event, which only the recorder wallet can emit, matched in
+full against the recomputed hash.
+
+### 7.3 Log search, for crash recovery
+
+The anchoring worker can also find a step's event without its transaction hash, after a crash
+left a row that never recorded it:
 
 1. Take the consignment's `bytes32` id.
-2. Read the logs from the contract address, from block 12047601, filtered with
-   `topics: [null, id]`. Decode them with the contract ABI.
-3. Find the event for the step being checked. For the original registration, this is the
-   `ConsignmentRegistered` event. Take its `dataHash`, and also its weight and actor
-   reference.
-4. Load the matching record from PostgreSQL and hash it again, using exactly the same
-   fields, order and encoding as when it was anchored.
-5. Compare the two hashes. If they match, the record is unchanged since anchoring. If they
-   differ, the database record has been altered and an alert must be raised. Also compare
-   the weight and actor reference against the event.
-6. Optionally, call `getConsignment(id)` to confirm the current stage.
+2. Read the logs from the contract address, filtered with
+   `topics: [<the three event topics>, id]`, in chunks of 500 blocks. The worker starts near
+   the step's received time, and never before the deployment block, 12047601. Decode them with the
+   contract ABI.
+3. Find the event that matches the step, with the same comparison as in 7.2, step 3.
+
+`getConsignment(id)` gives the consignment's current stage and latest step, which the worker
+reads before it ever resends a step.
 
 The hashing scheme belongs to the backend. Once a record has been anchored, that scheme must
 not change, or old records will no longer verify. If it ever needs to change, give it a

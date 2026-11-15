@@ -452,8 +452,39 @@ numbers. Details hold ids, never names of people. All values in the examples are
   { "noActiveZones": true, "toleranceMetres": 25 }
   ```
 
-- `record_tampered`: never raised by sync. It comes from verification, which is still to be
-  built, and its details will be defined there.
+- `record_tampered` (high): never raised by sync. Raised by the consignment view's chain check
+  (`backend/src/services/consignmentService.js`; [api.md](api.md#get-consignmentsby-qrqrcode))
+  on a confirmed step whose check is `mismatch`. `source` is always `verification`;
+  `fields` names what differs, never values; `chainTxHash` is the step's stored transaction
+  hash.
+
+  ```json
+  { "source": "verification", "fields": ["weight_mg"],
+    "chainTxHash": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0" }
+  ```
+
+**How a `record_tampered` alert is inserted.** The view reads in one `REPEATABLE READ`
+snapshot and commits, then asks the chain with no transaction open, then, only if a step
+mismatched, opens one short transaction:
+
+1. `SELECT id FROM consignments WHERE id = $1 FOR UPDATE`: the lock sync and an officer's close
+   take first, so the three wait for each other instead of deadlocking;
+2. for each mismatched step:
+
+   ```sql
+   INSERT INTO alerts (transaction_id, type, severity, details, created_at)
+   VALUES ($1, 'record_tampered', 'high', $2, clock_timestamp())
+   ON CONFLICT ON CONSTRAINT alerts_one_per_rule_per_step DO NOTHING
+   ```
+
+3. held is read again with `isConsignmentHeld`, so the answer shows `held: true`.
+
+`alerts_one_per_rule_per_step` (`UNIQUE (transaction_id, type)`) makes this happen **once
+per step, ever**: a second scan of the same tampered step inserts nothing, and once that alert
+is closed, a later mismatch on the same step raises no new one (a known limitation; the view
+still shows `mismatch`). The step itself is not changed: it is already anchored, and
+`transactions_anchor_only_if_approved` forbids `flagged` on a sent step. A scan writes no
+audit entry; the alert row is the record.
 
 **Two meanings of `stepId`.** Inside `quantity_discrepancy` details, `previous.stepId` and
 `registration.stepId` are server ids, `transactions.id`. In a `POST /sync/steps` result,
@@ -650,8 +681,9 @@ the hold, whichever decision closed it (see [Closing an alert](#alerts)). A revi
 leaves its step `rejected`, which the ordering rule ignores, so the consignment's other steps
 go on; a dismissed one leaves it `cleared`, and it is anchored in its turn. Closing a
 `record_tampered` alert also releases the hold, although the step still differs from the
-chain (a known limitation; the record is restored from a backup). The officer's alert list
-shows `held` with this same `HELD` rule. The rule is written once, as `HELD` in `backend/src/services/anchorQueue.js`, and
+chain (a known limitation; the record is restored from a backup). A `record_tampered` alert
+raised by a scan holds the consignment like any other open alert (see [alerts](#alerts)).
+The officer's alert list and the consignment view show `held` with this same `HELD` rule. The rule is written once, as `HELD` in `backend/src/services/anchorQueue.js`, and
 `isConsignmentHeld()` there uses the same SQL as the queue. A held consignment still accepts
 new steps, which are checked and stored normally; they simply wait to be anchored.
 
@@ -761,6 +793,12 @@ A CHECK constraint can only see its own row, so these rules live in the backend 
   transaction;
 - a buyer's transactions report holds only accepted (`passed` or `cleared`) steps of
   consignments the buyer has an accepted purchase of, a condition inside the report query;
+- the consignment view decides what each role may see in one function
+  (`consignmentDisclosure.js`) that copies each output field by name; its query reads
+  `captured_at` as text (milliseconds, or six fraction digits when the stored time is not a
+  whole millisecond), so the chain check sees a sub-millisecond edit;
+- a `record_tampered` alert is raised only by the consignment view, once per step (see
+  [alerts](#alerts));
 - every report export writes its `audit_logs` entry in the same transaction as the rows it
   sends (see [Reports](#reports)).
 

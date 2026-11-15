@@ -36,7 +36,13 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 14 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
+Updated 15 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
+
+- **App endpoints plan built** (`docs/plans/app-endpoints-plan.md`) on
+  `feature/backend-app-endpoints`: B1 officer alerts, B3 account rename and soft delete, B2
+  consignment view and verification (`GET /consignments/by-qr/{qrCode}`, B2.1–B2.6, last
+  code commit `0ea38c2`). Before the pull request with B3 is merged, the users-deleted
+  migration must be run against the production database (plan §5).
 
 - **Backend complete, merged and deployed.** `feature/backend-logic` is merged into `main`
   (PR #5). Latest commit `044af61` pins Node 22.14.0 for Render.
@@ -44,8 +50,8 @@ Updated 14 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
   with anchoring running in production since 14 Nov. Setup, checks, backups, the
   1 December database refresh and the re-check list are in `docs/deployment.md`; the
   reasons are in `docs/decisions.md`, "Deployment (1)–(12)".
-- **Test totals (confirmed, run 12 Nov 14:05):** `npm test` 1841, `npm run test:db` 787,
-  contract 37.
+- **Test totals (confirmed by the developer, 15 Nov, after B2.5a):** `npm test` 2300,
+  `npm run test:db` 914. Contract 37 (last run 12 Nov; the contract has not changed).
 - **Dev database** (`minechain_dev`) is migrated to `1794441600000_users-activation`.
   `npm run test:db` migrates `minechain_test` itself (`tests/db/globalSetup.js`).
 
