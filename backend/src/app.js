@@ -7,6 +7,7 @@ import { adminZoneRoutes } from './routes/adminZones.js';
 import { adminAnchoringRoutes } from './routes/adminAnchoring.js';
 import { syncRoutes } from './routes/sync.js';
 import { reportRoutes } from './routes/reports.js';
+import { alertRoutes } from './routes/alerts.js';
 import {
   createRegisterLimiter,
   createLoginIpLimiter,
@@ -16,6 +17,7 @@ import {
   createSyncLimiter,
   createReportLimiter,
   createAnchoringActionLimiter,
+  createAlertActionLimiter,
 } from './middleware/rateLimits.js';
 import { createRequireAuth } from './middleware/requireAuth.js';
 import { notFound } from './middleware/notFound.js';
@@ -27,7 +29,8 @@ import { errorHandler } from './middleware/errorHandler.js';
 //   trustProxyHops: how many proxies sit in front of the app (config TRUST_PROXY)
 //   rateLimits:     { registerPerHour, loginPerIp, loginPerUsername, activationPerIp,
 //                   passwordChangePerUser, syncPerUser, reportsPerUser,
-//                   anchoringActionsPerAdmin } to override the limits, for tests
+//                   anchoringActionsPerAdmin, alertActionsPerOfficer } to override the
+//                   limits, for tests
 export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } = {}) {
   if (!db || typeof db.query !== 'function') {
     throw new TypeError('createApp needs a db object with a query() method');
@@ -68,6 +71,7 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   const syncLimiter = createSyncLimiter({ limit: rateLimits.syncPerUser });
   const reportLimiter = createReportLimiter({ limit: rateLimits.reportsPerUser });
   const anchoringActionLimiter = createAnchoringActionLimiter({ limit: rateLimits.anchoringActionsPerAdmin });
+  const alertActionLimiter = createAlertActionLimiter({ limit: rateLimits.alertActionsPerOfficer });
 
   app.use('/health', healthRoutes({ db }));
   const requireAuth = createRequireAuth({ tokens: services.tokens, users: services.users });
@@ -108,6 +112,11 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   // not in the checks above; if it were missing, these routes would fail closed with a
   // logged 500.
   app.use('/reports', reportRoutes({ reports: services.reports, requireAuth, reportLimiter }));
+
+  // FR-08 officers' alert queue and decisions (Scope (2) and (5)). Like reports,
+  // services.alerts is not in the checks above; if it were missing, these routes would fail
+  // closed with a logged 500.
+  app.use('/alerts', alertRoutes({ alerts: services.alerts, requireAuth, alertActionLimiter }));
 
   // Order matters: these two must come after every route.
   app.use(notFound);

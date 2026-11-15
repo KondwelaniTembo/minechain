@@ -5,7 +5,7 @@ import { AppError } from '../errors.js';
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 
-// DEV-SHORTCUT: in-memory rate-limit stores (register, login IP, login username, activation, password change, sync, reports and anchoring actions) | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
+// DEV-SHORTCUT: in-memory rate-limit stores (register, login IP, login username, activation, password change, sync, reports, anchoring actions and alert actions) | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
 //
 // Shared settings for every limiter. Each limiter is made by a function rather than created
 // once at import, so each createApp call, and so each test, gets its own counter.
@@ -162,6 +162,25 @@ export function createAnchoringActionLimiter({ limit = 20, windowMs = FIFTEEN_MI
     keyGenerator: (req) => {
       // Fail closed, as in createSyncLimiter.
       if (!req.user?.id) throw new Error('createAnchoringActionLimiter ran without requireAuth before it on this route');
+      return `user:${req.user.id}`;
+    },
+  });
+}
+
+// Alert decisions per officer (POST /alerts/{id}/review and /dismiss), one count for both
+// (app endpoints plan, B1.3). Each decision writes to the append-only audit log, so a script
+// looping on them would fill it. 60 per 15 minutes is higher than the anchoring actions
+// because an officer works through a queue, one decision every few seconds at most. The
+// lists (GET) are not limited: they only read. Keyed by user id for the same reasons as
+// sync. Must run after requireAuth.
+export function createAlertActionLimiter({ limit = 60, windowMs = FIFTEEN_MINUTES_MS } = {}) {
+  return createLimiter({
+    limit,
+    windowMs,
+    message: 'Too many alert decisions. Please wait a few minutes and try again.',
+    keyGenerator: (req) => {
+      // Fail closed, as in createSyncLimiter.
+      if (!req.user?.id) throw new Error('createAlertActionLimiter ran without requireAuth before it on this route');
       return `user:${req.user.id}`;
     },
   });
