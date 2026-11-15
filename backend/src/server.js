@@ -4,6 +4,7 @@ import { createPool, createDb } from './db.js';
 import { createApp } from './app.js';
 import { createServices } from './services/index.js';
 import { createAnchorWorkerFromConfig, describeError } from './anchorWorker.js';
+import { createChainReaderFromConfig } from './chain/chainReader.js';
 
 // Loads backend/.env into process.env for local development. On Render there is no .env
 // file, and the variables come from the dashboard instead, so this quietly does nothing.
@@ -30,11 +31,22 @@ const anchorWorker = config.anchor.enabled
   ? createAnchorWorkerFromConfig({ db, pool, anchorConfig: config.anchor })
   : null;
 
-const app = createApp({ db, services: createServices({ db, config, anchorWorker }), trustProxyHops: config.trustProxyHops });
+// Read-only chain access for verification, separate from the worker and needing no key, so
+// it exists whenever the RPC URL and contract address are set, even with anchoring off.
+// null when they are not; verification then reports chain_unavailable. No network call
+// here: its network check runs on first use.
+const chainReader = createChainReaderFromConfig(config.anchor);
+
+const app = createApp({
+  db,
+  services: createServices({ db, config, anchorWorker, chainReader }),
+  trustProxyHops: config.trustProxyHops,
+});
 
 const server = app.listen(config.port, () => {
   console.log(`MineChain API listening on http://localhost:${config.port} (${config.nodeEnv})`);
   console.log(anchorWorker ? 'Anchoring: enabled, running preflight' : 'Anchoring: disabled (ANCHOR_ENABLED is not true)');
+  console.log(chainReader ? 'Verification: chain reader configured' : 'Verification: no chain reader (RPC URL or contract address not set)');
   // Not awaited: the API serves requests whatever the worker's preflight finds.
   anchorWorker?.start().catch((err) => console.error(`Anchoring worker could not start: ${describeError(err)}`));
 });
@@ -73,6 +85,8 @@ function shutdown(signal) {
   server.close(async (serverErr) => {
     try {
       await workerStopped;
+      // After the requests have drained, so no view loses its reader mid-check.
+      chainReader?.close();
       await db.close();
     } catch (dbErr) {
       console.error('Closing the database pool failed:', dbErr.message);

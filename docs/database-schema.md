@@ -13,7 +13,7 @@ behind the design are recorded in [decisions.md](decisions.md).
 
 | Table | Holds | Requirements |
 |---|---|---|
-| `users` | Accounts for the five roles: password hash, P-256 public key, random on-chain actor reference, approval, activation code hash, password-change cut-off | FR-06, FR-10, FR-12 |
+| `users` | Accounts for the five roles, in six statuses (deleted accounts are kept): password hash, P-256 public key, random on-chain actor reference, approval, activation code hash, token cut-off | FR-06, FR-10, FR-12 |
 | `gps_zones` | Licensed extraction zones, stored as polygons | FR-08, FR-11 |
 | `consignments` | Identity, mineral, miner and current stage of each consignment | FR-01 |
 | `transactions` | One row per signed custody step: signature, anchored hash, review and anchoring state | FR-02, FR-03, FR-05, FR-07 |
@@ -39,7 +39,7 @@ erDiagram
     text username UK "unique ignoring case"
     text full_name
     text licence_number
-    text password_hash "Argon2id or bcrypt; NULL while invited"
+    text password_hash "Argon2id or bcrypt; NULL while invited or deleted"
     text role
     text status
     text status_reason
@@ -151,8 +151,9 @@ one database transaction, so every consignment has at least one step.
     - `audit_logs.occurred_at` is `now()`, so an entry such as `transaction.create` is earlier
       than the step it records; if audit entries are ever merged into a trail by time, they
       would sort before their step.
-    - `alerts.reviewed_at` should be written with `clock_timestamp()` when officer review is
-      built.
+    - `alerts.reviewed_at` is written with `clock_timestamp()` by the officer's decision
+      (`alertService.js`), so it is never earlier than the alert's own `created_at`, even
+      inside a transaction that began before the alert was raised.
     - `consignments.created_at` is not a display time for "registered at": it is slightly
       earlier than the registration step; use the registration's `received_at`.
   - `users.activation_expires_at` is written as `clock_timestamp() + 72 hours` and checked
@@ -178,24 +179,29 @@ one database transaction, so every consignment has at least one step.
 
 ### users
 - `username`: 3–32 characters from `A–Z a–z 0–9 _ . -`, unique ignoring case. The index
-  covers every status, so the username of an invited, pending or rejected account stays
-  taken.
+  covers every status, so the username of an invited, pending, rejected or deleted account
+  stays taken. A deleted account's username is reserved for good.
 - `password_hash`: an Argon2id or bcrypt hash string, or NULL (`users_password_is_hash`).
   A plain password is refused.
 - `role`: `miner`, `transporter`, `buyer`, `officer` or `admin`.
-- `status`: `pending` (the default), `active`, `suspended`, `rejected` or `invited`
-  (`users_status_valid`). Suspended and rejected accounts need a non-blank `status_reason`.
+- `status`: `pending` (the default), `active`, `suspended`, `rejected`, `invited` or
+  `deleted` (`users_status_valid`). Suspended, rejected and deleted accounts need a
+  non-blank `status_reason` (`users_status_reason_required`).
   - `pending`: a miner, transporter or buyer asked for an account and waits for approval.
   - `invited`: an administrator created this officer or administrator account (FR-10), and
     its owner has not activated it yet. It cannot log in, every admin action except a new
-    code refuses it, and it is never counted as an active administrator.
+    code, a rename and a delete refuses it, and it is never counted as an active
+    administrator.
+  - `deleted`: an administrator deleted the account (FR-10, soft delete). Final. It cannot
+    sign in by any path, and is never counted as an active administrator. The row stays.
   - `active`, `suspended`, `rejected`: as before; `rejected` is final.
 - **Invited accounts and their activation codes** (migration `1794441600000_users-activation`):
   - `users_password_only_when_invited`: `(password_hash IS NULL) = (status = 'invited')`.
     Both directions in one rule: an invited account has **no** password hash at all, rather
     than a made-up one (NULL says honestly "no password yet", and no login can ever match
     it), and every other account always has one. Activation must therefore set the hash and the status in
-    the same `UPDATE`.
+    the same `UPDATE`. **Replaced** by `users_password_null_when_invited_or_deleted` in
+    `1794528000000_users-deleted` (below).
   - `activation_code_hash`: the SHA-256 of the current activation code, or NULL when there
     is none (never issued, used, or erased after 5 wrong attempts). The code itself is never
     stored. `users_activation_code_32_bytes`: a SHA-256 digest is always 32 bytes, so any
@@ -214,16 +220,43 @@ one database transaction, so every consignment has at least one step.
 - `tokens_valid_after`: the password-change cut-off. A token issued (`iat`) before this
   moment is refused; NULL, the value of every account until its first password change,
   means no cut-off. Set by `POST /auth/me/password` to the fresh token's own issue time, as
-  `to_timestamp(<iat>)`, in the same `UPDATE` as the new hash.
+  `to_timestamp(<iat>)`, in the same `UPDATE` as the new hash. Set by a delete to one second
+  after the app server's clock, so every token issued until then is refused.
 - **Rolling back** `1794441600000_users-activation` stops with an error while any invited
   account exists: it has no password hash, which the old schema requires. Activate those
   accounts, or remove them if they have no history, first.
+- **Deleted accounts** (migration `1794528000000_users-deleted`):
+  - `users_status_valid`: the six statuses, `deleted` added.
+  - `users_status_reason_required`: now covers `suspended`, `rejected` **and** `deleted`,
+    so a deleted account always says why.
+  - `users_password_null_when_invited_or_deleted`:
+    `(password_hash IS NULL) = (status IN ('invited', 'deleted'))`. It replaces
+    `users_password_only_when_invited` under a name that describes it. Both directions
+    again: invited and deleted accounts never have a hash, every other account always has
+    one. A delete must therefore erase the hash in the same `UPDATE` that sets the status,
+    and no status change alone can give a deleted account a way to log in again.
+  - `users_deleted_has_no_public_key`: `status <> 'deleted' OR public_key IS NULL`. The
+    delete clears the key in its `UPDATE`; this rule makes a leftover key impossible, not
+    merely unused, and stops a key being registered on a deleted account later (defence in
+    depth).
+  - `users_activation_only_when_invited` (from users-activation) already means a deleted
+    account can hold no activation code.
+- **What a delete clears and keeps.** One `UPDATE` sets `status = 'deleted'` and
+  `status_reason`, and clears `password_hash`, `public_key`, `activation_code_hash` and
+  `activation_expires_at`, sets `activation_failed_attempts` to 0, and sets
+  `tokens_valid_after` (see below). It keeps `id`, `username`, `full_name`, `role`,
+  `licence_number`, `actor_ref`, `approved_by` and `approved_at`. No row is removed, so every
+  foreign key to the account (steps, consignments, alerts, zones, approvals, audit entries)
+  still points at it, and anchored steps keep their on-chain actor.
+- **Rolling back** `1794528000000_users-deleted` stops with an error while any deleted
+  account exists: it has no password hash and a status the old schema does not allow, and
+  restoring a hash would mean inventing a password.
 - `public_key`: NULL, or a 91-byte P-256 key as exported by the Android Keystore. Unique
   across accounts through the index `users_public_key_key` (migration
   `users-public-key-unique`), so one device key belongs to one account. NULLs never clash,
   so any number of accounts can have no key. Set once by the user; cleared only by an
   administrator's key reset on a suspended account (see [signing-spec.md](signing-spec.md),
-  section 2).
+  section 2), or by a delete.
 - `actor_ref`: 32 random bytes, unique, used as the on-chain actor reference. It is made
   with `crypto.randomBytes`, never derived from personal data.
 - `approved_by` and `approved_at` are set together. Nobody can approve their own account.
@@ -304,7 +337,10 @@ one database transaction, so every consignment has at least one step.
   - custody chain: `(consignment_id, received_at)`;
   - FR-09 report filters: `(actor_id, received_at)`, `(zone_id, captured_at)` and
     `(captured_at)`;
-  - verification: `(data_hash)`;
+  - `(data_hash)`, `transactions_data_hash_idx`: created for looking rows up by their
+    anchored hash, but **no query uses it**. The consignment view finds steps by consignment
+    (via its QR code), sync compares a stored step's hash in JavaScript after finding it by
+    step id, and the reports only select the column. Kept for now;
   - the anchoring queue: `(received_at)`, limited to approved steps that are pending or
     submitted.
 
@@ -324,6 +360,44 @@ one database transaction, so every consignment has at least one step.
   earlier than the step's `received_at`, and the audit trail lists it after the step. Alerts
   stored before 11 Nov carry their transaction's start time and can sort before their step
   (a known limitation; development data only).
+
+**Closing an alert** (`backend/src/services/alertService.js`; endpoints in
+[api.md, Alerts](api.md#alerts-fr-08)). An officer's decision is one database transaction
+holding the change to the alert, to its step and to the consignment's stage, and the
+`alert.review` or `alert.dismiss` audit entry:
+
+- **Who:** the reviewer must be an **active `officer`**. The route's guard checks this, and the
+  service checks it again inside the transaction (403 `FORBIDDEN`), reading the user row
+  `FOR SHARE`, so an administrator suspending that officer at the same moment waits until the
+  decision is saved. The check comes after the alert is found, so an unknown alert is a 404
+  for anyone.
+- **Lock order**, always the same: the **user** (`FOR SHARE`), the **consignment**
+  (`FOR UPDATE`, the lock sync takes for every step), the **alert**, then the step's
+  **alerts** (`ORDER BY id`) and the **step** (`FOR UPDATE`). Sync also locks the user (its
+  key, `FOR SHARE`) before the consignment, so a decision and a sync on one consignment wait
+  for each other instead of deadlocking.
+- **Only an open alert closes.** Checked under the lock (409 `INVALID_STATUS_TRANSITION`) and
+  repeated in the `UPDATE … WHERE status = 'open'`. It sets `status`, `reviewed_by`,
+  `review_notes` and `reviewed_at = clock_timestamp()` together, as
+  `alerts_review_fields_match_status` requires.
+- **The step's review status comes from all its alerts**, not only the one closed: any
+  `reviewed` → `rejected`; every one `dismissed` → `cleared`; otherwise it stays `flagged`.
+  Only a `flagged` step is updated (`WHERE review_status = 'flagged'`), so a rejection is
+  never overturned by a later dismissal.
+- **A cleared handoff or purchase moves `consignments.stage` forward** by the same custody
+  rules sync uses (`backend/src/services/custodyRules.js`): handoff `registered → in_transit`,
+  purchase `in_transit → purchased`; a relay, or a stage already past the step, is left alone.
+  A rejected step never moves it.
+- **Three steps cannot be cleared**, and dismissing any of their alerts is refused before
+  anything is written (409 `STEP_CANNOT_BE_CLEARED`): a registration when the consignment has
+  another accepted registration, and a purchase when it has another accepted purchase (the
+  partial unique indexes on [transactions](#transactions) would refuse a second accepted
+  one), and a step with a `handoff_order` alert (the contract accepts nothing after
+  `Purchased`). They can still be reviewed.
+- **`record_tampered`:** the step is already anchored, and
+  `transactions_anchor_only_if_approved` forbids `flagged` or `rejected` on a sent step, so
+  closing this alert never changes the step's review status, and the derived status above
+  ignores `record_tampered` alerts.
 
 **`details` per alert type.** Written by the anomaly checks in
 `backend/src/services/anomalyChecks.js`. Weights are whole milligrams as text, never JSON
@@ -381,8 +455,39 @@ numbers. Details hold ids, never names of people. All values in the examples are
   { "noActiveZones": true, "toleranceMetres": 25 }
   ```
 
-- `record_tampered`: never raised by sync. It comes from verification, which is still to be
-  built, and its details will be defined there.
+- `record_tampered` (high): never raised by sync. Raised by the consignment view's chain check
+  (`backend/src/services/consignmentService.js`; [api.md](api.md#get-consignmentsby-qrqrcode))
+  on a confirmed step whose check is `mismatch`. `source` is always `verification`;
+  `fields` names what differs, never values; `chainTxHash` is the step's stored transaction
+  hash.
+
+  ```json
+  { "source": "verification", "fields": ["weight_mg"],
+    "chainTxHash": "0xc0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0c0" }
+  ```
+
+**How a `record_tampered` alert is inserted.** The view reads in one `REPEATABLE READ`
+snapshot and commits, then asks the chain with no transaction open, then, only if a step
+mismatched, opens one short transaction:
+
+1. `SELECT id FROM consignments WHERE id = $1 FOR UPDATE`: the lock sync and an officer's close
+   take first, so the three wait for each other instead of deadlocking;
+2. for each mismatched step:
+
+   ```sql
+   INSERT INTO alerts (transaction_id, type, severity, details, created_at)
+   VALUES ($1, 'record_tampered', 'high', $2, clock_timestamp())
+   ON CONFLICT ON CONSTRAINT alerts_one_per_rule_per_step DO NOTHING
+   ```
+
+3. held is read again with `isConsignmentHeld`, so the answer shows `held: true`.
+
+`alerts_one_per_rule_per_step` (`UNIQUE (transaction_id, type)`) makes this happen **once
+per step, ever**: a second scan of the same tampered step inserts nothing, and once that alert
+is closed, a later mismatch on the same step raises no new one (a known limitation; the view
+still shows `mismatch`). The step itself is not changed: it is already anchored, and
+`transactions_anchor_only_if_approved` forbids `flagged` on a sent step. A scan writes no
+audit entry; the alert row is the record.
 
 **Two meanings of `stepId`.** Inside `quantity_discrepancy` details, `previous.stepId` and
 `registration.stepId` are server ids, `transactions.id`. In a `POST /sync/steps` result,
@@ -575,7 +680,13 @@ Otherwise anyone with an approved account who had seen a QR code could freeze an
 miner's consignment by registering it again.
 
 Held is worked out by a query, never stored (D3), so closing the last open alert releases
-the hold. The rule is written once, as `HELD` in `backend/src/services/anchorQueue.js`, and
+the hold, whichever decision closed it (see [Closing an alert](#alerts)). A reviewed alert
+leaves its step `rejected`, which the ordering rule ignores, so the consignment's other steps
+go on; a dismissed one leaves it `cleared`, and it is anchored in its turn. Closing a
+`record_tampered` alert also releases the hold, although the step still differs from the
+chain (a known limitation; the record is restored from a backup). A `record_tampered` alert
+raised by a scan holds the consignment like any other open alert (see [alerts](#alerts)).
+The officer's alert list and the consignment view show `held` with this same `HELD` rule. The rule is written once, as `HELD` in `backend/src/services/anchorQueue.js`, and
 `isConsignmentHeld()` there uses the same SQL as the queue. A held consignment still accepts
 new steps, which are checked and stored normally; they simply wait to be anchored.
 
@@ -658,10 +769,13 @@ A CHECK constraint can only see its own row, so these rules live in the backend 
 - the P-256 signature verifies against `signer_public_key`;
 - `latitude` and `longitude` have at most 6 decimal places. The API rejects more, rather
   than letting `numeric(9,6)` round them, and the app rounds to 6 places before signing;
-- the reviewer is an officer, severity follows from the alert type, and an alert never
-  returns to `open`;
-- closing an alert updates the step in the same database transaction: `reviewed` makes
-  the step `rejected`, and `dismissed` makes it `cleared`;
+- the reviewer is an active officer (checked in the service as well as by the route's
+  guard), severity follows from the alert type, and an alert never returns to `open`;
+- closing an alert updates the step in the same database transaction, from all the step's
+  alerts: any `reviewed` makes it `rejected`, all `dismissed` make it `cleared`; a cleared
+  handoff or purchase moves the stage forward; a duplicate registration, a second purchase
+  and a `handoff_order` step are never cleared; a `record_tampered` close leaves the step
+  alone (see [Closing an alert](#alerts));
 - audit `details` never contain passwords, tokens or keys, nor an activation code;
 - only `officer` and `admin` accounts are created as `invited`, and only by an
   administrator (the role is checked by the request schema and again in the service);
@@ -672,10 +786,22 @@ A CHECK constraint can only see its own row, so these rules live in the backend 
   expired);
 - a password change sets the new hash and `tokens_valid_after` in one `UPDATE` that
   matches only while the old hash is still current;
-- a token is refused when its `iat` is before `tokens_valid_after`, a condition inside the
-  lookup `requireAuth` runs on every request;
+- a token is refused when its `iat` is before `tokens_valid_after`, or when the account is
+  `deleted`, two conditions inside the lookup `requireAuth` runs on every request;
+- a rename changes `full_name` only, and is refused on a rejected or deleted account; the
+  same name again writes nothing;
+- a delete starts only from `active`, `suspended` or `invited`, never deletes the acting
+  administrator or the last other active administrator (the active administrators are
+  locked first, as for a suspension), and writes its `audit_logs` entry in the same
+  transaction;
 - a buyer's transactions report holds only accepted (`passed` or `cleared`) steps of
   consignments the buyer has an accepted purchase of, a condition inside the report query;
+- the consignment view decides what each role may see in one function
+  (`consignmentDisclosure.js`) that copies each output field by name; its query reads
+  `captured_at` as text (milliseconds, or six fraction digits when the stored time is not a
+  whole millisecond), so the chain check sees a sub-millisecond edit;
+- a `record_tampered` alert is raised only by the consignment view, once per step (see
+  [alerts](#alerts));
 - every report export writes its `audit_logs` entry in the same transaction as the rows it
   sends (see [Reports](#reports)).
 
@@ -716,8 +842,10 @@ From `backend/`:
 | `npm run migrate:create -- <name>` | Creates `migrations/<timestamp>_<name>.sql` with up and down sections |
 
 Pending migrations run in one transaction, under an advisory lock, and only in order.
-Once a migration has been committed, it is never edited; a change is a new migration. On
-Render, `npm run migrate` is planned to run before `npm start` on each deploy.
+Once a migration has been committed, it is never edited; a change is a new migration.
+Render never runs migrations. They are run by hand from the developer's laptop against the
+production database, with `verify-full`, **before** any code that needs them is deployed (a
+merge to `main` deploys at once); see [deployment.md](deployment.md).
 
 ## Database tests
 

@@ -92,7 +92,8 @@ describe('users table', () => {
     // different rule happened to reject the row.
     it.each([
       ['an unknown role', { role: 'superuser' }, 'users_role_valid'],
-      ['an unknown status', { status: 'deleted' }, 'users_status_valid'],
+      // Not 'deleted': that became a real status in the users-deleted migration.
+      ['an unknown status', { status: 'archived' }, 'users_status_valid'],
       ['a plain-text password', { password_hash: 'hunter2' }, 'users_password_is_hash'],
       ['a 31-byte actor_ref', { actor_ref: randomBytes(31) }, 'users_actor_ref_32_bytes'],
       ['a public key of the wrong length', { public_key: randomBytes(65) }, 'users_public_key_p256_spki'],

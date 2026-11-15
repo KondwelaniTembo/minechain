@@ -75,12 +75,87 @@ describe('errorHandler', () => {
       expect(consoleError).not.toHaveBeenCalled();
     });
 
+    it('keeps its own Cache-Control: the path rule below sets no-store only for itself', async () => {
+      const res = await request(appThatThrows(new AppError(409, 'USERNAME_TAKEN', 'That username is already taken.'))).get('/fail');
+
+      expect(res.headers['cache-control']).toBeUndefined();
+    });
+
     it('is still an Error, with a name and a stack trace for debugging', () => {
       const err = new AppError(403, 'ACCOUNT_NOT_ACTIVE', 'Your account is awaiting approval.');
 
       expect(err).toBeInstanceOf(Error);
       expect(err.name).toBe('AppError');
       expect(err.stack).toBeDefined();
+    });
+  });
+
+  describe('a malformed percent-escape in a route parameter', () => {
+    const BAD_VALUE = 'SECRET-LOOKING-VALUE';
+
+    // The real router's error: a plain express app with a parameter route, and a bad escape.
+    function appWithParamRoute() {
+      const app = express();
+      app.get('/items/:id', (req, res) => res.json({ id: req.params.id }));
+      app.use(errorHandler);
+      return app;
+    }
+
+    it('the installed router really throws a URIError with status 400 for it', async () => {
+      let seen;
+      const app = express();
+      app.get('/items/:id', (req, res) => res.json({}));
+      app.use((err, req, res, next) => {
+        seen = err;
+        next(err);
+      });
+      app.use(errorHandler);
+
+      await request(app).get(`/items/${BAD_VALUE}%E0%A4`);
+
+      expect(seen).toBeInstanceOf(URIError);
+      expect(seen.status).toBe(400);
+      // The router puts the raw value in the message, which is why it is never logged.
+      expect(seen.message).toContain(BAD_VALUE);
+    });
+
+    it('answers 400 VALIDATION_FAILED with a fixed message and no-store, echoing nothing, logging nothing', async () => {
+      const res = await request(appWithParamRoute()).get(`/items/${BAD_VALUE}%E0%A4`);
+
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ error: { code: 'VALIDATION_FAILED', message: 'The request path is not valid.' } });
+      expect(res.headers['cache-control']).toBe('no-store');
+      expect(res.text).not.toContain(BAD_VALUE);
+      expect(res.text).not.toContain('%E0');
+      expect(consoleError).not.toHaveBeenCalled();
+    });
+
+    it('a well-formed escape on the same route still works', async () => {
+      const res = await request(appWithParamRoute()).get('/items/a%2Fb');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ id: 'a/b' });
+    });
+
+    function appThatThrows(error) {
+      const app = express();
+      app.get('/fail', async () => {
+        throw error;
+      });
+      app.use(errorHandler);
+      return app;
+    }
+
+    it.each([
+      ['a URIError with no status (our own code calling decodeURIComponent)', () => new URIError('URI malformed')],
+      ['a URIError with another status', () => Object.assign(new URIError('URI malformed'), { status: 500 })],
+      ['an ordinary Error with status 400', () => Object.assign(new Error('not a URIError'), { status: 400 })],
+    ])('%s keeps the logged 500', async (_label, make) => {
+      const res = await request(appThatThrows(make())).get('/fail');
+
+      expect(res.status).toBe(500);
+      expect(res.body).toEqual({ error: { code: 'INTERNAL_ERROR', message: 'Something went wrong' } });
+      expect(consoleError).toHaveBeenCalledWith('Unhandled error:', expect.any(Error));
     });
   });
 });

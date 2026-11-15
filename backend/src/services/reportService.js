@@ -44,6 +44,9 @@ export const ACCOUNT_EVENT_ACTIONS = Object.freeze([
   'user.activation_reissue',
   'user.activate',
   'user.password_change',
+  // B3: an administrator's rename (details say only which field) and soft delete.
+  'user.rename',
+  'user.delete',
 ]);
 
 // Steps a buyer may see: accepted ones only (passed, cleared). Flagged and rejected steps

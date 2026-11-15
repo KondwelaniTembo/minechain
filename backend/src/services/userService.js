@@ -37,7 +37,7 @@ const COUNT_WRONG_CODE = `
 // The right code. Every condition that made it right is checked again in the WHERE, so the
 // check and the change are one step: a second activation with the same code, a reissue or
 // the expiry arriving in between all make this match nothing. The password hash and the new
-// status are set together, as users_password_only_when_invited requires. approved_by stays
+// status are set together, as users_password_null_when_invited_or_deleted requires. approved_by stays
 // NULL: the user.create entry records which administrator made the account.
 const ACTIVATE = `
   UPDATE users
@@ -262,14 +262,15 @@ export function createUserService({ db, passwords, passwordPolicy, audit, tokens
         throw invalidCredentials();
       }
 
-      // An invited account (FR-10) has no password yet: there is nothing to verify, and
-      // passing NULL to Argon2 would throw. It is answered exactly like an unknown username:
-      // the same Argon2 work and the same 401, so neither the time taken nor the answer tells
-      // anyone that the username exists or is waiting for activation. Only the audit entry,
-      // which no client sees, says why.
+      // An invited account (FR-10) has no password yet, and a deleted one (B3) no longer has
+      // one: there is nothing to verify, and passing NULL to Argon2 would throw. Both are
+      // answered exactly like an unknown username: the same Argon2 work and the same 401, so
+      // neither the time taken nor the answer tells anyone that the username exists. Only the
+      // audit entry, which no client sees, says why: account_invited or account_deleted (the
+      // database allows a NULL hash for those two statuses only).
       if (user.password_hash === null) {
         await passwords.verifyDummy(password);
-        await recordFailedLogin('account_invited', { userId: user.id, ipAddress });
+        await recordFailedLogin(`account_${user.status}`, { userId: user.id, ipAddress });
         throw invalidCredentials();
       }
 
@@ -452,12 +453,17 @@ export function createUserService({ db, passwords, passwordPolicy, audit, tokens
     // (equal is allowed) and only the server's clock is ever involved. NULL: no cut-off.
     // A missing iat is NULL in SQL and fails the comparison, so it is refused whenever
     // there is a cut-off.
+    //
+    // A deleted account (B3) matches no row either, so its tokens get 401 TOKEN_INVALID, as if
+    // the account did not exist. The delete also sets a cut-off; this condition keeps the
+    // answer the same even if that cut-off were ever cleared.
     async getAuthenticatedUser(userId, tokenRole, iat) {
       // password_hash is not even selected: nothing on this path needs it.
       const { rows } = await db.query(
         `SELECT id, username, full_name, licence_number, role, status, created_at, public_key
            FROM users
           WHERE id = $1
+            AND status <> 'deleted'
             AND (tokens_valid_after IS NULL OR $2::bigint >= extract(epoch FROM tokens_valid_after))`,
         [userId, iat],
       );

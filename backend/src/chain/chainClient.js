@@ -1,5 +1,5 @@
-// The only module that talks to Ethereum over the network (docs/contract-spec.md, section 6).
-// Everything else about anchoring is pure or database code, so it can be tested without a
+// The anchoring worker's link to Ethereum (docs/contract-spec.md, section 6); the only other
+// network code is the key-free, read-only chainReader.js. Everything else about anchoring is pure or database code, so it can be tested without a
 // chain; the anchoring worker uses this interface, and tests use tests/fakes/fakeChainClient.js,
 // which implements the same one in memory.
 //
@@ -9,9 +9,25 @@
 // JSON.stringify of it show nothing secret. Provider errors are never passed on: ethers puts
 // the request URL into its error messages, so every error is classified first and replaced
 // by a ChainClientError built from our fixed codes and reasons (chainErrors.js).
-import { Contract, FetchRequest, Interface, JsonRpcProvider, Network, Wallet, keccak256 } from 'ethers';
-import { CHAIN_ERRORS, classifyChainError, feeTooHigh, toAnchorError } from './chainErrors.js';
+//
+// The provider set-up, the fallback rule and event decoding live in rpc.js, shared with the
+// key-free chainReader.js.
+import { Contract, Interface, Network, Wallet, keccak256 } from 'ethers';
+import { CHAIN_ERRORS, classifyChainError, feeTooHigh } from './chainErrors.js';
 import { DEPLOY_BLOCK, MINECHAIN_ABI } from './mineChainAbi.js';
+import {
+  ChainClientError,
+  DEFAULT_TIMEOUT_MS,
+  assertBytes32Hex,
+  createWithFallback,
+  decodeEvents,
+  hostOf,
+  makeProvider,
+  toReceipt,
+} from './rpc.js';
+
+// Kept importable from here: the worker, preflight and the fakes import it from this module.
+export { ChainClientError };
 
 const abi = new Interface(MINECHAIN_ABI);
 
@@ -24,65 +40,17 @@ const EVENT_TOPICS = Object.freeze(
   ['ConsignmentRegistered', 'HandoffRecorded', 'PurchaseRecorded'].map((name) => abi.getEvent(name).topicHash),
 );
 
-// A request that has not answered by then is treated as unavailable, so the worker can move
-// on to the fallback instead of waiting for ethers' default of five minutes.
-const DEFAULT_TIMEOUT_MS = 15_000;
 // Blocks per eth_getLogs request. Some free RPC plans refuse wider ranges, so the client
 // asks in small pieces rather than finding the limit by failing.
 const DEFAULT_LOG_CHUNK_BLOCKS = 500;
 
 const UNKNOWN = Object.freeze({ code: 'UNKNOWN', ...CHAIN_ERRORS.UNKNOWN });
 
-// The only error this module throws for chain problems. It carries a code, the action the
-// worker should take, a fixed reason, and which endpoint answered. Deliberately no `cause`:
-// util.inspect prints an error's cause, and the original error contains the URL.
-export class ChainClientError extends Error {
-  constructor(classified, endpoint) {
-    super(toAnchorError(classified));
-    this.name = 'ChainClientError';
-    this.code = classified.code;
-    this.action = classified.action;
-    this.reason = classified.reason;
-    this.endpoint = endpoint;
-    if (classified.field !== undefined) this.field = classified.field;
-    if (classified.currentStage !== undefined) this.currentStage = classified.currentStage;
-  }
-}
-
-// The host name is the only part of an RPC URL that may be logged: providers put the API
-// key in the path (Infura /v3/<key>, Alchemy /v2/<key>), never in the host.
-function hostOf(url) {
-  return new URL(url).hostname;
-}
-
 function requireSetting(value, name) {
   if (value === null || value === undefined) {
     throw new Error(`Chain client needs ${name}`);
   }
   return value;
-}
-
-function makeProvider(url, network, { timeoutMs, transport }) {
-  const request = new FetchRequest(url);
-  request.timeout = timeoutMs;
-  // No automatic retries on HTTP 429: ethers would otherwise retry up to 12 times with
-  // growing delays. One answer per provider; the fallback and the worker's backoff decide.
-  request.setThrottleParams({ maxAttempts: 1 });
-  // Test seam: tests replace the HTTP layer with an in-memory function, so no test can
-  // reach the network. Production leaves it unset and ethers uses Node's https module.
-  if (transport) request.getUrlFunc = transport;
-
-  return new JsonRpcProvider(request, network, {
-    // The chain id is fixed by config, so ethers never asks the node for it on its own.
-    // Without this, ethers would send eth_chainId in the background as soon as it starts,
-    // and retry every second, printing to console, while the RPC is unreachable.
-    staticNetwork: network,
-    // One JSON-RPC call per HTTP request: some free plans refuse batches, and a failure
-    // then belongs to exactly one call.
-    batchMaxCount: 1,
-    // No reuse of answers between calls: a nonce or receipt read twice must be read twice.
-    cacheTimeout: -1,
-  });
 }
 
 function assertNonNegativeInteger(value, name) {
@@ -95,40 +63,6 @@ function assertPositiveBigInt(value, name) {
   if (typeof value !== 'bigint' || value <= 0n) {
     throw new TypeError(`${name} must be a bigint above 0`);
   }
-}
-
-function assertBytes32Hex(value, name) {
-  if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
-    throw new TypeError(`${name} must be 0x and 64 hex characters`);
-  }
-}
-
-// Decodes MineChain's own events from raw logs. Logs from other contracts, or with topics
-// that are not ours, are left out rather than failing the whole receipt.
-function decodeEvents(logs, contractAddress) {
-  const events = [];
-  for (const log of logs) {
-    if (log.address.toLowerCase() !== contractAddress.toLowerCase()) continue;
-    let parsed;
-    try {
-      parsed = abi.parseLog({ topics: [...log.topics], data: log.data });
-    } catch {
-      parsed = null;
-    }
-    if (!parsed) continue;
-    events.push(
-      Object.freeze({
-        address: log.address,
-        name: parsed.name,
-        // A plain object read by name, the same shape the fake returns.
-        args: Object.freeze(parsed.args.toObject()),
-        blockNumber: log.blockNumber,
-        transactionHash: log.transactionHash,
-        logIndex: log.index,
-      }),
-    );
-  }
-  return Object.freeze(events);
 }
 
 // anchorConfig: config.anchor from loadConfig. options are for the worker and tests:
@@ -167,26 +101,10 @@ export function createChainClient(anchorConfig, options = {}) {
     endpoint.contract = new Contract(contractAddress, MINECHAIN_ABI, endpoint.provider);
   }
 
-  // Runs one read on the primary, and on the fallback only when the primary could not be
-  // reached. Any other error, such as a revert, is an answer, and asking again elsewhere
-  // would not change it.
-  async function withFallback(operation, fn) {
-    let lastError;
-    for (const endpoint of endpoints) {
-      try {
-        return await fn(endpoint);
-      } catch (err) {
-        const classified = classifyChainError(err);
-        lastError = new ChainClientError(classified, endpoint.name);
-        if (classified.code !== 'RPC_UNAVAILABLE') throw lastError;
-        const next = endpoints[endpoints.indexOf(endpoint) + 1];
-        if (next) {
-          log.warn(`Anchoring: ${endpoint.name} RPC ${endpoint.host} unavailable during ${operation}; trying ${next.name} RPC ${next.host}`);
-        }
-      }
-    }
-    throw lastError;
-  }
+  // Primary first, fallback only when the primary could not be reached (rpc.js).
+  const withFallback = createWithFallback(endpoints, (endpoint, next, operation) => {
+    log.warn(`Anchoring: ${endpoint.name} RPC ${endpoint.host} unavailable during ${operation}; trying ${next.name} RPC ${next.host}`);
+  });
 
   function encode(call) {
     if (!call || !WRITE_FUNCTIONS.has(call.functionName)) {
@@ -338,15 +256,7 @@ export function createChainClient(anchorConfig, options = {}) {
     async getReceipt(hash) {
       assertBytes32Hex(hash, 'hash');
       const receipt = await withFallback('getReceipt', (e) => e.provider.getTransactionReceipt(hash));
-      if (receipt === null) return null;
-      return Object.freeze({
-        hash: receipt.hash,
-        status: receipt.status,
-        blockNumber: receipt.blockNumber,
-        blockHash: receipt.blockHash,
-        gasUsed: receipt.gasUsed,
-        events: decodeEvents(receipt.logs, contractAddress),
-      });
+      return toReceipt(receipt, contractAddress);
     },
 
     async getBlockNumber() {

@@ -14,6 +14,12 @@ const NOT_ACTIVE = {
     code: 'ACCOUNT_NOT_ACTIVATED',
     message: 'Your account has not been activated yet. Use the activation code from your administrator.',
   },
+  // Deleted by an administrator (B3). Login and requireAuth never get here: a deleted
+  // account has no password, so login answers it as an unknown username, and its tokens are
+  // refused as TOKEN_INVALID. This entry is for any other path that meets one, such as a key
+  // registration whose account was deleted between requireAuth and its own read. The
+  // existing ACCOUNT_NOT_ACTIVE code, not a new one: B3 adds only CANNOT_DELETE_SELF.
+  deleted: { code: 'ACCOUNT_NOT_ACTIVE', message: 'This account has been deleted. Please contact an administrator.' },
 };
 // A status added later must never be mistaken for active.
 const UNKNOWN_STATUS = { code: 'ACCOUNT_NOT_ACTIVE', message: 'Your account is not active. Please contact an administrator.' };

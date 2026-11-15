@@ -97,7 +97,7 @@ describe('users: activation columns', () => {
 
 describe('users: activation CHECK rules', () => {
   it.each([
-    ['an invited account that has a password hash', { password_hash: FAKE_ARGON2_HASH }, 'users_password_only_when_invited'],
+    ['an invited account that has a password hash', { password_hash: FAKE_ARGON2_HASH }, 'users_password_null_when_invited_or_deleted'],
     ['a 31-byte code hash', { activation_code_hash: randomBytes(31) }, 'users_activation_code_32_bytes'],
     ['a 33-byte code hash', { activation_code_hash: randomBytes(33) }, 'users_activation_code_32_bytes'],
     ['a code with no expiry', { activation_expires_at: null }, 'users_activation_complete'],
@@ -118,7 +118,7 @@ describe('users: activation CHECK rules', () => {
   ])('still requires a password hash on a %s account', async (status, reason) => {
     const err = await expectRejected({ ...NO_CODE, status, status_reason: reason }, PG_ERROR.CHECK_VIOLATION);
 
-    expect(err.constraint).toBe('users_password_only_when_invited');
+    expect(err.constraint).toBe('users_password_null_when_invited_or_deleted');
   });
 
   it('still refuses a plain-text password, now that the column can be NULL', async () => {
@@ -152,7 +152,7 @@ describe('users: activation as one UPDATE', () => {
 
     const err = await expectPgError(t.db, "UPDATE users SET status = 'active' WHERE id = $1", [user.id], PG_ERROR.CHECK_VIOLATION);
 
-    expect(err.constraint).toBe('users_password_only_when_invited');
+    expect(err.constraint).toBe('users_password_null_when_invited_or_deleted');
   });
 
   it('refuses activating while leaving the code in place', async () => {

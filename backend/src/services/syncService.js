@@ -22,18 +22,12 @@ import { spkiFingerprint } from './signatureService.js';
 import { SigningError, SIGNING_ERROR_CODES } from './signingError.js';
 import { CHECKS, FLAGGED_MESSAGES, flaggedCodeFor, runChecks, reviewStatusFor } from './anomalyChecks.js';
 import { matchZone, pointFromText } from './zoneMatch.js';
+// Where a handoff or purchase may happen, and where it moves the consignment. Shared with the
+// officer's clear (alertService), so both apply the same stage rules.
+import { CUSTODY_RULES } from './custodyRules.js';
 
 // Who may sign each step type (the role check the database cannot make).
 const ROLE_FOR_TYPE = Object.freeze({ registration: 'miner', handoff: 'transporter', purchase: 'buyer' });
-
-// Where a handoff or purchase may happen, and where it moves the consignment (the
-// contract's stage rules, contract spec section 5). A handoff is allowed from in_transit
-// too, because one journey can have several transporters (a relay). A purchase needs a
-// handoff first: there is no direct miner-to-buyer sale in the prototype.
-const CUSTODY_RULES = Object.freeze({
-  handoff: Object.freeze({ allowedFrom: Object.freeze(['registered', 'in_transit']), to: 'in_transit' }),
-  purchase: Object.freeze({ allowedFrom: Object.freeze(['in_transit']), to: 'purchased' }),
-});
 
 // The anchor hash scheme of every row written here (signing-spec section 7).
 const HASH_VERSION = 1;

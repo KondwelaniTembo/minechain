@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import express from 'express';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { createTokenService } from '../src/services/tokenService.js';
+import { createAccountEditLimiter } from '../src/middleware/rateLimits.js';
+import { errorHandler } from '../src/middleware/errorHandler.js';
 import { AppError } from '../src/errors.js';
 
 // Fake secret, long enough for the 43-character rule.
@@ -10,6 +13,7 @@ const tokens = createTokenService({ secret: SECRET, expiresInSeconds: 3600 });
 
 // Fake, well-formed ids (version 4, variant 8).
 const ADMIN_ID = '3f2b6c1e-0000-4000-8000-0000000000ad';
+const OTHER_ADMIN_ID = '3f2b6c1e-0000-4000-8000-0000000000ae';
 const TARGET_ID = '3f2b6c1e-0000-4000-8000-000000000001';
 
 const SAMPLE_USER = {
@@ -42,7 +46,7 @@ const CREATE_BODY = { username: 'chanda_mwale', fullName: 'Chanda Mwale', role: 
 
 // The real app and real token checks, with fake services behind them. getAuthenticatedUser
 // stands in for the database: every token belongs to an active user with the token's role.
-function setup() {
+function setup({ accountEditsPerAdmin } = {}) {
   const users = {
     getAuthenticatedUser: vi.fn(async (userId, role) => ({ id: userId, username: `${role}_user`, role, status: 'active' })),
   };
@@ -55,8 +59,10 @@ function setup() {
     resetKey: vi.fn().mockResolvedValue({ ...SAMPLE_USER, status: 'suspended', statusReason: 'Lost device reported' }),
     createAccount: vi.fn().mockResolvedValue({ user: INVITED_USER, activation: ACTIVATION }),
     reissueActivation: vi.fn().mockResolvedValue({ user: INVITED_USER, activation: ACTIVATION }),
+    rename: vi.fn().mockResolvedValue({ ...SAMPLE_USER, fullName: 'Chanda Mwila' }),
+    deleteAccount: vi.fn().mockResolvedValue({ ...SAMPLE_USER, status: 'deleted', statusReason: 'Left the cooperative' }),
   };
-  const app = createApp({ db: { query: vi.fn() }, services: { users, tokens, accounts } });
+  const app = createApp({ db: { query: vi.fn() }, services: { users, tokens, accounts }, rateLimits: { accountEditsPerAdmin } });
   const tokenFor = async (role, userId = role === 'admin' ? ADMIN_ID : TARGET_ID) =>
     (await tokens.sign({ userId, role })).token;
   return { app, accounts, tokenFor };
@@ -75,7 +81,11 @@ const ROUTES = [
   // FR-10 creation answers 201 (ok), every other route 200.
   { name: 'create', method: 'post', path: '/admin/users', body: CREATE_BODY, ok: 201 },
   { name: 'reissueActivation', method: 'post', path: `/admin/users/${TARGET_ID}/activation-code` },
+  // B3 edits, POST like the actions above (decision of 15 Nov 2026).
+  { name: 'rename', method: 'post', path: `/admin/users/${TARGET_ID}/rename`, body: { fullName: 'Chanda Mwila' } },
+  { name: 'deleteAccount', method: 'post', path: `/admin/users/${TARGET_ID}/delete`, body: { reason: 'Left the cooperative' } },
 ];
+const route = (name, overrides = {}) => ({ ...ROUTES.find((r) => r.name === name), ...overrides });
 // The routes that take a user id in the path.
 const ID_ROUTES = ROUTES.filter((r) => r.method === 'post' && r.path.includes(TARGET_ID));
 
@@ -122,7 +132,8 @@ describe('admin user routes: who may call them', () => {
   it('refuses a non-admin on a path that does not exist exactly as on one that does', async () => {
     const { app, tokenFor } = setup();
 
-    const res = await send(app, { method: 'post', path: `/admin/users/${TARGET_ID}/delete` }, await tokenFor('officer'));
+    // Not /delete, which became a real route in B3.3.
+    const res = await send(app, { method: 'post', path: `/admin/users/${TARGET_ID}/restore` }, await tokenFor('officer'));
 
     // 403, not 404: a non-admin cannot find out which admin paths exist.
     expect(res.status).toBe(403);
@@ -131,7 +142,8 @@ describe('admin user routes: who may call them', () => {
   it('gives an admin the normal 404 for a path that does not exist', async () => {
     const { app, tokenFor } = setup();
 
-    const res = await send(app, { method: 'post', path: `/admin/users/${TARGET_ID}/delete` }, await tokenFor('admin'));
+    // Not /delete, which became a real route in B3.3.
+    const res = await send(app, { method: 'post', path: `/admin/users/${TARGET_ID}/restore` }, await tokenFor('admin'));
 
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe('NOT_FOUND');
@@ -255,7 +267,8 @@ describe('admin user routes: validation', () => {
   });
 
   it.each([
-    ['an unknown status', '?status=deleted', 'status'],
+    // Not 'deleted': that became a real status in the users-deleted migration (B3).
+    ['an unknown status', '?status=archived', 'status'],
     ['a limit over the cap', '?limit=101', 'limit'],
     ['an unknown parameter', '?sort=password_hash', 'sort'],
   ])('list refuses %s', async (_label, query, field) => {
@@ -409,5 +422,167 @@ describe('admin user routes: account creation and activation codes (FR-10)', () 
     const withCode = Object.keys(bodies).filter((name) => bodies[name].includes(ACTIVATION.code));
     expect(withCode.sort()).toEqual(['create', 'reissueActivation']);
     expect(refused).not.toContain(ACTIVATION.code);
+  });
+});
+
+// B3: rename and soft delete. The 401, the 403 for every other role, no-store on success and
+// the malformed id are covered by the ROUTES rows above.
+describe('admin user routes: rename and delete (B3)', () => {
+  it('rename passes the target, the trimmed name, the admin from the token and the client IP', async () => {
+    const { app, accounts, tokenFor } = setup();
+
+    const res = await send(app, route('rename', { body: { fullName: '  Chanda Mwila  ' } }), await tokenFor('admin'));
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ user: { ...SAMPLE_USER, fullName: 'Chanda Mwila' } });
+    expect(accounts.rename).toHaveBeenCalledWith({
+      userId: TARGET_ID,
+      fullName: 'Chanda Mwila',
+      adminId: ADMIN_ID,
+      ipAddress: expect.stringMatching(/127\.0\.0\.1|::1/),
+    });
+  });
+
+  it('delete passes the target, the trimmed reason, the admin from the token and the client IP', async () => {
+    const { app, accounts, tokenFor } = setup();
+
+    const res = await send(app, route('deleteAccount', { body: { reason: '  Left the cooperative  ' } }), await tokenFor('admin'));
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ user: expect.objectContaining({ id: TARGET_ID, status: 'deleted' }) });
+    expect(accounts.deleteAccount).toHaveBeenCalledWith({
+      userId: TARGET_ID,
+      reason: 'Left the cooperative',
+      adminId: ADMIN_ID,
+      ipAddress: expect.stringMatching(/127\.0\.0\.1|::1/),
+    });
+  });
+
+  it.each([
+    // Strict body: only the name can change through a rename.
+    ['rename with a role', route('rename', { body: { fullName: 'Chanda Mwila', role: 'admin' } }), [{ field: 'role', message: 'is not allowed' }]],
+    ['rename with a username', route('rename', { body: { fullName: 'Chanda Mwila', username: 'chanda' } }), [{ field: 'username', message: 'is not allowed' }]],
+    ['rename with a licence number', route('rename', { body: { fullName: 'Chanda Mwila', licenceNumber: 'DEMO-ASM-0002' } }), [{ field: 'licenceNumber', message: 'is not allowed' }]],
+    ['rename with a status', route('rename', { body: { fullName: 'Chanda Mwila', status: 'active' } }), [{ field: 'status', message: 'is not allowed' }]],
+    ['rename with no name', route('rename', { body: {} }), [{ field: 'fullName', message: expect.any(String) }]],
+    ['rename with a blank name', route('rename', { body: { fullName: '   ' } }), [{ field: 'fullName', message: 'is required' }]],
+    ['rename with a 101-character name', route('rename', { body: { fullName: 'a'.repeat(101) } }), [{ field: 'fullName', message: 'must be at most 100 characters' }]],
+    ['rename with no body at all', route('rename', { body: undefined }), [{ field: 'body', message: expect.any(String) }]],
+    // The same reason rules as suspend.
+    ['delete with no reason', route('deleteAccount', { body: {} }), [{ field: 'reason', message: expect.any(String) }]],
+    ['delete with a 2-character reason', route('deleteAccount', { body: { reason: ' ab ' } }), [{ field: 'reason', message: 'must be at least 3 characters' }]],
+    ['delete with a stray field', route('deleteAccount', { body: { reason: 'Left the cooperative', status: 'active' } }), [{ field: 'status', message: 'is not allowed' }]],
+    ['delete with no body at all', route('deleteAccount', { body: undefined }), [{ field: 'body', message: expect.any(String) }]],
+    // Both the id and the body are wrong: only the id is named, because params come first.
+    ['rename with a malformed id (before the body)', route('rename', { path: '/admin/users/not-a-uuid/rename', body: {} }), [{ field: 'id', message: 'must be a valid user id' }]],
+    ['delete with a malformed id (before the body)', route('deleteAccount', { path: '/admin/users/not-a-uuid/delete', body: {} }), [{ field: 'id', message: 'must be a valid user id' }]],
+  ])('refuses %s with 400, before the service, with no-store', async (_label, r, details) => {
+    const { app, accounts, tokenFor } = setup();
+
+    const res = await send(app, r, await tokenFor('admin'));
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatchObject({ code: 'VALIDATION_FAILED', details });
+    expect(res.headers['cache-control']).toBe('no-store');
+    noServiceCalled(accounts);
+  });
+
+  it.each([
+    ['rename', 404, 'USER_NOT_FOUND', 'No user has this id.'],
+    ['rename', 409, 'INVALID_STATUS_TRANSITION', 'A deleted account cannot be changed.'],
+    ['deleteAccount', 403, 'CANNOT_DELETE_SELF', 'You cannot delete your own account.'],
+    ['deleteAccount', 404, 'USER_NOT_FOUND', 'No user has this id.'],
+    ['deleteAccount', 409, 'INVALID_STATUS_TRANSITION', 'This account has already been deleted.'],
+    ['deleteAccount', 409, 'LAST_ACTIVE_ADMIN', 'At least one other active administrator must remain, so this account cannot be deleted.'],
+  ])('%s passes a %i %s through unchanged, with no-store', async (name, status, code, message) => {
+    const { app, accounts, tokenFor } = setup();
+    // mockRejectedValue makes the rejected promise only when the route calls the service.
+    accounts[name].mockRejectedValue(new AppError(status, code, message));
+
+    const res = await send(app, route(name), await tokenFor('admin'));
+
+    expect(res.status).toBe(status);
+    expect(res.body).toEqual({ error: { code, message } });
+    expect(res.headers['cache-control']).toBe('no-store');
+  });
+});
+
+describe('admin user routes: the per-admin account edit limit', () => {
+  it('counts rename and delete together, then answers 429 with Retry-After and no-store', async () => {
+    const { app, accounts, tokenFor } = setup({ accountEditsPerAdmin: 2 });
+    const token = await tokenFor('admin');
+    expect((await send(app, route('rename'), token)).status).toBe(200);
+    expect((await send(app, route('deleteAccount'), token)).status).toBe(200);
+
+    const res = await send(app, route('rename'), token);
+
+    expect(res.status).toBe(429);
+    expect(res.body.error).toEqual({ code: 'TOO_MANY_REQUESTS', message: 'Too many account changes. Please wait a few minutes and try again.' });
+    expect(Number(res.headers['retry-after'])).toBeGreaterThan(0);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(accounts.rename).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts malformed requests too, a bad id as much as a bad body', async () => {
+    const { app, tokenFor } = setup({ accountEditsPerAdmin: 2 });
+    const token = await tokenFor('admin');
+    expect((await send(app, route('rename', { body: {} }), token)).status).toBe(400);
+    expect((await send(app, route('deleteAccount', { path: '/admin/users/not-a-uuid/delete' }), token)).status).toBe(400);
+
+    expect((await send(app, route('deleteAccount'), token)).status).toBe(429);
+  });
+
+  it('never counts or limits the other admin account routes, and gives each admin their own count', async () => {
+    const { app, tokenFor } = setup({ accountEditsPerAdmin: 1 });
+    const token = await tokenFor('admin');
+    const others = ROUTES.filter((r) => r.name !== 'rename' && r.name !== 'deleteAccount');
+    for (let i = 0; i < 2; i += 1) {
+      for (const r of others) expect((await send(app, r, token)).status).toBe(r.ok ?? 200);
+    }
+    // The other routes used none of the count: the one edit allowed still goes through.
+    expect((await send(app, route('rename'), token)).status).toBe(200);
+    expect((await send(app, route('reject'), token)).status).toBe(200);
+    expect((await send(app, route('deleteAccount'), token)).status).toBe(429);
+
+    expect((await send(app, route('deleteAccount'), await tokenFor('admin', OTHER_ADMIN_ID))).status).toBe(200);
+  });
+
+  it('does not count a non-admin, who is refused before the limiter', async () => {
+    const { app, tokenFor } = setup({ accountEditsPerAdmin: 1 });
+    // The same user id, but as an officer: refused by the role check, so nothing is counted.
+    expect((await send(app, route('deleteAccount'), await tokenFor('officer', ADMIN_ID))).status).toBe(403);
+
+    expect((await send(app, route('deleteAccount'), await tokenFor('admin'))).status).toBe(200);
+  });
+});
+
+describe('createAccountEditLimiter', () => {
+  it('defaults to 20 per 15 minutes', async () => {
+    const app = express();
+    app.use((req, res, next) => {
+      req.user = { id: ADMIN_ID };
+      next();
+    });
+    app.post('/r', createAccountEditLimiter(), (req, res) => res.json({ ok: true }));
+
+    const res = await request(app).post('/r');
+
+    expect(res.headers['ratelimit-policy']).toMatch(/q=20; w=900/);
+  });
+
+  it('fails closed with a logged 500 when requireAuth is missing', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const app = express();
+    app.post('/r', createAccountEditLimiter(), (req, res) => res.json({ ok: true }));
+    app.use(errorHandler);
+
+    const res = await request(app).post('/r');
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ error: { code: 'INTERNAL_ERROR', message: 'Something went wrong' } });
+    expect(consoleError).toHaveBeenCalledWith(
+      'Unhandled error:',
+      expect.objectContaining({ message: 'createAccountEditLimiter ran without requireAuth before it on this route' }),
+    );
   });
 });

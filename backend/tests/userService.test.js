@@ -489,6 +489,15 @@ describe('userService.getAuthenticatedUser', () => {
     expect(params).toEqual(['user-1', 1794470400]);
   });
 
+  it('matches no deleted account in SQL, so its token gets TOKEN_INVALID like a missing user', async () => {
+    const { service, db } = setupLookup([dbRow]);
+
+    await service.getAuthenticatedUser('user-1', 'miner', 1794470400);
+
+    // tests/db/accountEdits.test.js proves the answer against the real database.
+    expect(db.query.mock.calls[0][0]).toMatch(/AND status <> 'deleted'/);
+  });
+
   it('returns the safe user for an active account whose role matches', async () => {
     const { service } = setupLookup([dbRow]);
 

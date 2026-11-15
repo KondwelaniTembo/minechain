@@ -26,6 +26,8 @@ and `FAKE-SIGNATURE`. None of them is a real identifier, password or token.
 | `POST` | [`/admin/users/{id}/reactivate`](#post-adminusersidreactivate) | Reactivate a suspended account (FR-10) | Yes, admin only |
 | `POST` | [`/admin/users/{id}/reset-key`](#post-adminusersidreset-key) | Remove a suspended account's device key, for a lost phone | Yes, admin only |
 | `POST` | [`/admin/users/{id}/activation-code`](#post-adminusersidactivation-code) | Issue a new activation code for an invited account; the old one stops working (FR-10) | Yes, admin only |
+| `POST` | [`/admin/users/{id}/rename`](#post-adminusersidrename) | Change an account's full name, and nothing else (FR-10) | Yes, admin only |
+| `POST` | [`/admin/users/{id}/delete`](#post-adminusersiddelete) | Delete an account, with a reason: it can never sign in again, and its history is kept (FR-10) | Yes, admin only |
 | `GET` | [`/admin/zones`](#get-adminzones) | List licensed GPS zones by status (FR-11) | Yes, admin only |
 | `POST` | [`/admin/zones`](#post-adminzones) | Create a licensed GPS zone (FR-11) | Yes, admin only |
 | `POST` | [`/admin/zones/{id}/rename`](#post-adminzonesidrename) | Rename a zone (FR-11) | Yes, admin only |
@@ -34,6 +36,11 @@ and `FAKE-SIGNATURE`. None of them is a real identifier, password or token.
 | `GET` | [`/admin/anchoring`](#get-adminanchoring) | Anchoring status: the worker, what is waiting, stuck or failed, and a list of problems (FR-03) | Yes, admin only |
 | `POST` | [`/admin/anchoring/run`](#post-adminanchoringrun) | Run one anchoring tick now (FR-03) | Yes, admin only |
 | `POST` | [`/admin/anchoring/steps/{id}/retry`](#post-adminanchoringstepsidretry) | Send a failed step back to the anchoring queue, with a reason (FR-03) | Yes, admin only |
+| `GET` | [`/alerts`](#get-alerts) | The anomaly alert queue: open alerts oldest first, or closed ones, filtered by type (FR-08) | Yes, officer only |
+| `GET` | [`/alerts/{id}`](#get-alertsid) | One alert, with the other alerts on its consignment (FR-08) | Yes, officer only |
+| `POST` | [`/alerts/{id}/review`](#post-alertsidreview) | "Confirm problem": close an alert as a real problem, with notes; its step is rejected (FR-08) | Yes, officer only |
+| `POST` | [`/alerts/{id}/dismiss`](#post-alertsiddismiss) | "Clear, no problem": close an alert as a false alarm, with notes; its step can be cleared and the hold released (FR-08) | Yes, officer only |
+| `GET` | [`/consignments/by-qr/{qrCode}`](#get-consignmentsby-qrqrcode) | Scan a consignment: its custody steps, what this role may see of them, and a live check of each anchored step against the blockchain (FR-04) | Yes, transporter, buyer or officer |
 | `GET` | [`/reports/transactions`](#get-reportstransactions) | Download custody steps as a spreadsheet (CSV), filtered (FR-09) | Yes, officer, buyer (own purchases only) or admin |
 | `GET` | [`/reports/audit-trail`](#get-reportsaudit-trail) | Download the audit trail of one consignment or one actor as CSV (FR-13) | Yes, officer only |
 | `POST` | [`/sync/steps`](#post-syncsteps) | Upload signed custody steps from the phone's offline queue (FR-03, FR-07) | Yes, miner, transporter or buyer |
@@ -90,10 +97,18 @@ appear in a response.
 |---|---|---|---|
 | 400 | `INVALID_JSON` | The body is not valid JSON | Request body is not valid JSON |
 | 400 | `VALIDATION_FAILED` | A field is missing, invalid, or not allowed | Some fields are missing or invalid. |
+| 400 | `VALIDATION_FAILED` | A path parameter has a malformed percent-escape, for example `/alerts/%E0` (see below). No `details` | The request path is not valid. |
 | 404 | `NOT_FOUND` | No such route | Route not found |
 | 413 | `PAYLOAD_TOO_LARGE` | The body is over 100 kB | Request body is too large |
 | 429 | `TOO_MANY_REQUESTS` | A rate limit was reached (see below) | Depends on the limit |
 | 500 | `INTERNAL_ERROR` | An unexpected server fault. Details are written to the server log, never sent | Something went wrong |
+
+**A malformed percent-escape in a path parameter.** Any `{id}` or `{qrCode}` in a path is
+percent-decoded by the server before it is checked. When the escape is broken (`%E0`, `%E0%A4`,
+`%ZZ`), the answer is 400 `VALIDATION_FAILED`, "The request path is not valid.", with
+`Cache-Control: no-store` and no `details`. The value sent is not echoed and not logged. The
+token and role checks on the route's group run first, so without a token the answer is still
+401. These requests are not counted by the per-user rate limits (see [Rate limits](#rate-limits)).
 
 ## Authentication
 
@@ -123,13 +138,13 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
 | Status | Code | When | Message |
 |---|---|---|---|
 | 401 | `TOKEN_MISSING` | No `Authorization` header, another scheme (such as `Basic`), or `Bearer` with nothing after it | Please log in to continue. |
-| 401 | `TOKEN_INVALID` | The token is malformed, forged, tampered with, or no longer matches the account (the user no longer exists, the role changed, or the token was issued before the account's last password change). Logging in again fixes it | Your session is not valid. Please log in again. |
+| 401 | `TOKEN_INVALID` | The token is malformed, forged, tampered with, or no longer matches the account (the user no longer exists, the account was [deleted](#post-adminusersiddelete), the role changed, or the token was issued before the account's last password change). Logging in again fixes it, except for a deleted account, which cannot log in | Your session is not valid. Please log in again. |
 | 401 | `TOKEN_EXPIRED` | The token is older than its lifetime. Ask for the password again | Your session has expired. Please log in again. |
 | 403 | `ACCOUNT_PENDING` | The account is waiting for approval | Your account is waiting for approval by an administrator. |
 | 403 | `ACCOUNT_SUSPENDED` | The account has been suspended | Your account has been suspended. Please contact an administrator. |
 | 403 | `ACCOUNT_REJECTED` | The account request was not approved | Your account request was not approved. Please contact an administrator. |
 | 403 | `ACCOUNT_NOT_ACTIVATED` | The account was created by an administrator and has not been activated yet. An invited account has no password and cannot log in, so the app does not normally meet this code (login answers `INVALID_CREDENTIALS` first) | Your account has not been activated yet. Use the activation code from your administrator. |
-| 403 | `ACCOUNT_NOT_ACTIVE` | Any other status that is not active (a fallback) | Your account is not active. Please contact an administrator. |
+| 403 | `ACCOUNT_NOT_ACTIVE` | Any other status that is not active (a fallback). Also a deleted account, on the rare path where it is deleted between the token check and the endpoint's own read (for example a device key registration); a deleted account's token normally gets 401 `TOKEN_INVALID` first | Your account is not active. Please contact an administrator. For a deleted account: This account has been deleted. Please contact an administrator. |
 | 403 | `FORBIDDEN` | Logged in and active, but this role may not use this endpoint (see [Roles and access](#roles-and-access)) | You do not have permission to do this. |
 
 **401 vs 403:** a 401 means the credentials don't work, and logging in again may help. A 403
@@ -154,6 +169,17 @@ A 403 has no `WWW-Authenticate` header, because the credentials themselves were 
 | `POST /auth/login` | 10 per 15 minutes | username (any letter case or surrounding spaces) | failed attempts only (401 and 403). Successful logins are not counted |
 | `POST /auth/activate` | 30 per 15 minutes | client IP | every request, including invalid ones |
 | `POST /auth/me/password` | 10 per 15 minutes | logged-in user | failed attempts only (every error after the token check, including `VALIDATION_FAILED`). Successful changes are not counted. A request refused for its token never reaches the limiter |
+| `POST /sync/steps` | 60 per 15 minutes | logged-in user | every request that passes the role check (miner, transporter or buyer), including invalid ones (`VALIDATION_FAILED`). Anyone else is refused before it and not counted. Message: "Too many sync requests. Please wait a few minutes and try again." |
+| `GET /reports/transactions` and `GET /reports/audit-trail`, together | 20 per 15 minutes | logged-in user | every request under `/reports` that passes the role check (officer, buyer or admin), including invalid ones and refused ones (a buyer or administrator asking for the audit trail, which is for officers only). Anyone else is refused before it and not counted. Message: "Too many report downloads. Please wait a few minutes and try again." |
+| `POST /admin/anchoring/run` and `POST /admin/anchoring/steps/{id}/retry`, together | 20 per 15 minutes | logged-in administrator | every request that passes the admin check, including invalid ones (`VALIDATION_FAILED`) and refused ones. Anyone who is not an administrator is refused before it and not counted. `GET /admin/anchoring` is not limited. Message: "Too many anchoring actions. Please wait a few minutes and try again." |
+| `POST /alerts/{id}/review` and `POST /alerts/{id}/dismiss`, together | 60 per 15 minutes | logged-in officer | every request that passes the officer check, including invalid ones (`VALIDATION_FAILED`) and refused ones. Anyone who is not an officer is refused before it and not counted. `GET /alerts` and `GET /alerts/{id}` are not limited |
+| `POST /admin/users/{id}/rename` and `POST /admin/users/{id}/delete`, together | 20 per 15 minutes | logged-in administrator | every request that passes the admin check, including invalid ones (a malformed `{id}` or body, `VALIDATION_FAILED`) and refused ones. Anyone who is not an administrator is refused before it and not counted. The other `/admin/users` endpoints are not counted and have no limit yet. Message: "Too many account changes. Please wait a few minutes and try again." |
+| `GET /consignments/by-qr/{qrCode}` | 60 per 15 minutes | logged-in user | every request that passes the role check, including malformed QR codes (`VALIDATION_FAILED`) and unknown ones (`CONSIGNMENT_NOT_FOUND`). A miner or administrator is refused before it and not counted. Message: "Too many consignment scans. Please wait a few minutes and try again." |
+
+**Not counted by the per-user limits:** a request whose path parameter has a malformed
+percent-escape (see [Error format](#error-format)). It is refused while the route is being
+matched, before the route's own limiter runs. It still needs a valid token, and it reaches no
+service.
 
 The per-IP limits are high on purpose. Zambian mobile networks use carrier-grade NAT, so a
 whole mining site can share one public IP address. The per-username limit is what stops
@@ -225,21 +251,21 @@ the endpoint sections below remain the source of truth for what exists.
 | Change own password (FR-06): `POST /auth/me/password` | ✓ | ✓ | ✓ | ✓ | ✓ | **Built** |
 | Activate an account an administrator created (FR-10): `POST /auth/activate`, no login | | | | ✓ | ✓ | **Built** |
 | Register a device key (FR-02): `PUT /auth/me/public-key` | ✓ | ✓ | ✓ | | | **Built** |
-| Register a consignment at extraction (FR-01, FR-02) | ✓ | | | | | Planned |
-| Record a handoff to a transporter (FR-02, FR-03) | | ✓ | | | | Planned |
-| Record a purchase (FR-02, FR-03) | | | ✓ | | | Planned |
+| Register a consignment at extraction (FR-01, FR-02): sent as a signed `registration` step to `POST /sync/steps` | ✓ | | | | | API **Built**; app screen planned |
+| Record a handoff to a transporter (FR-02, FR-03): a signed `handoff` step to `POST /sync/steps` | | ✓ | | | | API **Built**; app screen planned |
+| Record a purchase (FR-02, FR-03): a signed `purchase` step to `POST /sync/steps` | | | ✓ | | | API **Built**; app screen planned |
 | Sync signed work recorded offline (FR-03, FR-07): `POST /sync/steps` | ✓ | ✓ | ✓ | | | **Built** |
-| Verify a consignment by QR code (FR-04) | | ✓ | ✓ | ✓ | | Planned |
-| View a consignment's full custody chain (FR-04, FR-05) | | | ✓ | ✓ | | Planned |
+| Verify a consignment by QR code (FR-04): `GET /consignments/by-qr/{qrCode}` (a buyer only in transit or after their own purchase) | | ✓ | ✓ | ✓ | | **Built** |
+| View a consignment's full custody chain, with GPS and signature evidence (FR-04, FR-05): the same endpoint (a buyer once they have an accepted purchase; officers also see flagged and rejected steps) | | | ✓ | ✓ | | **Built** |
 | Signed provenance certificate (FR-16) | | | ✓ | | | Planned |
 | Transaction reports and spreadsheet export (FR-09): `GET /reports/transactions` (a buyer sees only consignments they bought) | | | ✓ | ✓ | ✓ read-only | **Built** |
-| Review anomaly alerts, with case notes (FR-08) | | | | ✓ | | Planned |
+| Review anomaly alerts, with case notes (FR-08): `GET /alerts`, `/alerts/{id}`, `POST /alerts/{id}/review`, `/dismiss` (officers only; administrators are refused) | | | | ✓ | | **Built** |
 | Download audit trails (FR-13): `GET /reports/audit-trail` | | | | ✓ | | **Built** |
 | Approve or reject account requests (FR-12): `/admin/users/{id}/approve`, `/reject` | | | | | ✓ | **Built** |
 | List accounts; suspend and reactivate them (FR-10): `GET /admin/users`, `/admin/users/{id}/suspend`, `/reactivate` | | | | | ✓ | **Built** |
 | Reset a lost phone's device key (FR-10, [signing spec](signing-spec.md) section 2): `/admin/users/{id}/reset-key` | | | | | ✓ | **Built** |
 | Create officer and admin accounts, and reissue their activation codes (FR-10): `POST /admin/users`, `/admin/users/{id}/activation-code` | | | | | ✓ | **Built** |
-| Change an account's role; delete an account with no history (FR-10) | | | | | ✓ | Planned |
+| Rename an account (full name only) and soft-delete an account, keeping its history (FR-10): `/admin/users/{id}/rename`, `/delete`. A role, username or licence number is never changed | | | | | ✓ | **Built** |
 | Manage licensed GPS extraction zones (FR-11): `/admin/zones` | | | | | ✓ | **Built** |
 | Monitor blockchain anchoring: the worker, stuck and failed steps, a list of problems (System Administrator use case): `GET /admin/anchoring` | | | | | ✓ | **Built** |
 | Trigger a manual re-synchronisation (System Administrator use case): `POST /admin/anchoring/run`, `/admin/anchoring/steps/{id}/retry` | | | | | ✓ | **Built** |
@@ -442,7 +468,7 @@ so it never contains a name or other personal data.
 |---|---|---|---|
 | 400 | `VALIDATION_FAILED` | A field is missing, empty, too long (password over 1024 characters), or not allowed | Some fields are missing or invalid. |
 | 400 | `INVALID_JSON` | The body is not valid JSON | Request body is not valid JSON |
-| 401 | `INVALID_CREDENTIALS` | The username does not exist, **or** the password is wrong, **or** the account is invited and has no password yet. All three are deliberately identical, and take about the same time, so nobody can find out which usernames exist or which accounts are waiting for activation | Username or password is incorrect. |
+| 401 | `INVALID_CREDENTIALS` | The username does not exist, **or** the password is wrong, **or** the account has no password: invited and not activated yet, or [deleted](#post-adminusersiddelete). All are deliberately identical, and take about the same time, so nobody can find out which usernames exist, which accounts are waiting for activation, or which were deleted | Username or password is incorrect. |
 | 403 | `ACCOUNT_PENDING` | Correct password, but the account is waiting for approval | Your account is waiting for approval by an administrator. |
 | 403 | `ACCOUNT_SUSPENDED` | Correct password, but the account is suspended | Your account has been suspended. Please contact an administrator. |
 | 403 | `ACCOUNT_REJECTED` | Correct password, but the account request was not approved | Your account request was not approved. Please contact an administrator. |
@@ -586,7 +612,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
 | Status | Code | When | Message |
 |---|---|---|---|
 | 401 | `TOKEN_MISSING` | No usable `Authorization: Bearer` header | Please log in to continue. |
-| 401 | `TOKEN_INVALID` | Malformed, forged or tampered token, or the user no longer exists, or the role changed, or the token was issued before the account's last password change | Your session is not valid. Please log in again. |
+| 401 | `TOKEN_INVALID` | Malformed, forged or tampered token, or the user no longer exists or was deleted, or the role changed, or the token was issued before the account's last password change | Your session is not valid. Please log in again. |
 | 401 | `TOKEN_EXPIRED` | The token's lifetime has passed | Your session has expired. Please log in again. |
 | 403 | `ACCOUNT_PENDING` | The account was set back to pending after the token was issued | Your account is waiting for approval by an administrator. |
 | 403 | `ACCOUNT_SUSPENDED` | The account was suspended after the token was issued | Your account has been suspended. Please contact an administrator. |
@@ -777,12 +803,13 @@ the session away over a typing mistake.
 
 ## Admin account management
 
-Eight endpoints let an administrator review account requests (FR-12), create officer and
+Ten endpoints let an administrator review account requests (FR-12), create officer and
 administrator accounts and reissue their activation codes (FR-10), suspend or reactivate
-accounts (FR-10), and remove a lost phone's device key. Changing a role and deleting an
-account are planned for a later step.
+accounts (FR-10), remove a lost phone's device key, correct an account's full name, and
+delete an account (FR-10). A role, username or licence number is never changed through the
+API.
 
-**Account statuses.** Every account has one of five:
+**Account statuses.** Every account has one of six:
 
 | Status | Meaning | Can log in |
 |---|---|---|
@@ -791,18 +818,23 @@ account are planned for a later step.
 | `active` | Approved or activated | Yes |
 | `suspended` | Suspended by an administrator, with a reason | No (403 `ACCOUNT_SUSPENDED`) |
 | `rejected` | The request was refused, with a reason. Final | No (403 `ACCOUNT_REJECTED`) |
+| `deleted` | Deleted by an administrator ([`/delete`](#post-adminusersiddelete)), with a reason. Final. It has no password and no device key; the account and its history are kept | No: login answers `INVALID_CREDENTIALS`, as for an unknown username, and every token issued before the delete gets 401 `TOKEN_INVALID` |
 
-An invited account is not active, so approve, reject, suspend, reactivate and reset key all
-refuse it, and it never counts as one of the active administrators that must remain.
+Invited and deleted accounts are not active, so approve, reject, suspend, reactivate and
+reset key all refuse them, and neither ever counts as one of the active administrators that
+must remain.
 
-**Rules shared by all eight:**
+**Rules shared by all ten:**
 
 - **Admin only.** Every request needs a token, and the account must be an active `admin`.
   Anyone else gets 401 or 403 (see [Roles and access](#roles-and-access)). This applies to
   every path under `/admin/users`, including paths that do not exist: a non-admin gets 403,
   not 404, so the paths cannot be discovered.
 - **No caching.** Every response, errors included, carries `Cache-Control: no-store`.
-- **Rate limits:** none yet. To be reviewed in the security review on Saturday 14 November.
+- **Rate limits:** rename and delete share a limit of 20 per 15 minutes per administrator,
+  counted before validation, so malformed requests count too (see
+  [Rate limits](#rate-limits)). The other eight have no limit yet; they are on the final
+  review list.
 - **One action per endpoint.** Each action moves an account from one status to another, and
   only from that status:
 
@@ -815,28 +847,34 @@ refuse it, and it never counts as one of the active administrators that must rem
   | Reset key | `suspended` | `suspended` (the device key is removed; the status does not change) | `{ "reason": "…" }` | Accounts with a device key: `miner`, `transporter`, `buyer` |
   | Create | (new account) | `invited` | `{ "username", "fullName", "role" }` | `officer`, `admin` only |
   | Reissue activation code | `invited` | `invited` (a new code; the old one stops working) | none, or `{}` | `officer`, `admin` (the only invited accounts) |
+  | Rename | `pending`, `invited`, `active`, `suspended` | the same status (only `fullName` changes) | `{ "fullName": "…" }` | All roles |
+  | Delete | `active`, `suspended`, `invited` | `deleted` | `{ "reason": "…" }` | All roles, with the same two extra rules for administrators as suspend |
 
-  **Rejected is final.** No action leads out of `rejected`. The person must request a new
-  account under a different username.
+  **Rejected and deleted are final.** No action leads out of either, and neither can be
+  renamed. The person must request a new account under a different username: the old one
+  stays taken.
 - **Two administrators acting at once:** the check and the change happen in one database
-  step, so only one of them succeeds. The other gets 409 `INVALID_STATUS_TRANSITION`.
+  step (or, for rename and delete, under a lock on the account), so only one of them
+  succeeds. The other gets 409 `INVALID_STATUS_TRANSITION`.
 - **Every change is recorded** in the audit log, in the same database transaction, with the
   administrator as the actor, their IP address, and `{ from, to }` plus the reason where
   there is one. The actions are `user.approve`, `user.reject`, `user.suspend` and
   `user.reactivate`. A key reset is recorded as `user.key_reset` with `{ reason,
   keyFingerprint }`, naming the removed key by fingerprint. A created account is recorded
   as `user.create` with `{ source: "admin", role, activationExpiresAt }`, and a new code as
-  `user.activation_reissue` with `{ activationExpiresAt }`. An activation code is never
-  recorded.
+  `user.activation_reissue` with `{ activationExpiresAt }`. A rename is recorded as
+  `user.rename` with `{ field: "fullName" }` only, never the old or new name, and a delete as
+  `user.delete` with `{ from, to: "deleted", reason, keyFingerprint }` (`null` when there was
+  no key). An activation code is never recorded.
 - **`{id}`** is the user's id, a UUID. Upper- or lower-case letters are both accepted.
 
-**Reasons.** Reject, suspend and reset key need a reason: 3 to 500 characters after surrounding spaces
+**Reasons.** Reject, suspend, reset key and delete need a reason: 3 to 500 characters after surrounding spaces
 are trimmed. Line breaks are allowed. **A reason is kept permanently** in the append-only
 audit log, where it can never be edited or removed. Keep it short and factual, for example
 `Licence number could not be verified`, and do not add personal details that are not needed.
 The reason is shown to administrators only, never to the account's owner.
 
-**The admin view of a user.** All eight endpoints return users in this form. Unlike
+**The admin view of a user.** All ten endpoints return users in this form. Unlike
 [`GET /auth/me`](#get-authme), it includes the status reason, the approval and the
 activation expiry. It never contains the password hash, the on-chain reference, the
 activation code or its hash, or the device key itself, only the key's fingerprint.
@@ -845,7 +883,7 @@ activation code or its hash, or the device key itself, only the key's fingerprin
 |---|---|
 | `id` | The user's id |
 | `username`, `fullName`, `licenceNumber`, `role`, `status` | As in `/auth/me` |
-| `statusReason` | Why the account is suspended or rejected; `null` otherwise |
+| `statusReason` | Why the account is suspended, rejected or deleted; `null` otherwise |
 | `approvedBy` | The id of the administrator who approved the account; `null` if never approved through the API (for example a seeded account) |
 | `approvedAt` | When it was approved; `null` with `approvedBy` |
 | `createdAt`, `updatedAt` | When the account was requested, and when it last changed |
@@ -856,15 +894,16 @@ activation code or its hash, or the device key itself, only the key's fingerprin
 
 | Status | Code | When | Message |
 |---|---|---|---|
-| 400 | `VALIDATION_FAILED` | `{id}` is not a UUID; a reason is missing, too short or too long; a body or query has a field it should not | Some fields are missing or invalid. |
+| 400 | `VALIDATION_FAILED` | `{id}` is not a UUID; a reason or full name is missing, too short or too long; a body or query has a field it should not | Some fields are missing or invalid. |
 | 403 | `FORBIDDEN` | Logged in and active, but not an administrator | You do not have permission to do this. |
 | 403 | `CANNOT_SUSPEND_SELF` | An administrator tried to suspend their own account | You cannot suspend your own account. |
+| 403 | `CANNOT_DELETE_SELF` | An administrator tried to delete their own account. Checked before anything else | You cannot delete your own account. |
 | 404 | `USER_NOT_FOUND` | No user has this id | No user has this id. |
 | 400 | `ROLE_NOT_CREATABLE` | Create with a role other than `officer` or `admin`. The request schema refuses it first (`VALIDATION_FAILED`, "must be officer or admin"); the service checks again for any other caller | Only officer and administrator accounts are created by an administrator. Miners, transporters and buyers register themselves. |
-| 409 | `INVALID_STATUS_TRANSITION` | The account is not in the status this action starts from (for example approving an active account, resetting the key of an account that is not suspended, reissuing a code for an account that is not invited, or anything on a rejected one) | Only a pending account can be approved. This account is active. (The wording names the action and the actual status, with "an" before `active` and `invited`.) |
+| 409 | `INVALID_STATUS_TRANSITION` | The account is not in the status this action starts from (for example approving an active account, resetting the key of an account that is not suspended, reissuing a code for an account that is not invited, or anything on a rejected or deleted one) | Only a pending account can be approved. This account is active. (The wording names the action and the actual status, with "an" before `active` and `invited`.) Rename and delete have their own fixed messages; see their sections |
 | 409 | `ROLE_NOT_APPROVABLE` | Approve or reject on an officer or administrator account. Those are created by an administrator, never requested | Officer and administrator accounts are created by an administrator, not approved or rejected. |
-| 409 | `USERNAME_TAKEN` | Create with a username that exists already, in any letter case, whatever that account's status (invited, pending and rejected included) | That username is already taken. Please choose another. |
-| 409 | `LAST_ACTIVE_ADMIN` | Suspending this administrator would leave no other active administrator | At least one other active administrator must remain, so this account cannot be suspended. |
+| 409 | `USERNAME_TAKEN` | Create with a username that exists already, in any letter case, whatever that account's status (invited, pending, rejected and deleted included) | That username is already taken. Please choose another. |
+| 409 | `LAST_ACTIVE_ADMIN` | Suspending or deleting this administrator would leave no other active administrator | Suspend: At least one other active administrator must remain, so this account cannot be suspended. Delete: At least one other active administrator must remain, so this account cannot be deleted. |
 | 409 | `NO_PUBLIC_KEY` | Reset key on a suspended account that has no device key | This account has no device key to reset. |
 | 500 | `INTERNAL_ERROR` | Unexpected server fault | Something went wrong |
 
@@ -885,7 +924,7 @@ of pending requests: the queue an administrator works through (FR-12).
 
 | Parameter | Default | Rules |
 |---|---|---|
-| `status` | `pending` | `pending`, `active`, `suspended`, `rejected` or `invited` |
+| `status` | `pending` | `pending`, `active`, `suspended`, `rejected`, `invited` or `deleted` |
 | `limit` | `20` | Whole number, 1 to 100 |
 | `offset` | `0` | Whole number, 0 to 10 000: how many matching accounts to skip |
 
@@ -1212,6 +1251,149 @@ never the code.
 **Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `USER_NOT_FOUND` and
 `INVALID_STATUS_TRANSITION` ("Only an invited account can get a new activation code. This
 account is active."). See [the shared table](#admin-account-management).
+
+---
+
+## POST /admin/users/{id}/rename
+
+Changes an account's full name (FR-10), for example to correct a typing mistake made at
+registration. **Only the full name changes.** A role, username or licence number can never
+be changed this way, or by any other endpoint.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | 20 renames and deletes per 15 minutes per administrator, together |
+
+**Request body**
+
+| Field | Type | Required | Rules |
+|---|---|---|---|
+| `fullName` | string | yes | As at [registration](#post-authregister): surrounding spaces are trimmed, 1–100 characters |
+
+Any other field is refused with `VALIDATION_FAILED` ("is not allowed"), including `role`,
+`username`, `licenceNumber` and `status`.
+
+```
+POST /admin/users/3f2b6c1e-0000-4000-8000-000000000001/rename
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+Content-Type: application/json
+```
+
+```json
+{ "fullName": "Mutale Banda Chanda" }
+```
+
+**200 OK**: the user in the admin view, with the new `fullName` and the same status.
+
+- **Allowed from** `pending`, `invited`, `active` and `suspended`. A pending request can be
+  corrected before it is approved.
+- **The same name again** answers 200 with the account as it is: nothing is written and
+  nothing is recorded, so a retried request adds no second audit entry.
+- **A rename keeps sessions.** The account's tokens keep working, and
+  [`/auth/me`](#get-authme) shows the new name on its next request.
+- **Recorded** in the audit log as `user.rename` with `{ field: "fullName" }` only. The audit
+  log is append-only, so a name written there could never be removed; the name itself lives
+  only in the account.
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `USER_NOT_FOUND` and
+`INVALID_STATUS_TRANSITION`, with these messages:
+
+| Account is | Message |
+|---|---|
+| `rejected` | A rejected account cannot be changed. |
+| `deleted` | A deleted account cannot be changed. |
+
+See [the shared table](#admin-account-management).
+
+---
+
+## POST /admin/users/{id}/delete
+
+Deletes an account (FR-10): a **soft delete**. The account can never sign in again by any
+path, but its row is kept, so every custody step, alert, approval, report row and audit entry
+that names it keeps its meaning, and its anchored steps still point at a real account.
+**A delete cannot be undone.**
+
+POST, not `DELETE`, like the other account actions: a reason travels in the body, and some
+proxies and clients drop the body of a `DELETE` request.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | 20 renames and deletes per 15 minutes per administrator, together |
+
+**Request body**: `reason`, with the same rules as for [reject](#post-adminusersidreject).
+
+```
+POST /admin/users/3f2b6c1e-0000-4000-8000-000000000001/delete
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+Content-Type: application/json
+```
+
+```json
+{ "reason": "Left the cooperative" }
+```
+
+**200 OK**
+
+```json
+{
+  "user": {
+    "id": "3f2b6c1e-0000-4000-8000-000000000001",
+    "username": "mutale_banda",
+    "fullName": "Mutale Banda",
+    "licenceNumber": "ZM-ASM-0042",
+    "role": "miner",
+    "status": "deleted",
+    "statusReason": "Left the cooperative",
+    "approvedBy": "3f2b6c1e-0000-4000-8000-0000000000ad",
+    "approvedAt": "2026-11-06T10:15:00.000Z",
+    "createdAt": "2026-11-05T09:00:00.000Z",
+    "updatedAt": "2026-11-15T09:30:00.000Z",
+    "publicKeyFingerprint": null,
+    "activationExpiresAt": null
+  }
+}
+```
+
+**What a delete does**, in one database transaction with its audit entry:
+
+- the status becomes `deleted`, with the reason in `statusReason`;
+- the password hash is erased, so login answers `INVALID_CREDENTIALS`, exactly as for an
+  unknown username;
+- the device key is removed, so nothing more can be signed or synced with it;
+- any activation code is erased, so an invited account can no longer be activated;
+- **every session ends:** every token issued before the delete gets 401 `TOKEN_INVALID`.
+
+**What it keeps:** the username (it stays taken, in any letter case, and can never be used
+again), the full name, the role, the licence number and the approval, and every record that
+names the account. Steps already recorded keep verifying, because each keeps a copy of the
+key that signed it.
+
+- **Allowed from** `active`, `suspended` and `invited`. A pending request is rejected
+  instead, which tells the person why.
+- **Two rules for administrator accounts**, as for [suspend](#post-adminusersidsuspend): an
+  administrator cannot delete themselves (403 `CANNOT_DELETE_SELF`, checked before anything
+  else), and at least one other active administrator must remain (409 `LAST_ACTIVE_ADMIN`),
+  also when two administrators try to delete each other at the same moment.
+- **A sync in progress** when the delete happens either finishes first, signed while the
+  account was active, or waits for the delete and then stores nothing (`deferred`,
+  `NO_DEVICE_KEY`).
+- **Recorded** in the audit log as `user.delete` with `{ from, to: "deleted", reason,
+  keyFingerprint }`: the removed key by fingerprint, or `null` when there was none.
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `CANNOT_DELETE_SELF`, `USER_NOT_FOUND`,
+`LAST_ACTIVE_ADMIN` ("At least one other active administrator must remain, so this account
+cannot be deleted.") and `INVALID_STATUS_TRANSITION`, with these messages:
+
+| Account is | Message |
+|---|---|
+| `pending` | A pending account cannot be deleted. Reject the request instead, so the person is told why. |
+| `rejected` | Only an active, suspended or invited account can be deleted. This account is rejected. |
+| `deleted` | This account has already been deleted. |
+
+See [the shared table](#admin-account-management).
 
 ---
 
@@ -1874,6 +2056,482 @@ change and its audit entry are saved together, or not at all.
 
 ---
 
+## Alerts (FR-08)
+
+Four endpoints give regulatory officers the anomaly alerts raised by the sync checks and by
+verification (`record_tampered`, raised by the [consignment view](#get-consignmentsby-qrqrcode)):
+a queue, one alert in detail, and two ways to close one. This is
+the in-app alerts list that replaces push notifications in the prototype (decisions log,
+Scope (2)). The app refreshes it when it is opened and on pull-down.
+
+**Rules shared by all four:**
+
+- **Officers only.** Every request needs a token, and the account must be an active
+  `officer`. Anyone else gets 401 or 403, **administrators included**: an administrator runs
+  the system but does not judge custody records, so one stolen administrator account cannot
+  also clear alerts (decisions log, Scope (5)). This applies to every path under `/alerts`,
+  including paths that do not exist: anyone but an officer gets 403, not 404.
+- **No caching.** Every response, errors included, carries `Cache-Control: no-store`.
+- **Rate limit: 60 decisions per 15 minutes per officer**, review and dismiss together, one
+  count for both. It counts every request that passes the officer check, including invalid
+  ones. Over the limit: **429 `TOO_MANY_REQUESTS`**, "Too many alert decisions. Please wait a
+  few minutes and try again.", with `Retry-After` (see [Rate limits](#rate-limits)). **The
+  two GETs are not limited**: they only read.
+- **`{id}`** is the alert's id, a UUID. Upper- or lower-case letters are both accepted.
+- **Every decision is recorded** in the audit log, in the same database transaction as the
+  change, with the officer as the actor and their IP address. A refusal, and a read, record
+  nothing.
+
+  | Action | Audit action | Entity | `details` |
+  |---|---|---|---|
+  | Review | `alert.review` | the alert | `{ notes, alertType, transactionId, stepStatus, stage }` |
+  | Dismiss | `alert.dismiss` | the alert | the same |
+
+  `transactionId` is the alert's step. `stepStatus` is `{ from, to }` when the step's review
+  status changed, otherwise `null`; `stage` is `{ from, to }` when the consignment's stage
+  moved, otherwise `null`.
+
+### The alert view
+
+Every endpoint returns alerts in this form. It holds ids, states, times, the consignment's
+identity and the actor's username and role. **It never contains a full name, a key, a
+signature, a signed payload or GPS coordinates.**
+
+| Field | Meaning |
+|---|---|
+| `id`, `type`, `severity`, `status` | The alert. `type` is one of the six alert types; `status` is `open`, `reviewed` or `dismissed` |
+| `details` | As stored by the check that raised it: ids, weights as whole milligrams in text, a zone name, never a person's name (see [database-schema.md, details per alert type](database-schema.md#alerts)) |
+| `createdAt` | When the alert was raised |
+| `step` | `{ id, type, reviewStatus, anchorStatus, capturedAt, receivedAt }`: the step the alert is on |
+| `consignment` | `{ id, qrCode, mineral, stage, held }`. `held` is `true` while any alert on the consignment is open, by exactly the rule the anchoring worker uses (see [Held consignments](database-schema.md#held-consignments)) |
+| `actor` | `{ id, username, role }`: who recorded the step |
+| `review` | `null` while open; once closed, `{ by: { id, username }, notes, at }` |
+
+### The two decisions
+
+| Decision | In the app | Alert becomes | The step |
+|---|---|---|---|
+| Review | "Confirm problem" | `reviewed` | `rejected`: it is never anchored. The stage does not move |
+| Dismiss | "Clear, no problem" | `dismissed` | `cleared` once none of its alerts is open or reviewed; it is then anchored like a passed step |
+
+**A step can have more than one alert** (one per check, for example off-zone and too
+heavy). Its review status is worked out from **all** of its alerts after each decision:
+
+- any alert `reviewed` → the step is `rejected`, and stays so; dismissing another alert on it
+  later does not overturn that;
+- every alert `dismissed` → the step is `cleared`;
+- otherwise (some still open, none reviewed) → the step stays `flagged`.
+
+For a step with one alert this is simply: review rejects it, dismiss clears it.
+
+**A cleared handoff or purchase moves the stage**, as it would have done at sync had it
+passed, by the same custody rules: a handoff moves `registered` to `in_transit`, a purchase
+moves `in_transit` to `purchased`. A relay (a handoff at `in_transit`) leaves the stage
+where it is, and the stage never moves backwards. So a purchase that was deferred with
+`STAGE_NOT_READY` behind a flagged handoff is accepted when the app sends it again.
+
+**The hold is released** when no alert on the consignment is open any more, whichever
+decision closed the last one. Held is worked out each time, never stored.
+
+**Three steps can never be cleared**, so dismissing any of their alerts is refused with 409
+`STEP_CANNOT_BE_CLEARED` and nothing is changed. Confirming the problem is still allowed.
+
+| Case | Why |
+|---|---|
+| A registration on a consignment that already has an accepted registration (a duplicate) | Only one registration per consignment can be accepted |
+| A purchase on a consignment that already has an accepted purchase | Only one purchase per consignment can be accepted |
+| An alert of type `handoff_order`: a step recorded after the purchase | Nothing can follow a purchase on the blockchain, so the step could only fail |
+
+**`record_tampered`** alerts (raised by the chain check of the
+[consignment view](#get-consignmentsby-qrqrcode)) sit on a step that is already on the
+blockchain. That step's review status can never change, so either decision
+closes the alert and leaves the step as it is. Closing it releases the hold. The fix for a
+tampered record is restoring the row from a backup (a known limitation in the decisions log).
+
+**Two officers deciding at once:** the consignment, the alert and its step are locked while
+the decision is checked and saved, so the second officer waits and then gets 409
+`INVALID_STATUS_TRANSITION`.
+
+**Errors these endpoints can return**, on top of the [token errors](#authentication):
+
+| Status | Code | When | Message |
+|---|---|---|---|
+| 400 | `VALIDATION_FAILED` | The list has an unknown `status` ("must be open, reviewed or dismissed") or `type`, a `limit` or `offset` that is not plain digits or out of range, or any other parameter; `{id}` is not a UUID ("must be a valid alert id", checked before the body); `notes` is missing, under 3 or over 500 characters after trimming, or comes with another field | Some fields are missing or invalid. |
+| 403 | `FORBIDDEN` | Logged in and active, but not an officer. The decisions check this again inside the service, so an account that is not an active officer can never close an alert, whatever calls it | You do not have permission to do this. |
+| 404 | `ALERT_NOT_FOUND` | No alert has this id | No alert has this id. |
+| 409 | `INVALID_STATUS_TRANSITION` | The alert is already closed | Only an open alert can be reviewed. This alert is dismissed. (The wording names the decision and the actual status.) |
+| 409 | `STEP_CANNOT_BE_CLEARED` | Dismiss: a duplicate registration | This step cannot be cleared: the consignment already has an accepted registration. Confirm the problem instead. |
+| 409 | `STEP_CANNOT_BE_CLEARED` | Dismiss: a second purchase | This step cannot be cleared: the consignment already has an accepted purchase. Confirm the problem instead. |
+| 409 | `STEP_CANNOT_BE_CLEARED` | Dismiss: a `handoff_order` alert | This step cannot be cleared: it was recorded after the consignment was purchased, and nothing can follow a purchase on the blockchain. Confirm the problem instead. |
+| 429 | `TOO_MANY_REQUESTS` | More than 60 reviews and dismissals in 15 minutes | Too many alert decisions. Please wait a few minutes and try again. |
+| 500 | `INTERNAL_ERROR` | Unexpected server fault | Something went wrong |
+
+---
+
+## GET /alerts
+
+The alert queue. With no query it lists the first page of **open** alerts, **oldest
+first**: the queue an officer works through. Closed alerts are listed **newest decision
+first**.
+
+| | |
+|---|---|
+| **Login needed** | Yes, officer only |
+| **Rate limits** | None |
+| **Request body** | None |
+
+**Query parameters**
+
+| Parameter | Default | Rules |
+|---|---|---|
+| `status` | `open` | `open`, `reviewed` or `dismissed` |
+| `type` | every type | `duplicate_consignment`, `quantity_discrepancy`, `gps_zone`, `invalid_signature`, `handoff_order` or `record_tampered` |
+| `limit` | `20` | Whole number, 1 to 100 |
+| `offset` | `0` | Whole number, 0 to 10 000 |
+
+As for [`GET /admin/users`](#get-adminusers), `limit` and `offset` must be plain digits, and
+any other parameter is refused.
+
+```
+GET /alerts?status=open&type=quantity_discrepancy
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+```
+
+**200 OK** (all values fake):
+
+```json
+{
+  "alerts": [
+    {
+      "id": "7a3e9b10-0000-4000-8000-000000000101",
+      "type": "quantity_discrepancy",
+      "severity": "medium",
+      "status": "open",
+      "details": {
+        "weightMg": "1320000", "thresholdPercent": 10, "failedBaselines": ["registration"],
+        "registration": { "stepId": "9d4e5f60-0000-4000-8000-000000000001", "weightMg": "1500000",
+                          "differenceMg": "-180000", "exceeded": true }
+      },
+      "createdAt": "2026-11-15T09:00:01.120Z",
+      "step": {
+        "id": "9d4e5f60-0000-4000-8000-000000000002",
+        "type": "handoff",
+        "reviewStatus": "flagged",
+        "anchorStatus": "pending",
+        "capturedAt": "2026-11-15T08:55:00.000Z",
+        "receivedAt": "2026-11-15T09:00:01.118Z"
+      },
+      "consignment": {
+        "id": "5c0d7e21-0000-4000-8000-000000000001",
+        "qrCode": "MC-2026-000123",
+        "mineral": "gold",
+        "stage": "registered",
+        "held": true
+      },
+      "actor": { "id": "3f2b6c1e-0000-4000-8000-000000000002", "username": "bwalya_t", "role": "transporter" },
+      "review": null
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+`total` counts every alert matching `status` and `type`, not only this page, and is read in
+the same snapshot as the page. An `offset` past the end gives an empty `alerts` list with the
+real `total`.
+
+**Errors:** `VALIDATION_FAILED` and `FORBIDDEN`.
+
+---
+
+## GET /alerts/{id}
+
+One alert, with the other alerts on the same consignment (on any of its steps, open or
+closed, oldest first), so the officer sees what else is waiting: closing one alert does not
+release the hold while another is open.
+
+| | |
+|---|---|
+| **Login needed** | Yes, officer only |
+| **Rate limits** | None |
+| **Request body** | None |
+
+**200 OK**: `{ "alert": … }`, the [alert view](#the-alert-view) with one more field:
+
+```json
+{
+  "alert": {
+    "id": "7a3e9b10-0000-4000-8000-000000000101",
+    "type": "quantity_discrepancy",
+    "…": "the rest of the alert view, as in GET /alerts",
+    "otherAlerts": [
+      { "id": "7a3e9b10-0000-4000-8000-000000000102", "type": "gps_zone", "severity": "medium",
+        "status": "dismissed", "stepId": "9d4e5f60-0000-4000-8000-000000000001",
+        "createdAt": "2026-11-15T08:30:00.410Z" }
+    ]
+  }
+}
+```
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN` and `ALERT_NOT_FOUND`.
+
+---
+
+## POST /alerts/{id}/review
+
+"Confirm problem": closes an open alert as a real problem. The alert becomes `reviewed`, and
+its step becomes `rejected` (see [the two decisions](#the-two-decisions)); a rejected step is
+never anchored.
+
+| | |
+|---|---|
+| **Login needed** | Yes, officer only |
+| **Rate limits** | 60 reviews and dismissals per 15 minutes per officer, together |
+
+**Request body**
+
+| Field | Type | Required | Rules |
+|---|---|---|---|
+| `notes` | string | yes | Surrounding spaces and line breaks are trimmed. 3–500 characters. Line breaks inside are kept. Kept permanently in the audit log |
+
+**Notes are kept for ever** in the append-only audit log, where they can never be edited or
+removed, as for reasons. Keep them short and factual, for example `Weighed again at the
+depot: 1.2 kg confirmed, load short`, and do not add personal details that are not needed.
+
+```
+POST /alerts/7a3e9b10-0000-4000-8000-000000000101/review
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+Content-Type: application/json
+```
+
+```json
+{ "notes": "Weighed again at the depot: 1.2 kg confirmed, load short" }
+```
+
+**200 OK**: the closed alert, its step's status now, and the consignment, so the app can
+update its list without asking again.
+
+```json
+{
+  "alert": { "id": "7a3e9b10-0000-4000-8000-000000000101", "status": "reviewed", "…": "the alert view" },
+  "step": { "id": "9d4e5f60-0000-4000-8000-000000000002", "reviewStatus": "rejected" },
+  "consignment": { "id": "5c0d7e21-0000-4000-8000-000000000001", "stage": "registered", "held": false }
+}
+```
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `ALERT_NOT_FOUND`, `INVALID_STATUS_TRANSITION`
+and `TOO_MANY_REQUESTS`.
+
+---
+
+## POST /alerts/{id}/dismiss
+
+"Clear, no problem": closes an open alert as a false alarm. The alert becomes `dismissed`;
+its step becomes `cleared` once none of its alerts is open or reviewed, and a cleared handoff
+or purchase moves the stage (see [the two decisions](#the-two-decisions)).
+
+| | |
+|---|---|
+| **Login needed** | Yes, officer only |
+| **Rate limits** | 60 reviews and dismissals per 15 minutes per officer, together |
+| **Request body** | `notes`, with the same rules as for [review](#post-alertsidreview) |
+
+```json
+{ "notes": "Weighed again at the depot with a checked scale: the load is complete" }
+```
+
+**200 OK**, here for a flagged handoff on a registered consignment with no other open alert:
+
+```json
+{
+  "alert": { "id": "7a3e9b10-0000-4000-8000-000000000101", "status": "dismissed", "…": "the alert view" },
+  "step": { "id": "9d4e5f60-0000-4000-8000-000000000002", "reviewStatus": "cleared" },
+  "consignment": { "id": "5c0d7e21-0000-4000-8000-000000000001", "stage": "in_transit", "held": false }
+}
+```
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `ALERT_NOT_FOUND`, `INVALID_STATUS_TRANSITION`,
+`STEP_CANNOT_BE_CLEARED` and `TOO_MANY_REQUESTS`.
+
+---
+
+## GET /consignments/by-qr/{qrCode}
+
+Scan a consignment's QR code (FR-04). One request returns the consignment, its custody steps
+in order, and a **live check of each anchored step against the blockchain**, cut down to what
+the viewer's role may see (decisions log, Scope (9) and Verification). The phone never talks
+to the blockchain; the server does the check.
+
+| | |
+|---|---|
+| **Login needed** | Yes, transporter, buyer or officer. A miner or administrator gets 403 `FORBIDDEN` on this path and on every other path under `/consignments`, including paths that do not exist |
+| **Rate limits** | 60 scans per 15 minutes per user, counted after the role check, malformed codes included (see [Rate limits](#rate-limits)) |
+| **Request body** | None |
+| **Caching** | Every response, errors included, carries `Cache-Control: no-store` |
+
+**The `{qrCode}` parameter.** 4–128 characters, each one of `A–Z a–z 0–9 . _ : / -`: the same
+rule sync stores a code by. **A `/` inside a code must be sent as `%2F`**, for example
+`MC%2F2026%2F001` for `MC/2026/001`. The server decodes the parameter before checking it. A raw
+`/` makes a different path, which gets 404 `NOT_FOUND`, not a lookup.
+
+```
+GET /consignments/by-qr/MC-2026-000123
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+```
+
+**200 OK**, here as an officer sees a purchased consignment (all values fake; one step shown):
+
+```json
+{
+  "consignment": {
+    "id": "5c0d7e21-0000-4000-8000-000000000001",
+    "qrCode": "MC-2026-000123",
+    "mineral": "gold",
+    "stage": "purchased",
+    "held": false,
+    "weightsHidden": false
+  },
+  "steps": [
+    {
+      "id": "9d4e5f60-0000-4000-8000-000000000001",
+      "type": "registration",
+      "byYou": false,
+      "actor": { "role": "miner", "username": "mutale_banda" },
+      "weightMg": "1500000",
+      "location": { "latitude": "-15.419012", "longitude": "28.288105" },
+      "zoneName": "ZCAS Campus (demo)",
+      "capturedAt": "2026-11-10T08:00:00.000Z",
+      "receivedAt": "2026-11-10T08:05:01.118Z",
+      "anchor": { "status": "confirmed", "chainTxHash": "0xccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc0" },
+      "check": { "result": "match" },
+      "reviewStatus": "passed",
+      "alerts": [],
+      "evidence": {
+        "signedPayload": "minechain-step/1/registration\nstep_id=…\n",
+        "signature": "MEQCIF…FAKE…==",
+        "signerPublicKey": "MFkwEw…FAKE…=="
+      }
+    }
+  ]
+}
+```
+
+**The body.** A field a role may not see is **left out**, not sent as `null`.
+
+| Field | Meaning |
+|---|---|
+| `consignment.id`, `qrCode`, `mineral`, `stage` | The consignment. `stage` is `registered`, `in_transit` or `purchased` |
+| `consignment.held` | `true` means "under review": an open alert holds the consignment from anchoring (see [Held consignments](database-schema.md#held-consignments)). A mismatch found by this scan makes it `true` at once |
+| `consignment.weightsHidden` | `true` when the viewer may not see weights (a transporter before their own handoff), so the app can say "weigh first" |
+| `steps[]` | In custody order (received time, then id) |
+| `id`, `type` | The step: `registration`, `handoff` or `purchase` |
+| `byYou` | `true` on the viewer's own steps. No user id appears anywhere in the body |
+| `actor` | `{ role }`, or `{ role, username }` (see the table below). Never a full name or licence number |
+| `weightMg` | Whole milligrams, as text |
+| `location` | `{ latitude, longitude }`, decimal degrees as text with 6 places |
+| `zoneName` | The licensed zone the point fell in when the step was synced, or `null` outside every active zone |
+| `capturedAt`, `receivedAt` | The phone's signed capture time, and when the server stored the step; ISO 8601 with milliseconds |
+| `anchor.status` | `pending`, `submitted`, `confirmed` or `failed` |
+| `anchor.chainTxHash` | The public Sepolia transaction hash, `0x` and 64 hex characters; `null` while nothing has been sent |
+| `check` | `{ result }`; for an officer, on a mismatch, also `fields` and sometimes `reason` (see [The chain check](#the-chain-check)) |
+| `reviewStatus` | `passed`, `cleared`, `flagged` or `rejected` |
+| `alerts` | The step's alerts, `[{ id, type, status }]`; full details are in [`GET /alerts/{id}`](#get-alertsid) |
+| `evidence` | `{ signedPayload, signature, signerPublicKey }`: the exact signed text, and the DER signature and SPKI public key in standard base64, so the phone can re-check each signature itself ([signing spec](signing-spec.md)) |
+
+**Never in any body:** full names, licence numbers, user ids, the on-chain actor reference
+(`actor_ref`), `anchor_error`, nonces, block numbers or the stored `data_hash`.
+
+### What each viewer sees
+
+| | Officer | Buyer who owns it (accepted purchase) | Any other buyer | Transporter who has handed off | Transporter who has not (blind) |
+|---|---|---|---|---|---|
+| Can open | any consignment | that consignment | only while `in_transit`; otherwise 404 `CONSIGNMENT_NOT_FOUND`, the answer for an unknown code | any consignment | any consignment |
+| Steps listed | all, flagged and rejected included | accepted (`passed`, `cleared`) | accepted | accepted | accepted |
+| `reviewStatus`, `alerts` | ✓ | | | | |
+| `weightMg` | ✓ | ✓ | ✓ | ✓ | none (`weightsHidden: true`) |
+| `location` | ✓ | ✓ | | | |
+| `zoneName` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `actor` | `{ role, username }` | `{ role, username }` | `{ role, username }` | `{ role }` | `{ role }` |
+| `byYou` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `anchor.status` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `anchor.chainTxHash` | ✓ | ✓ | ✓ | ✓ | none |
+| `check.result` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `check.fields`, `check.reason` | ✓ (on a mismatch) | | | | |
+| `evidence` | ✓ | ✓ | | | |
+
+- **"Has handed off"** means the transporter has any handoff stored on this consignment,
+  whatever its review status, flagged or rejected included: their own measurement is then on
+  record. Another transporter's handoff unlocks nothing for someone who has not weighed.
+- **Why a blind transporter sees no transaction hash:** the hash leads to the on-chain event,
+  and the event carries the weight. A transporter must weigh without knowing the expected
+  figure, so the 10% rule cannot be gamed. This is enforced by the API and the app only; see
+  the known limitation in the decisions log (Verification).
+- **A buyer whose own purchase is flagged** has no accepted purchase yet, so they get the
+  "any other buyer" view while the consignment is `in_transit`. Their flagged step is not
+  listed, and `held: true` shows it is under review.
+
+### The chain check
+
+Every listed step gets a `check.result`:
+
+| Result | In plain words |
+|---|---|
+| `match` | The stored record is exactly what was signed, the signature still verifies, and the Sepolia transaction holds a MineChain event for this step with the same consignment, actor reference, weight and hash. Nothing has been changed since it was anchored |
+| `mismatch` | Something differs: the stored record no longer agrees with its own signature or hash, or with what the blockchain recorded. This is treated as tampering |
+| `not_anchored_yet` | The step is not confirmed on the blockchain yet (pending, submitted or failed, and every flagged or rejected step), so there is nothing to compare. The blockchain is not asked |
+| `chain_unavailable` | The server could not ask the blockchain this time, or could not trust the answer: the RPC provider was down or slow, it is on the wrong network or has the wrong contract, or no reader is configured. **Never shown as tampering, and it raises no alert.** Scanning again later may give a real result |
+
+**How a step is checked**, cheapest first:
+
+1. **The stored record against itself, with no network.** The anchor hash is recomputed from
+   the stored payload, public key and signature, and the signature is verified again with that
+   key. The signed payload is compared with the stored columns (type, step id, actor, QR code,
+   mineral for a registration, weight, latitude, longitude, capture time, all as text), and the
+   recomputed hash with the stored hash. Any difference is a `mismatch` at once, even when the
+   blockchain cannot be reached. The signature check matters most: someone who edits the
+   payload, the columns and the stored hash together cannot make the signature verify without
+   the phone's private key.
+2. **The receipt of the stored transaction hash.** It must have succeeded, be in the stored
+   block, and hold one MineChain event that matches the step, compared with the **recomputed**
+   hash, not the stored one.
+3. **A missing receipt** is a `mismatch` only when the server's RPC provider has already
+   reached the step's block plus the confirmations (`ANCHOR_CONFIRMATIONS`, 2 by default). The
+   officer then sees `fields: ["chain_tx_hash"]` and `reason: "TX_NOT_FOUND"`. Before that, the
+   provider may simply be behind, so the result is `chain_unavailable`.
+
+**On a mismatch**, officers see the names of what differs in `check.fields`, never the values.
+Column names (`weight_mg`, `captured_at`, `signature`, `data_hash`, …) mean the stored record
+disagrees with itself; `receipt.status` and `receipt.blockNumber` describe the receipt;
+`event.<name>` (for example `event.weightMilligrams`) names the event field that differs.
+
+**A scan can write.** Whoever scans, if any step is a `mismatch`, the server raises a
+`record_tampered` alert (severity `high`) on that step, and the consignment is held until an
+officer closes it ([Alerts](#alerts-fr-08)). There is at most one such alert per step, ever:
+scanning again adds none. A viewer refused with 404 causes no blockchain call and writes
+nothing. Scans themselves are not recorded in the audit log.
+
+**Timing.** At most 3 steps are checked at once, and each blockchain request gives up after
+8 seconds. The check works whether or not anchoring is enabled: the server reads the chain with
+a key-free reader whenever `SEPOLIA_RPC_URL` and `MINECHAIN_CONTRACT_ADDRESS` are set. Without
+them, every confirmed step is `chain_unavailable`. How the reader works is in
+[contract-spec.md, section 7](contract-spec.md).
+
+**Errors**, on top of the [token errors](#authentication):
+
+| Status | Code | When | Message |
+|---|---|---|---|
+| 400 | `VALIDATION_FAILED` | `{qrCode}` is shorter than 4 or longer than 128 characters, or has a character outside `A–Z a–z 0–9 . _ : / -` (details name `qrCode`) | Some fields are missing or invalid. |
+| 400 | `VALIDATION_FAILED` | `{qrCode}` has a malformed percent-escape | The request path is not valid. |
+| 401 | `TOKEN_MISSING`, `TOKEN_INVALID`, `TOKEN_EXPIRED` | See [Authentication](#authentication) | |
+| 403 | `FORBIDDEN` | A miner or administrator | You do not have permission to do this. |
+| 404 | `CONSIGNMENT_NOT_FOUND` | No consignment has this code, **or** this viewer may not see it: a buyer scanning a consignment that is still `registered`, or one another buyer has purchased. The two answers are identical, so a scan cannot tell them apart | No consignment has this QR code. |
+| 429 | `TOO_MANY_REQUESTS` | More than 60 scans in 15 minutes | Too many consignment scans. Please wait a few minutes and try again. |
+| 500 | `INTERNAL_ERROR` | Unexpected server fault | Something went wrong |
+
+---
+
 ## Reports (FR-09, FR-13)
 
 Two endpoints download records as spreadsheet files (CSV): the custody steps in a period
@@ -2064,7 +2722,7 @@ Neither id, or both, is refused with `"field": "query"`.
 | `step_recorded` | The server received a step (its `received_at`) | both |
 | `alert_raised` | An anomaly check raised an alert on a step | both |
 | `step_anchored` | The step's Sepolia transaction was mined (the block's time) | both |
-| `alert_reviewed`, `alert_dismissed` | An officer closed an alert. Officer review is still to be built; these rows appear once alerts can be closed | both |
+| `alert_reviewed`, `alert_dismissed` | An officer closed an alert ([Alerts](#alerts-fr-08)) | both |
 | `account_event` | A change to the actor's account: `user.create`, `user.register`, `user.approve`, `user.reject`, `user.suspend`, `user.reactivate`, `user.key_register`, `user.key_reset`, `user.activation_reissue`, `user.activate` or `user.password_change`. Logins, and failed logins, activations and password changes, are not included | actor only |
 
 - **An actor's trail** contains the steps that actor recorded, the alerts and anchoring of

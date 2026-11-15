@@ -54,5 +54,29 @@ export function createAdminUsersController({ accounts }) {
       const user = await accounts.resetKey({ targetId: targetId(req), reason: req.validated.body.reason, ...actor(req) });
       res.status(200).json({ user });
     },
+
+    // B3. These two service methods name their arguments userId and adminId; the values
+    // come from the same places as for the actions above.
+    async rename(req, res) {
+      const user = await accounts.rename({
+        userId: targetId(req),
+        fullName: req.validated.body.fullName,
+        adminId: req.user.id,
+        ipAddress: req.ip,
+      });
+      res.status(200).json({ user });
+    },
+
+    // 200 with the account, now deleted, rather than 204: the admin's screen shows its new
+    // status, as after a suspend.
+    async deleteAccount(req, res) {
+      const user = await accounts.deleteAccount({
+        userId: targetId(req),
+        reason: req.validated.body.reason,
+        adminId: req.user.id,
+        ipAddress: req.ip,
+      });
+      res.status(200).json({ user });
+    },
   };
 }

@@ -9,11 +9,12 @@ import {
   reasonBodySchema,
   emptyBodySchema,
   createUserBodySchema,
+  renameUserBodySchema,
 } from '../schemas/adminUsers.js';
 
-// Mounted at /admin/users. requireAuth is made by createApp and passed in, like the auth
-// routes.
-export function adminUserRoutes({ accounts, requireAuth }) {
+// Mounted at /admin/users. requireAuth and the account-edit limiter are made by createApp and
+// passed in, like the auth routes, so each app instance (and each test) has its own counter.
+export function adminUserRoutes({ accounts, requireAuth, accountEditLimiter }) {
   const router = Router();
   const controller = createAdminUsersController({ accounts });
 
@@ -42,6 +43,14 @@ export function adminUserRoutes({ accounts, requireAuth }) {
   router.post('/:id/reset-key', id, validate(reasonBodySchema), controller.resetKey);
   // A new code for an invited account: lost, expired or erased. The old one stops working.
   router.post('/:id/activation-code', id, validate(emptyBodySchema), controller.reissueActivation);
+
+  // B3 edits. POST, not PATCH and DELETE (decision of 15 Nov 2026): the same shape as the
+  // actions above and as zone rename, and a DELETE request's body (the reason) may be dropped
+  // by proxies or clients. The two share one limiter, after the guard (so it is keyed by the
+  // admin requireAuth found) and before validation, so malformed requests count too.
+  router.post('/:id/rename', accountEditLimiter, id, validate(renameUserBodySchema), controller.rename);
+  // Soft delete: the row and its history stay; the account can never sign in again.
+  router.post('/:id/delete', accountEditLimiter, id, validate(reasonBodySchema), controller.deleteAccount);
 
   return router;
 }

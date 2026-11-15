@@ -560,6 +560,8 @@ describe('audit trail: one actor', () => {
       'user.activation_reissue',
       'user.activate',
       'user.password_change',
+      'user.rename',
+      'user.delete',
     ]);
   });
 

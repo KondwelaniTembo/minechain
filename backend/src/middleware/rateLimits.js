@@ -5,7 +5,7 @@ import { AppError } from '../errors.js';
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 
-// DEV-SHORTCUT: in-memory rate-limit stores (register, login IP, login username, activation, password change, sync, reports and anchoring actions) | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
+// DEV-SHORTCUT: in-memory rate-limit stores (register, login IP, login username, activation, password change, sync, reports, anchoring actions, alert actions, account edits and consignment views) | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
 //
 // Shared settings for every limiter. Each limiter is made by a function rather than created
 // once at import, so each createApp call, and so each test, gets its own counter.
@@ -162,6 +162,63 @@ export function createAnchoringActionLimiter({ limit = 20, windowMs = FIFTEEN_MI
     keyGenerator: (req) => {
       // Fail closed, as in createSyncLimiter.
       if (!req.user?.id) throw new Error('createAnchoringActionLimiter ran without requireAuth before it on this route');
+      return `user:${req.user.id}`;
+    },
+  });
+}
+
+// Alert decisions per officer (POST /alerts/{id}/review and /dismiss), one count for both
+// (app endpoints plan, B1.3). Each decision writes to the append-only audit log, so a script
+// looping on them would fill it. 60 per 15 minutes is higher than the anchoring actions
+// because an officer works through a queue, one decision every few seconds at most. The
+// lists (GET) are not limited: they only read. Keyed by user id for the same reasons as
+// sync. Must run after requireAuth.
+export function createAlertActionLimiter({ limit = 60, windowMs = FIFTEEN_MINUTES_MS } = {}) {
+  return createLimiter({
+    limit,
+    windowMs,
+    message: 'Too many alert decisions. Please wait a few minutes and try again.',
+    keyGenerator: (req) => {
+      // Fail closed, as in createSyncLimiter.
+      if (!req.user?.id) throw new Error('createAlertActionLimiter ran without requireAuth before it on this route');
+      return `user:${req.user.id}`;
+    },
+  });
+}
+
+// Account edits per administrator (POST /admin/users/{id}/rename and .../delete), one count
+// for both (app endpoints plan, B3.3). Each edit writes to the append-only audit log, and a
+// delete cannot be undone, so a script or a stolen admin session looping on them is held to
+// 20 per 15 minutes, far more than an admin edits by hand. The other account actions are not
+// counted here (decision of 15 Nov 2026: they stay as they are). Keyed by user id for the
+// same reasons as sync. Must run after requireAuth.
+export function createAccountEditLimiter({ limit = 20, windowMs = FIFTEEN_MINUTES_MS } = {}) {
+  return createLimiter({
+    limit,
+    windowMs,
+    message: 'Too many account changes. Please wait a few minutes and try again.',
+    keyGenerator: (req) => {
+      // Fail closed, as in createSyncLimiter.
+      if (!req.user?.id) throw new Error('createAccountEditLimiter ran without requireAuth before it on this route');
+      return `user:${req.user.id}`;
+    },
+  });
+}
+
+// Consignment views per user (GET /consignments/by-qr/{qrCode}, app endpoints plan, B2.5).
+// Each view asks the RPC provider for one receipt per confirmed step plus, at times, the
+// block number, and a free plan has a small quota, so a script scanning codes in a loop
+// would use it up for everyone. 60 per 15 minutes is far more than a person scans by hand.
+// Malformed codes count too (the limiter runs before validation). Keyed by user id for the
+// same reasons as sync. Must run after requireAuth.
+export function createConsignmentViewLimiter({ limit = 60, windowMs = FIFTEEN_MINUTES_MS } = {}) {
+  return createLimiter({
+    limit,
+    windowMs,
+    message: 'Too many consignment scans. Please wait a few minutes and try again.',
+    keyGenerator: (req) => {
+      // Fail closed, as in createSyncLimiter.
+      if (!req.user?.id) throw new Error('createConsignmentViewLimiter ran without requireAuth before it on this route');
       return `user:${req.user.id}`;
     },
   });

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 // Used for one offline check only: the address checksum. Nothing here touches the network;
-// all chain calls live in the chain client.
+// chain calls live in the chain client (writes, with the recorder key) and the chain reader
+// (key-free reads for the consignment view).
 import { getAddress } from 'ethers';
 import { SEPOLIA_CHAIN_ID } from './chain/mineChainAbi.js';
 
