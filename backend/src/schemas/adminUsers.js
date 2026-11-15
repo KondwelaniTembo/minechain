@@ -81,6 +81,15 @@ export const createUserBodySchema = z
   })
   .strict();
 
+// POST /admin/users/:id/rename (B3). The same full-name rule as registration and account
+// creation. .strict(): role, username, licenceNumber, status or anything else is refused,
+// not ignored, so a rename can never be a way to change them.
+export const renameUserBodySchema = z
+  .object({
+    fullName: fullNameSchema,
+  })
+  .strict();
+
 // Approve and reactivate take no input. .optional(): Express 5 leaves req.body undefined
 // when no body is sent, and a plain POST with no body is the normal way to call these.
 // A body that is sent must be empty, so a field like reason or status is refused rather

@@ -18,6 +18,7 @@ import {
   createReportLimiter,
   createAnchoringActionLimiter,
   createAlertActionLimiter,
+  createAccountEditLimiter,
 } from './middleware/rateLimits.js';
 import { createRequireAuth } from './middleware/requireAuth.js';
 import { notFound } from './middleware/notFound.js';
@@ -29,8 +30,8 @@ import { errorHandler } from './middleware/errorHandler.js';
 //   trustProxyHops: how many proxies sit in front of the app (config TRUST_PROXY)
 //   rateLimits:     { registerPerHour, loginPerIp, loginPerUsername, activationPerIp,
 //                   passwordChangePerUser, syncPerUser, reportsPerUser,
-//                   anchoringActionsPerAdmin, alertActionsPerOfficer } to override the
-//                   limits, for tests
+//                   anchoringActionsPerAdmin, alertActionsPerOfficer,
+//                   accountEditsPerAdmin } to override the limits, for tests
 export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } = {}) {
   if (!db || typeof db.query !== 'function') {
     throw new TypeError('createApp needs a db object with a query() method');
@@ -72,6 +73,7 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   const reportLimiter = createReportLimiter({ limit: rateLimits.reportsPerUser });
   const anchoringActionLimiter = createAnchoringActionLimiter({ limit: rateLimits.anchoringActionsPerAdmin });
   const alertActionLimiter = createAlertActionLimiter({ limit: rateLimits.alertActionsPerOfficer });
+  const accountEditLimiter = createAccountEditLimiter({ limit: rateLimits.accountEditsPerAdmin });
 
   app.use('/health', healthRoutes({ db }));
   const requireAuth = createRequireAuth({ tokens: services.tokens, users: services.users });
@@ -92,7 +94,7 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   // FR-10 and FR-12 account management. services.accounts is not in the checks above, so
   // existing tests that build the app with only users and tokens keep working. If it were
   // ever missing, these routes would fail closed: a logged 500, never an open route.
-  app.use('/admin/users', adminUserRoutes({ accounts: services.accounts, requireAuth }));
+  app.use('/admin/users', adminUserRoutes({ accounts: services.accounts, requireAuth, accountEditLimiter }));
 
   // FR-11 licensed GPS zones. Like accounts, services.zones is not in the checks above; if it
   // were missing, these routes would fail closed with a logged 500.
