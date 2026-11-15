@@ -31,6 +31,14 @@ abstract final class AppText {
   static const String myConsignments = 'My consignments';
   static const String sendMyWork = 'Send my work';
 
+  // ---- TEMPORARY (F4) "Check server" tile, replaced in F5 ----
+
+  static const String checkServer = 'Check server';
+  static const String checking = 'Checking…';
+  static const String serverReady = 'Server ready';
+  static const String serverCheckFailed =
+      'The server could not be checked. Please try again later.';
+
   // ---- Problems with the server's answer (core/errors/failure_text.dart) ----
 
   static const String invalidCredentials = 'Wrong username or password.';
