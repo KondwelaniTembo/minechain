@@ -9,6 +9,7 @@ import { createSyncService } from './syncService.js';
 import { createZoneService } from './zoneService.js';
 import { createReportService } from './reportService.js';
 import { createAnchorStatusService } from './anchorStatusService.js';
+import { createAlertService } from './alertService.js';
 
 // The one place where the real services are connected to each other. server.js and the
 // end-to-end DB tests both use it, so the wiring is never written twice. Unit tests skip it
@@ -29,6 +30,8 @@ export function createServices({ db, config, anchorWorker = null, clock }) {
   const zones = createZoneService({ db, audit });
   const reports = createReportService({ db, audit });
   const anchoring = createAnchorStatusService({ db, audit, anchorWorker, intervalSeconds: config.anchor?.intervalSeconds, clock });
+  // Officers' alert queue (FR-08, Scope (5)). Read side only so far (plan B1.1).
+  const alerts = createAlertService({ db });
 
-  return { users, tokens, accounts, signatures, sync, zones, reports, anchoring };
+  return { users, tokens, accounts, signatures, sync, zones, reports, anchoring, alerts };
 }
