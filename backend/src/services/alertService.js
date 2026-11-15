@@ -1,9 +1,12 @@
 import { AppError } from '../errors.js';
 import { HELD } from './anchorQueue.js';
+import { stageAfter } from './custodyRules.js';
+import { withArticle } from './wording.js';
 
-// The officer's view of anomaly alerts (FR-08; decisions.md Scope (2) and (5)). This file is
-// the read side (plan B1.1); closing an alert comes in B1.2. Alerts are created by sync and,
-// later, by verification; nothing here changes how they are raised.
+// The officer's view of anomaly alerts (FR-08; decisions.md Scope (2) and (5)), and the two
+// ways an officer closes one: "Confirm problem" (review) and "Clear, no problem" (dismiss).
+// Alerts are created by sync and, later, by verification; nothing here changes how they are
+// raised.
 //
 // What an officer sees is limited on purpose: ids, the step's type, states and times, the
 // consignment's identity and whether it is held, the actor's username and role, and the
@@ -72,6 +75,101 @@ const OTHER_ALERTS = `
   WHERE ot.consignment_id = $1 AND o.id <> $2
   ORDER BY o.created_at, o.id`;
 
+// ---------- closing an alert (plan B1.2) ----------
+
+// Which consignment the alert belongs to, read without a lock, only to know which consignment
+// to lock first. Everything that decides is read again under the locks below.
+const FIND_CONSIGNMENT = `
+  SELECT t.consignment_id
+  FROM alerts al
+  JOIN transactions t ON t.id = al.transaction_id
+  WHERE al.id = $1`;
+
+// The lock order, always the same: consignment, then the alert, then the step's alerts and
+// the step. Sync takes the consignment lock first too (LOCK_CONSIGNMENT in syncService), so
+// a close and a sync on one consignment wait for each other instead of deadlocking.
+const LOCK_CONSIGNMENT = 'SELECT id, stage FROM consignments WHERE id = $1 FOR UPDATE';
+
+// The reviewer, read in the closing transaction. FOR SHARE: an administrator suspending this
+// officer at the same moment waits until the decision is saved, so a decision is never made
+// by an account that was already suspended when it was written. Taken before the consignment
+// lock, the same order sync uses (the user's key FOR SHARE, then the consignment).
+const LOCK_REVIEWER = 'SELECT role, status FROM users WHERE id = $1 FOR SHARE';
+const LOCK_ALERT = 'SELECT id, transaction_id, type, status FROM alerts WHERE id = $1 FOR UPDATE';
+// ORDER BY id: two closes on one step take these locks in the same order. The alert being
+// closed is already locked by this transaction, so locking it again here never waits.
+const LOCK_STEP_ALERTS = 'SELECT id, type, status FROM alerts WHERE transaction_id = $1 ORDER BY id FOR UPDATE';
+const LOCK_STEP = 'SELECT id, consignment_id, type, review_status FROM transactions WHERE id = $1 FOR UPDATE';
+
+// Another accepted step of this type on the consignment. Only one accepted registration and
+// one accepted purchase are allowed (the partial unique indexes on transactions), so clearing
+// a second one would fail; it is refused with a clear answer first. Read under the
+// consignment lock, which every step insert also takes, so no new step can appear meanwhile.
+const OTHER_ACCEPTED = `
+  SELECT EXISTS (
+    SELECT 1 FROM transactions
+     WHERE consignment_id = $1 AND type = $2 AND id <> $3
+       AND review_status IN ('passed', 'cleared')) AS found`;
+
+// The decision itself. reviewed_at is clock_timestamp(), the time of this statement: now()
+// would be when the transaction began, which can be earlier than the alert's own created_at
+// (database-schema.md, two clocks). WHERE status = 'open' repeats the check made under the
+// lock, so the statement can never close an alert twice.
+const CLOSE_ALERT = `
+  UPDATE alerts
+     SET status = $2, reviewed_by = $3, review_notes = $4, reviewed_at = clock_timestamp()
+   WHERE id = $1 AND status = 'open'`;
+
+// Only a flagged step changes: one already rejected stays rejected, and the CHECK
+// transactions_anchor_only_if_approved would refuse rejecting a step that was sent.
+const SET_STEP_STATUS = `
+  UPDATE transactions SET review_status = $2
+   WHERE id = $1 AND review_status = 'flagged'`;
+
+const SET_STAGE = 'UPDATE consignments SET stage = $2 WHERE id = $1';
+
+// The two actions. status: what the alert becomes. verb: for the 409 message, "Only an open
+// alert can be reviewed."
+const CLOSE_ACTIONS = Object.freeze({
+  review: Object.freeze({ status: 'reviewed', verb: 'reviewed', audit: 'alert.review' }),
+  dismiss: Object.freeze({ status: 'dismissed', verb: 'dismissed', audit: 'alert.dismiss' }),
+});
+
+// The step's review status worked out from the statuses of ALL its alerts (plan §1, decided
+// 15 Nov 2026): any reviewed -> rejected; every one dismissed -> cleared; otherwise (some
+// still open, none reviewed) it stays flagged. A rejection is final, so dismissing another
+// alert on the same step later cannot overturn it. For a step with one alert this is exactly
+// Scope (5): review -> rejected, dismiss -> cleared.
+// Pure, so every combination can be tested without a database.
+export function stepStatusFromAlerts(statuses) {
+  if (!Array.isArray(statuses) || statuses.length === 0) {
+    throw new TypeError('statuses must list the status of every alert on the step');
+  }
+  if (statuses.includes('reviewed')) return 'rejected';
+  if (statuses.every((status) => status === 'dismissed')) return 'cleared';
+  return 'flagged';
+}
+
+// The three steps that can never be cleared (plan §1, decided 15 Nov 2026), one fixed message
+// each. The officer can still confirm the problem.
+export const NOT_CLEARABLE_MESSAGES = Object.freeze({
+  duplicateRegistration:
+    'This step cannot be cleared: the consignment already has an accepted registration. Confirm the problem instead.',
+  secondPurchase:
+    'This step cannot be cleared: the consignment already has an accepted purchase. Confirm the problem instead.',
+  afterPurchase:
+    'This step cannot be cleared: it was recorded after the consignment was purchased, and nothing can follow a purchase on the blockchain. Confirm the problem instead.',
+});
+
+// The same answer requireRole gives, so a caller cannot tell which check refused it.
+function forbidden() {
+  return new AppError(403, 'FORBIDDEN', 'You do not have permission to do this.');
+}
+
+function notClearable(message) {
+  return new AppError(409, 'STEP_CANNOT_BE_CLEARED', message);
+}
+
 // snake_case columns to the API's camelCase, built field by field.
 function toAlert(row) {
   return {
@@ -126,10 +224,133 @@ function alertNotFound() {
   return new AppError(404, 'ALERT_NOT_FOUND', 'No alert has this id.');
 }
 
-// db: the app's db object. The audit service is added with the close actions in B1.2, which
-// write their entry in the same transaction; reads are not audited.
-export function createAlertService({ db }) {
+// Dependencies are passed in, so DB tests can give a failing audit service to prove the
+// decision and its entry are saved together. Reads are not audited.
+//   db:    the app's db object
+//   audit: the audit service (record)
+export function createAlertService({ db, audit }) {
+  // Why a dismissal would leave a step that can never be accepted, or null. Checked before
+  // anything is written; the transaction then rolls back with nothing changed.
+  async function clearRefusal(tx, alert, step) {
+    if (alert.type === 'handoff_order') return notClearable(NOT_CLEARABLE_MESSAGES.afterPurchase);
+    if (step.type === 'registration' || step.type === 'purchase') {
+      const { rows } = await tx.query(OTHER_ACCEPTED, [step.consignment_id, step.type, step.id]);
+      if (rows[0].found) {
+        return notClearable(
+          step.type === 'registration' ? NOT_CLEARABLE_MESSAGES.duplicateRegistration : NOT_CLEARABLE_MESSAGES.secondPurchase,
+        );
+      }
+    }
+    return null;
+  }
+
+  // One function for both actions (plan §2, "The close transaction"). The decision, the step
+  // and stage it changes, and the audit entry are saved together or not at all.
+  function close(action, { alertId, officerId, notes, ipAddress = null }) {
+    const id = normalizeId(alertId);
+    const { status: newStatus, verb, audit: auditAction } = CLOSE_ACTIONS[action];
+
+    return db.transaction(async (tx) => {
+      // 1. Which consignment to lock.
+      const { rows: found } = await tx.query(FIND_CONSIGNMENT, [id]);
+      if (found.length === 0) throw alertNotFound();
+
+      // Only an active officer may decide an alert (database-schema.md, rules enforced by the
+      // service; Scope (5): administrators never close alerts). The route's guard checks this
+      // too; repeating it here covers every other caller. After the 404, so an unknown alert
+      // is reported as unknown whoever asks, and before any write.
+      const { rows: reviewers } = await tx.query(LOCK_REVIEWER, [officerId]);
+      const reviewer = reviewers[0];
+      if (!reviewer || reviewer.role !== 'officer' || reviewer.status !== 'active') throw forbidden();
+
+      // 2-3. The locks, in the fixed order. An alert's step never changes, so the
+      // consignment found above is still the right one.
+      const { rows: consignments } = await tx.query(LOCK_CONSIGNMENT, [found[0].consignment_id]);
+      const consignment = consignments[0];
+      const { rows: alertRows } = await tx.query(LOCK_ALERT, [id]);
+      const alert = alertRows[0];
+      // A second officer who waited for the lock now sees the first one's decision.
+      if (alert.status !== 'open') {
+        throw new AppError(
+          409,
+          'INVALID_STATUS_TRANSITION',
+          `Only ${withArticle('open')} alert can be ${verb}. This alert is ${alert.status}.`,
+        );
+      }
+      const { rows: stepAlerts } = await tx.query(LOCK_STEP_ALERTS, [alert.transaction_id]);
+      const { rows: steps } = await tx.query(LOCK_STEP, [alert.transaction_id]);
+      const step = steps[0];
+
+      // 4. Dismiss only: a step that could never be accepted is refused before any write.
+      if (action === 'dismiss') {
+        const refusal = await clearRefusal(tx, alert, step);
+        if (refusal) throw refusal;
+      }
+
+      // 5. The decision.
+      await tx.query(CLOSE_ALERT, [id, newStatus, officerId, notes]);
+
+      // 6. The step's status from all its sync-time alerts, and the stage if it was cleared.
+      // A record_tampered alert sits on a step that is already on the blockchain: its
+      // review_status cannot change (transactions_anchor_only_if_approved), so it is left
+      // alone, and the alert's own status is the whole decision (plan §6, Q3).
+      let stepStatus = null;
+      let stage = null;
+      if (alert.type !== 'record_tampered') {
+        const statuses = stepAlerts
+          .filter((a) => a.type !== 'record_tampered')
+          .map((a) => (a.id === id ? newStatus : a.status));
+        const derived = stepStatusFromAlerts(statuses);
+        if (derived !== step.review_status) {
+          const { rowCount } = await tx.query(SET_STEP_STATUS, [step.id, derived]);
+          if (rowCount === 1) stepStatus = { from: step.review_status, to: derived };
+        }
+        // A cleared step counts as accepted from now on, so it moves the consignment as a
+        // passed step would have at sync: forward only, a relay leaves it alone.
+        if (stepStatus?.to === 'cleared') {
+          const next = stageAfter(step.type, consignment.stage);
+          if (next !== null) {
+            await tx.query(SET_STAGE, [consignment.id, next]);
+            stage = { from: consignment.stage, to: next };
+          }
+        }
+      }
+
+      // 7. The audit entry, in the same transaction. The notes are copied into the
+      // append-only log, where they can never be changed or removed.
+      await audit.record(tx, {
+        action: auditAction,
+        actorId: officerId,
+        entityType: 'alert',
+        entityId: id,
+        details: { notes, alertType: alert.type, transactionId: step.id, stepStatus, stage },
+        ipAddress,
+      });
+
+      // The answer, read after the writes in this transaction, so held already reflects them.
+      const { rows: viewRows } = await tx.query(GET_ALERT, [id]);
+      const view = toAlert(viewRows[0]);
+      return {
+        alert: view,
+        step: { id: view.step.id, reviewStatus: view.step.reviewStatus },
+        consignment: { id: view.consignment.id, stage: view.consignment.stage, held: view.consignment.held },
+      };
+    });
+  }
+
   return {
+    // "Confirm problem": the alert becomes reviewed and its step rejected.
+    review(input) {
+      return close('review', input);
+    },
+
+    // "Clear, no problem": the alert becomes dismissed, and its step cleared once none of the
+    // step's alerts is open or reviewed. The hold is released when no other alert on the
+    // consignment is open (HELD is worked out, never stored).
+    dismiss(input) {
+      return close('dismiss', input);
+    },
+
     // input has already passed listAlertsQuerySchema, so status is one of the three, type is
     // one of the six or absent, and limit and offset are capped.
     // The page and its total are read in one REPEATABLE READ snapshot, so the total always

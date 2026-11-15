@@ -30,8 +30,8 @@ export function createServices({ db, config, anchorWorker = null, clock }) {
   const zones = createZoneService({ db, audit });
   const reports = createReportService({ db, audit });
   const anchoring = createAnchorStatusService({ db, audit, anchorWorker, intervalSeconds: config.anchor?.intervalSeconds, clock });
-  // Officers' alert queue (FR-08, Scope (5)). Read side only so far (plan B1.1).
-  const alerts = createAlertService({ db });
+  // Officers' alert queue and its two closing actions (FR-08, Scope (5)).
+  const alerts = createAlertService({ db, audit });
 
   return { users, tokens, accounts, signatures, sync, zones, reports, anchoring, alerts };
 }
