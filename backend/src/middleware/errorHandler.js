@@ -28,6 +28,17 @@ export function errorHandler(err, req, res, next) {
     return res.status(known.status).json({ error: { code: known.code, message: known.message } });
   }
 
+  // A route parameter with a malformed percent-escape, such as /alerts/%E0. Express 5's
+  // router decodes each parameter with decodeURIComponent while matching the route, and on
+  // failure rethrows the URIError with status 400 and the raw value in its message
+  // (node_modules/router/lib/layer.js, decodeParam). It is the client's mistake, so it is a
+  // 400, and it is not logged: the message holds whatever the client typed, and repeating a
+  // bad link would only fill the log. no-store is set here because not every router sets it.
+  if (err instanceof URIError && err.status === 400) {
+    res.set('Cache-Control', 'no-store');
+    return res.status(400).json({ error: { code: 'VALIDATION_FAILED', message: 'The request path is not valid.' } });
+  }
+
   // Anything else is unexpected. The full error goes to the server log so the fault can be
   // traced (NFR-07), while the client gets a generic message: stack traces and SQL errors
   // tell an attacker how the system is built.
