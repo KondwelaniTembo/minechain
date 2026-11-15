@@ -34,6 +34,10 @@ and `FAKE-SIGNATURE`. None of them is a real identifier, password or token.
 | `GET` | [`/admin/anchoring`](#get-adminanchoring) | Anchoring status: the worker, what is waiting, stuck or failed, and a list of problems (FR-03) | Yes, admin only |
 | `POST` | [`/admin/anchoring/run`](#post-adminanchoringrun) | Run one anchoring tick now (FR-03) | Yes, admin only |
 | `POST` | [`/admin/anchoring/steps/{id}/retry`](#post-adminanchoringstepsidretry) | Send a failed step back to the anchoring queue, with a reason (FR-03) | Yes, admin only |
+| `GET` | [`/alerts`](#get-alerts) | The anomaly alert queue: open alerts oldest first, or closed ones, filtered by type (FR-08) | Yes, officer only |
+| `GET` | [`/alerts/{id}`](#get-alertsid) | One alert, with the other alerts on its consignment (FR-08) | Yes, officer only |
+| `POST` | [`/alerts/{id}/review`](#post-alertsidreview) | "Confirm problem": close an alert as a real problem, with notes; its step is rejected (FR-08) | Yes, officer only |
+| `POST` | [`/alerts/{id}/dismiss`](#post-alertsiddismiss) | "Clear, no problem": close an alert as a false alarm, with notes; its step can be cleared and the hold released (FR-08) | Yes, officer only |
 | `GET` | [`/reports/transactions`](#get-reportstransactions) | Download custody steps as a spreadsheet (CSV), filtered (FR-09) | Yes, officer, buyer (own purchases only) or admin |
 | `GET` | [`/reports/audit-trail`](#get-reportsaudit-trail) | Download the audit trail of one consignment or one actor as CSV (FR-13) | Yes, officer only |
 | `POST` | [`/sync/steps`](#post-syncsteps) | Upload signed custody steps from the phone's offline queue (FR-03, FR-07) | Yes, miner, transporter or buyer |
@@ -154,6 +158,7 @@ A 403 has no `WWW-Authenticate` header, because the credentials themselves were 
 | `POST /auth/login` | 10 per 15 minutes | username (any letter case or surrounding spaces) | failed attempts only (401 and 403). Successful logins are not counted |
 | `POST /auth/activate` | 30 per 15 minutes | client IP | every request, including invalid ones |
 | `POST /auth/me/password` | 10 per 15 minutes | logged-in user | failed attempts only (every error after the token check, including `VALIDATION_FAILED`). Successful changes are not counted. A request refused for its token never reaches the limiter |
+| `POST /alerts/{id}/review` and `POST /alerts/{id}/dismiss`, together | 60 per 15 minutes | logged-in officer | every request that passes the officer check, including invalid ones (`VALIDATION_FAILED`) and refused ones. Anyone who is not an officer is refused before it and not counted. `GET /alerts` and `GET /alerts/{id}` are not limited |
 
 The per-IP limits are high on purpose. Zambian mobile networks use carrier-grade NAT, so a
 whole mining site can share one public IP address. The per-username limit is what stops
@@ -233,7 +238,7 @@ the endpoint sections below remain the source of truth for what exists.
 | View a consignment's full custody chain (FR-04, FR-05) | | | ✓ | ✓ | | Planned |
 | Signed provenance certificate (FR-16) | | | ✓ | | | Planned |
 | Transaction reports and spreadsheet export (FR-09): `GET /reports/transactions` (a buyer sees only consignments they bought) | | | ✓ | ✓ | ✓ read-only | **Built** |
-| Review anomaly alerts, with case notes (FR-08) | | | | ✓ | | Planned |
+| Review anomaly alerts, with case notes (FR-08): `GET /alerts`, `/alerts/{id}`, `POST /alerts/{id}/review`, `/dismiss` (officers only; administrators are refused) | | | | ✓ | | **Built** |
 | Download audit trails (FR-13): `GET /reports/audit-trail` | | | | ✓ | | **Built** |
 | Approve or reject account requests (FR-12): `/admin/users/{id}/approve`, `/reject` | | | | | ✓ | **Built** |
 | List accounts; suspend and reactivate them (FR-10): `GET /admin/users`, `/admin/users/{id}/suspend`, `/reactivate` | | | | | ✓ | **Built** |
@@ -1874,6 +1879,305 @@ change and its audit entry are saved together, or not at all.
 
 ---
 
+## Alerts (FR-08)
+
+Four endpoints give regulatory officers the anomaly alerts raised by the sync checks (and,
+later, by verification): a queue, one alert in detail, and two ways to close one. This is
+the in-app alerts list that replaces push notifications in the prototype (decisions log,
+Scope (2)). The app refreshes it when it is opened and on pull-down.
+
+**Rules shared by all four:**
+
+- **Officers only.** Every request needs a token, and the account must be an active
+  `officer`. Anyone else gets 401 or 403, **administrators included**: an administrator runs
+  the system but does not judge custody records, so one stolen administrator account cannot
+  also clear alerts (decisions log, Scope (5)). This applies to every path under `/alerts`,
+  including paths that do not exist: anyone but an officer gets 403, not 404.
+- **No caching.** Every response, errors included, carries `Cache-Control: no-store`.
+- **Rate limit: 60 decisions per 15 minutes per officer**, review and dismiss together, one
+  count for both. It counts every request that passes the officer check, including invalid
+  ones. Over the limit: **429 `TOO_MANY_REQUESTS`**, "Too many alert decisions. Please wait a
+  few minutes and try again.", with `Retry-After` (see [Rate limits](#rate-limits)). **The
+  two GETs are not limited**: they only read.
+- **`{id}`** is the alert's id, a UUID. Upper- or lower-case letters are both accepted.
+- **Every decision is recorded** in the audit log, in the same database transaction as the
+  change, with the officer as the actor and their IP address. A refusal, and a read, record
+  nothing.
+
+  | Action | Audit action | Entity | `details` |
+  |---|---|---|---|
+  | Review | `alert.review` | the alert | `{ notes, alertType, transactionId, stepStatus, stage }` |
+  | Dismiss | `alert.dismiss` | the alert | the same |
+
+  `transactionId` is the alert's step. `stepStatus` is `{ from, to }` when the step's review
+  status changed, otherwise `null`; `stage` is `{ from, to }` when the consignment's stage
+  moved, otherwise `null`.
+
+### The alert view
+
+Every endpoint returns alerts in this form. It holds ids, states, times, the consignment's
+identity and the actor's username and role. **It never contains a full name, a key, a
+signature, a signed payload or GPS coordinates.**
+
+| Field | Meaning |
+|---|---|
+| `id`, `type`, `severity`, `status` | The alert. `type` is one of the six alert types; `status` is `open`, `reviewed` or `dismissed` |
+| `details` | As stored by the check that raised it: ids, weights as whole milligrams in text, a zone name, never a person's name (see [database-schema.md, details per alert type](database-schema.md#alerts)) |
+| `createdAt` | When the alert was raised |
+| `step` | `{ id, type, reviewStatus, anchorStatus, capturedAt, receivedAt }`: the step the alert is on |
+| `consignment` | `{ id, qrCode, mineral, stage, held }`. `held` is `true` while any alert on the consignment is open, by exactly the rule the anchoring worker uses (see [Held consignments](database-schema.md#held-consignments)) |
+| `actor` | `{ id, username, role }`: who recorded the step |
+| `review` | `null` while open; once closed, `{ by: { id, username }, notes, at }` |
+
+### The two decisions
+
+| Decision | In the app | Alert becomes | The step |
+|---|---|---|---|
+| Review | "Confirm problem" | `reviewed` | `rejected`: it is never anchored. The stage does not move |
+| Dismiss | "Clear, no problem" | `dismissed` | `cleared` once none of its alerts is open or reviewed; it is then anchored like a passed step |
+
+**A step can have more than one alert** (one per check, for example off-zone and too
+heavy). Its review status is worked out from **all** of its alerts after each decision:
+
+- any alert `reviewed` → the step is `rejected`, and stays so; dismissing another alert on it
+  later does not overturn that;
+- every alert `dismissed` → the step is `cleared`;
+- otherwise (some still open, none reviewed) → the step stays `flagged`.
+
+For a step with one alert this is simply: review rejects it, dismiss clears it.
+
+**A cleared handoff or purchase moves the stage**, as it would have done at sync had it
+passed, by the same custody rules: a handoff moves `registered` to `in_transit`, a purchase
+moves `in_transit` to `purchased`. A relay (a handoff at `in_transit`) leaves the stage
+where it is, and the stage never moves backwards. So a purchase that was deferred with
+`STAGE_NOT_READY` behind a flagged handoff is accepted when the app sends it again.
+
+**The hold is released** when no alert on the consignment is open any more, whichever
+decision closed the last one. Held is worked out each time, never stored.
+
+**Three steps can never be cleared**, so dismissing any of their alerts is refused with 409
+`STEP_CANNOT_BE_CLEARED` and nothing is changed. Confirming the problem is still allowed.
+
+| Case | Why |
+|---|---|
+| A registration on a consignment that already has an accepted registration (a duplicate) | Only one registration per consignment can be accepted |
+| A purchase on a consignment that already has an accepted purchase | Only one purchase per consignment can be accepted |
+| An alert of type `handoff_order`: a step recorded after the purchase | Nothing can follow a purchase on the blockchain, so the step could only fail |
+
+**`record_tampered`** alerts (raised by verification, still to be built) sit on a step that
+is already on the blockchain. That step's review status can never change, so either decision
+closes the alert and leaves the step as it is. Closing it releases the hold. The fix for a
+tampered record is restoring the row from a backup (a known limitation in the decisions log).
+
+**Two officers deciding at once:** the consignment, the alert and its step are locked while
+the decision is checked and saved, so the second officer waits and then gets 409
+`INVALID_STATUS_TRANSITION`.
+
+**Errors these endpoints can return**, on top of the [token errors](#authentication):
+
+| Status | Code | When | Message |
+|---|---|---|---|
+| 400 | `VALIDATION_FAILED` | The list has an unknown `status` ("must be open, reviewed or dismissed") or `type`, a `limit` or `offset` that is not plain digits or out of range, or any other parameter; `{id}` is not a UUID ("must be a valid alert id", checked before the body); `notes` is missing, under 3 or over 500 characters after trimming, or comes with another field | Some fields are missing or invalid. |
+| 403 | `FORBIDDEN` | Logged in and active, but not an officer. The decisions check this again inside the service, so an account that is not an active officer can never close an alert, whatever calls it | You do not have permission to do this. |
+| 404 | `ALERT_NOT_FOUND` | No alert has this id | No alert has this id. |
+| 409 | `INVALID_STATUS_TRANSITION` | The alert is already closed | Only an open alert can be reviewed. This alert is dismissed. (The wording names the decision and the actual status.) |
+| 409 | `STEP_CANNOT_BE_CLEARED` | Dismiss: a duplicate registration | This step cannot be cleared: the consignment already has an accepted registration. Confirm the problem instead. |
+| 409 | `STEP_CANNOT_BE_CLEARED` | Dismiss: a second purchase | This step cannot be cleared: the consignment already has an accepted purchase. Confirm the problem instead. |
+| 409 | `STEP_CANNOT_BE_CLEARED` | Dismiss: a `handoff_order` alert | This step cannot be cleared: it was recorded after the consignment was purchased, and nothing can follow a purchase on the blockchain. Confirm the problem instead. |
+| 429 | `TOO_MANY_REQUESTS` | More than 60 reviews and dismissals in 15 minutes | Too many alert decisions. Please wait a few minutes and try again. |
+| 500 | `INTERNAL_ERROR` | Unexpected server fault | Something went wrong |
+
+---
+
+## GET /alerts
+
+The alert queue. With no query it lists the first page of **open** alerts, **oldest
+first**: the queue an officer works through. Closed alerts are listed **newest decision
+first**.
+
+| | |
+|---|---|
+| **Login needed** | Yes, officer only |
+| **Rate limits** | None |
+| **Request body** | None |
+
+**Query parameters**
+
+| Parameter | Default | Rules |
+|---|---|---|
+| `status` | `open` | `open`, `reviewed` or `dismissed` |
+| `type` | every type | `duplicate_consignment`, `quantity_discrepancy`, `gps_zone`, `invalid_signature`, `handoff_order` or `record_tampered` |
+| `limit` | `20` | Whole number, 1 to 100 |
+| `offset` | `0` | Whole number, 0 to 10 000 |
+
+As for [`GET /admin/users`](#get-adminusers), `limit` and `offset` must be plain digits, and
+any other parameter is refused.
+
+```
+GET /alerts?status=open&type=quantity_discrepancy
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+```
+
+**200 OK** (all values fake):
+
+```json
+{
+  "alerts": [
+    {
+      "id": "7a3e9b10-0000-4000-8000-000000000101",
+      "type": "quantity_discrepancy",
+      "severity": "medium",
+      "status": "open",
+      "details": {
+        "weightMg": "1320000", "thresholdPercent": 10, "failedBaselines": ["registration"],
+        "registration": { "stepId": "9d4e5f60-0000-4000-8000-000000000001", "weightMg": "1500000",
+                          "differenceMg": "-180000", "exceeded": true }
+      },
+      "createdAt": "2026-11-15T09:00:01.120Z",
+      "step": {
+        "id": "9d4e5f60-0000-4000-8000-000000000002",
+        "type": "handoff",
+        "reviewStatus": "flagged",
+        "anchorStatus": "pending",
+        "capturedAt": "2026-11-15T08:55:00.000Z",
+        "receivedAt": "2026-11-15T09:00:01.118Z"
+      },
+      "consignment": {
+        "id": "5c0d7e21-0000-4000-8000-000000000001",
+        "qrCode": "MC-2026-000123",
+        "mineral": "gold",
+        "stage": "registered",
+        "held": true
+      },
+      "actor": { "id": "3f2b6c1e-0000-4000-8000-000000000002", "username": "bwalya_t", "role": "transporter" },
+      "review": null
+    }
+  ],
+  "total": 1,
+  "limit": 20,
+  "offset": 0
+}
+```
+
+`total` counts every alert matching `status` and `type`, not only this page, and is read in
+the same snapshot as the page. An `offset` past the end gives an empty `alerts` list with the
+real `total`.
+
+**Errors:** `VALIDATION_FAILED` and `FORBIDDEN`.
+
+---
+
+## GET /alerts/{id}
+
+One alert, with the other alerts on the same consignment (on any of its steps, open or
+closed, oldest first), so the officer sees what else is waiting: closing one alert does not
+release the hold while another is open.
+
+| | |
+|---|---|
+| **Login needed** | Yes, officer only |
+| **Rate limits** | None |
+| **Request body** | None |
+
+**200 OK**: `{ "alert": … }`, the [alert view](#the-alert-view) with one more field:
+
+```json
+{
+  "alert": {
+    "id": "7a3e9b10-0000-4000-8000-000000000101",
+    "type": "quantity_discrepancy",
+    "…": "the rest of the alert view, as in GET /alerts",
+    "otherAlerts": [
+      { "id": "7a3e9b10-0000-4000-8000-000000000102", "type": "gps_zone", "severity": "medium",
+        "status": "dismissed", "stepId": "9d4e5f60-0000-4000-8000-000000000001",
+        "createdAt": "2026-11-15T08:30:00.410Z" }
+    ]
+  }
+}
+```
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN` and `ALERT_NOT_FOUND`.
+
+---
+
+## POST /alerts/{id}/review
+
+"Confirm problem": closes an open alert as a real problem. The alert becomes `reviewed`, and
+its step becomes `rejected` (see [the two decisions](#the-two-decisions)); a rejected step is
+never anchored.
+
+| | |
+|---|---|
+| **Login needed** | Yes, officer only |
+| **Rate limits** | 60 reviews and dismissals per 15 minutes per officer, together |
+
+**Request body**
+
+| Field | Type | Required | Rules |
+|---|---|---|---|
+| `notes` | string | yes | Surrounding spaces and line breaks are trimmed. 3–500 characters. Line breaks inside are kept. Kept permanently in the audit log |
+
+**Notes are kept for ever** in the append-only audit log, where they can never be edited or
+removed, as for reasons. Keep them short and factual, for example `Weighed again at the
+depot: 1.2 kg confirmed, load short`, and do not add personal details that are not needed.
+
+```
+POST /alerts/7a3e9b10-0000-4000-8000-000000000101/review
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+Content-Type: application/json
+```
+
+```json
+{ "notes": "Weighed again at the depot: 1.2 kg confirmed, load short" }
+```
+
+**200 OK**: the closed alert, its step's status now, and the consignment, so the app can
+update its list without asking again.
+
+```json
+{
+  "alert": { "id": "7a3e9b10-0000-4000-8000-000000000101", "status": "reviewed", "…": "the alert view" },
+  "step": { "id": "9d4e5f60-0000-4000-8000-000000000002", "reviewStatus": "rejected" },
+  "consignment": { "id": "5c0d7e21-0000-4000-8000-000000000001", "stage": "registered", "held": false }
+}
+```
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `ALERT_NOT_FOUND`, `INVALID_STATUS_TRANSITION`
+and `TOO_MANY_REQUESTS`.
+
+---
+
+## POST /alerts/{id}/dismiss
+
+"Clear, no problem": closes an open alert as a false alarm. The alert becomes `dismissed`;
+its step becomes `cleared` once none of its alerts is open or reviewed, and a cleared handoff
+or purchase moves the stage (see [the two decisions](#the-two-decisions)).
+
+| | |
+|---|---|
+| **Login needed** | Yes, officer only |
+| **Rate limits** | 60 reviews and dismissals per 15 minutes per officer, together |
+| **Request body** | `notes`, with the same rules as for [review](#post-alertsidreview) |
+
+```json
+{ "notes": "Weighed again at the depot with a checked scale: the load is complete" }
+```
+
+**200 OK**, here for a flagged handoff on a registered consignment with no other open alert:
+
+```json
+{
+  "alert": { "id": "7a3e9b10-0000-4000-8000-000000000101", "status": "dismissed", "…": "the alert view" },
+  "step": { "id": "9d4e5f60-0000-4000-8000-000000000002", "reviewStatus": "cleared" },
+  "consignment": { "id": "5c0d7e21-0000-4000-8000-000000000001", "stage": "in_transit", "held": false }
+}
+```
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `ALERT_NOT_FOUND`, `INVALID_STATUS_TRANSITION`,
+`STEP_CANNOT_BE_CLEARED` and `TOO_MANY_REQUESTS`.
+
+---
+
 ## Reports (FR-09, FR-13)
 
 Two endpoints download records as spreadsheet files (CSV): the custody steps in a period
@@ -2064,7 +2368,7 @@ Neither id, or both, is refused with `"field": "query"`.
 | `step_recorded` | The server received a step (its `received_at`) | both |
 | `alert_raised` | An anomaly check raised an alert on a step | both |
 | `step_anchored` | The step's Sepolia transaction was mined (the block's time) | both |
-| `alert_reviewed`, `alert_dismissed` | An officer closed an alert. Officer review is still to be built; these rows appear once alerts can be closed | both |
+| `alert_reviewed`, `alert_dismissed` | An officer closed an alert ([Alerts](#alerts-fr-08)) | both |
 | `account_event` | A change to the actor's account: `user.create`, `user.register`, `user.approve`, `user.reject`, `user.suspend`, `user.reactivate`, `user.key_register`, `user.key_reset`, `user.activation_reissue`, `user.activate` or `user.password_change`. Logins, and failed logins, activations and password changes, are not included | actor only |
 
 - **An actor's trail** contains the steps that actor recorded, the alerts and anchoring of

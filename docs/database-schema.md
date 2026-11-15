@@ -151,8 +151,9 @@ one database transaction, so every consignment has at least one step.
     - `audit_logs.occurred_at` is `now()`, so an entry such as `transaction.create` is earlier
       than the step it records; if audit entries are ever merged into a trail by time, they
       would sort before their step.
-    - `alerts.reviewed_at` should be written with `clock_timestamp()` when officer review is
-      built.
+    - `alerts.reviewed_at` is written with `clock_timestamp()` by the officer's decision
+      (`alertService.js`), so it is never earlier than the alert's own `created_at`, even
+      inside a transaction that began before the alert was raised.
     - `consignments.created_at` is not a display time for "registered at": it is slightly
       earlier than the registration step; use the registration's `received_at`.
   - `users.activation_expires_at` is written as `clock_timestamp() + 72 hours` and checked
@@ -324,6 +325,44 @@ one database transaction, so every consignment has at least one step.
   earlier than the step's `received_at`, and the audit trail lists it after the step. Alerts
   stored before 11 Nov carry their transaction's start time and can sort before their step
   (a known limitation; development data only).
+
+**Closing an alert** (`backend/src/services/alertService.js`; endpoints in
+[api.md, Alerts](api.md#alerts-fr-08)). An officer's decision is one database transaction
+holding the change to the alert, to its step and to the consignment's stage, and the
+`alert.review` or `alert.dismiss` audit entry:
+
+- **Who:** the reviewer must be an **active `officer`**. The route's guard checks this, and the
+  service checks it again inside the transaction (403 `FORBIDDEN`), reading the user row
+  `FOR SHARE`, so an administrator suspending that officer at the same moment waits until the
+  decision is saved. The check comes after the alert is found, so an unknown alert is a 404
+  for anyone.
+- **Lock order**, always the same: the **user** (`FOR SHARE`), the **consignment**
+  (`FOR UPDATE`, the lock sync takes for every step), the **alert**, then the step's
+  **alerts** (`ORDER BY id`) and the **step** (`FOR UPDATE`). Sync also locks the user (its
+  key, `FOR SHARE`) before the consignment, so a decision and a sync on one consignment wait
+  for each other instead of deadlocking.
+- **Only an open alert closes.** Checked under the lock (409 `INVALID_STATUS_TRANSITION`) and
+  repeated in the `UPDATE … WHERE status = 'open'`. It sets `status`, `reviewed_by`,
+  `review_notes` and `reviewed_at = clock_timestamp()` together, as
+  `alerts_review_fields_match_status` requires.
+- **The step's review status comes from all its alerts**, not only the one closed: any
+  `reviewed` → `rejected`; every one `dismissed` → `cleared`; otherwise it stays `flagged`.
+  Only a `flagged` step is updated (`WHERE review_status = 'flagged'`), so a rejection is
+  never overturned by a later dismissal.
+- **A cleared handoff or purchase moves `consignments.stage` forward** by the same custody
+  rules sync uses (`backend/src/services/custodyRules.js`): handoff `registered → in_transit`,
+  purchase `in_transit → purchased`; a relay, or a stage already past the step, is left alone.
+  A rejected step never moves it.
+- **Three steps cannot be cleared**, and dismissing any of their alerts is refused before
+  anything is written (409 `STEP_CANNOT_BE_CLEARED`): a registration when the consignment has
+  another accepted registration, and a purchase when it has another accepted purchase (the
+  partial unique indexes on [transactions](#transactions) would refuse a second accepted
+  one), and a step with a `handoff_order` alert (the contract accepts nothing after
+  `Purchased`). They can still be reviewed.
+- **`record_tampered`:** the step is already anchored, and
+  `transactions_anchor_only_if_approved` forbids `flagged` or `rejected` on a sent step, so
+  closing this alert never changes the step's review status, and the derived status above
+  ignores `record_tampered` alerts.
 
 **`details` per alert type.** Written by the anomaly checks in
 `backend/src/services/anomalyChecks.js`. Weights are whole milligrams as text, never JSON
@@ -575,7 +614,12 @@ Otherwise anyone with an approved account who had seen a QR code could freeze an
 miner's consignment by registering it again.
 
 Held is worked out by a query, never stored (D3), so closing the last open alert releases
-the hold. The rule is written once, as `HELD` in `backend/src/services/anchorQueue.js`, and
+the hold, whichever decision closed it (see [Closing an alert](#alerts)). A reviewed alert
+leaves its step `rejected`, which the ordering rule ignores, so the consignment's other steps
+go on; a dismissed one leaves it `cleared`, and it is anchored in its turn. Closing a
+`record_tampered` alert also releases the hold, although the step still differs from the
+chain (a known limitation; the record is restored from a backup). The officer's alert list
+shows `held` with this same `HELD` rule. The rule is written once, as `HELD` in `backend/src/services/anchorQueue.js`, and
 `isConsignmentHeld()` there uses the same SQL as the queue. A held consignment still accepts
 new steps, which are checked and stored normally; they simply wait to be anchored.
 
@@ -658,10 +702,13 @@ A CHECK constraint can only see its own row, so these rules live in the backend 
 - the P-256 signature verifies against `signer_public_key`;
 - `latitude` and `longitude` have at most 6 decimal places. The API rejects more, rather
   than letting `numeric(9,6)` round them, and the app rounds to 6 places before signing;
-- the reviewer is an officer, severity follows from the alert type, and an alert never
-  returns to `open`;
-- closing an alert updates the step in the same database transaction: `reviewed` makes
-  the step `rejected`, and `dismissed` makes it `cleared`;
+- the reviewer is an active officer (checked in the service as well as by the route's
+  guard), severity follows from the alert type, and an alert never returns to `open`;
+- closing an alert updates the step in the same database transaction, from all the step's
+  alerts: any `reviewed` makes it `rejected`, all `dismissed` make it `cleared`; a cleared
+  handoff or purchase moves the stage forward; a duplicate registration, a second purchase
+  and a `handoff_order` step are never cleared; a `record_tampered` close leaves the step
+  alone (see [Closing an alert](#alerts));
 - audit `details` never contain passwords, tokens or keys, nor an activation code;
 - only `officer` and `admin` accounts are created as `invited`, and only by an
   administrator (the role is checked by the request schema and again in the service);

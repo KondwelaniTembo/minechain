@@ -1,6 +1,10 @@
 # App endpoints: alerts, consignment view, account edit and delete — plan (15 Nov 2026)
 
-**Status: Plan approved 15 Nov 2026; not built.** Written on 15 Nov 2026 for review in chat, to be built in
+**Status: Plan approved 15 Nov 2026. B1 (alerts) built 15 Nov 2026 in B1.1–B1.4:** B1.1
+`453d3f9`, B1.2 `f37256e`, B1.3 `c11adc5`; B1.4 is the docs commit that adds this line. What
+was built, and where it differs from this plan, is in `docs/api.md` ("Alerts (FR-08)"),
+`docs/database-schema.md` (alerts, "Closing an alert") and `docs/decisions.md` ("Alerts
+(1)–(8)" and their limitations). B2 and B3 are not built. Written on 15 Nov 2026 for review in chat, to be built in
 sub-steps B1.1–B3.4 on the backend branch planned for Mon 16 Nov 2026. Based on
 `docs/decisions.md` Scope (2)–(9), `docs/api.md`, `docs/database-schema.md`,
 `docs/signing-spec.md` (sections 3, 5 and 7), `docs/contract-spec.md` (section 7) and the code
@@ -91,6 +95,13 @@ Scope (5)).
 7. `audit.record` in the same transaction; `held` re-read with `isConsignmentHeld` for the
    answer.
 
+**Built** (15 Nov 2026): B1.1 `453d3f9`, B1.2 `f37256e`, B1.3 `c11adc5`, B1.4 the docs
+commit. Differences from the rows below: B1.2 also checks inside the service that the
+reviewer is an active officer (Alerts (4)); the B1.3 real-stack test uses a **12% light
+handoff, not 20%**, because after a cleared 20% light handoff no purchase weight is within
+10% of both the handoff and the registration, so the purchase could never be accepted
+(Alerts (8)).
+
 | Sub-step | Contents | Size |
 |---|---|---|
 | **B1.1** Read side | `src/services/alertService.js` (`list`, `get`; fixed SQL, columns listed, `HELD` from `anchorQueue.js`), `src/schemas/alerts.js` (`listAlertsQuerySchema`, `alertIdParamsSchema`, `notesBodySchema`; `ALERT_TYPES` from `anomalyChecks.js`), wired as `services.alerts` in `services/index.js`. No routes yet | M |
@@ -120,7 +131,8 @@ Scope (5)).
   relay leaves the stage; each `STEP_CANNOT_BE_CLEARED` case with nothing written;
   `record_tampered` close leaves `review_status` alone; second close → 409; audit write fails
   → nothing saved; `reviewed_at` ≥ the alert's `created_at`. Real stack in
-  `tests/db/alertsRealStack.test.js` with `loggedInSigner`: a 20% light handoff is flagged,
+  `tests/db/alertsRealStack.test.js` with `loggedInSigner`: a 20% light handoff (built with
+  12%, see the note above the table) is flagged,
   the officer dismisses it over HTTP, the consignment anchors, the purchase is accepted.
 - **Security checks:** officer only, admin refused; notes never in an error; fixed SQL with
   parameters only; no personal names in the view; `noStore` on the router; the limiter
