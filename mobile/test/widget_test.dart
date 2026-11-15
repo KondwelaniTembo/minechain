@@ -1,30 +1,20 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// F1's only widget test: the app starts and shows its one screen.
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:minechain/main.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('shows the MineChain title and the foundation text',
+      (WidgetTester tester) async {
+    // pumpWidget builds the app in a test window and draws one frame. No phone
+    // or emulator is needed: the test runs on the laptop.
+    await tester.pumpWidget(const MineChainApp());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    // findsOneWidget fails the test if the text is missing or appears twice.
+    // "MineChain" is the app bar title; MaterialApp's title is not drawn on
+    // screen, so it does not count as a second match.
+    expect(find.text('MineChain'), findsOneWidget);
+    expect(find.text('Foundation build'), findsOneWidget);
   });
 }

@@ -1,8 +1,30 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- The app talks to the MineChain API. Flutter adds INTERNET only to the debug
+         and profile manifests (so hot reload works), not to this one, so without
+         this line a release build would have no network at all. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- usesCleartextTraffic="false": no plain http://, only TLS. The app's own
+         HTTP client enforces this too (pinned roots, TLS 1.3); this is the platform's
+         second line.
+         allowBackup="false": the token and database key in secure storage must not
+         leave the phone in a backup, and a restore onto another phone could not be
+         decrypted by that phone's Keystore anyway.
+         On Android 12+ allowBackup="false" does not stop device-to-device transfer on
+         every phone, so dataExtractionRules (Android 12+) and fullBackupContent
+         (Android 11 and lower) also exclude everything. tools:targetApi only tells
+         lint that dataExtractionRules is meant for API 31+. -->
     <application
-        android:label="minechain"
+        android:label="MineChain"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="false"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        tools:targetApi="31">
         <activity
             android:name=".MainActivity"
             android:exported="true"
