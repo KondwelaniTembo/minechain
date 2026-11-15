@@ -46,3 +46,9 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Build settings given with --dart-define-from-file. The real files are made by
+# hand and never committed; only the example with a fake value is. See
+# lib/core/config/app_config.dart for how to create env/api.json.
+/env/*
+!/env/api.example.json
