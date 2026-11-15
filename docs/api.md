@@ -26,6 +26,8 @@ and `FAKE-SIGNATURE`. None of them is a real identifier, password or token.
 | `POST` | [`/admin/users/{id}/reactivate`](#post-adminusersidreactivate) | Reactivate a suspended account (FR-10) | Yes, admin only |
 | `POST` | [`/admin/users/{id}/reset-key`](#post-adminusersidreset-key) | Remove a suspended account's device key, for a lost phone | Yes, admin only |
 | `POST` | [`/admin/users/{id}/activation-code`](#post-adminusersidactivation-code) | Issue a new activation code for an invited account; the old one stops working (FR-10) | Yes, admin only |
+| `POST` | [`/admin/users/{id}/rename`](#post-adminusersidrename) | Change an account's full name, and nothing else (FR-10) | Yes, admin only |
+| `POST` | [`/admin/users/{id}/delete`](#post-adminusersiddelete) | Delete an account, with a reason: it can never sign in again, and its history is kept (FR-10) | Yes, admin only |
 | `GET` | [`/admin/zones`](#get-adminzones) | List licensed GPS zones by status (FR-11) | Yes, admin only |
 | `POST` | [`/admin/zones`](#post-adminzones) | Create a licensed GPS zone (FR-11) | Yes, admin only |
 | `POST` | [`/admin/zones/{id}/rename`](#post-adminzonesidrename) | Rename a zone (FR-11) | Yes, admin only |
@@ -127,13 +129,13 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
 | Status | Code | When | Message |
 |---|---|---|---|
 | 401 | `TOKEN_MISSING` | No `Authorization` header, another scheme (such as `Basic`), or `Bearer` with nothing after it | Please log in to continue. |
-| 401 | `TOKEN_INVALID` | The token is malformed, forged, tampered with, or no longer matches the account (the user no longer exists, the role changed, or the token was issued before the account's last password change). Logging in again fixes it | Your session is not valid. Please log in again. |
+| 401 | `TOKEN_INVALID` | The token is malformed, forged, tampered with, or no longer matches the account (the user no longer exists, the account was [deleted](#post-adminusersiddelete), the role changed, or the token was issued before the account's last password change). Logging in again fixes it, except for a deleted account, which cannot log in | Your session is not valid. Please log in again. |
 | 401 | `TOKEN_EXPIRED` | The token is older than its lifetime. Ask for the password again | Your session has expired. Please log in again. |
 | 403 | `ACCOUNT_PENDING` | The account is waiting for approval | Your account is waiting for approval by an administrator. |
 | 403 | `ACCOUNT_SUSPENDED` | The account has been suspended | Your account has been suspended. Please contact an administrator. |
 | 403 | `ACCOUNT_REJECTED` | The account request was not approved | Your account request was not approved. Please contact an administrator. |
 | 403 | `ACCOUNT_NOT_ACTIVATED` | The account was created by an administrator and has not been activated yet. An invited account has no password and cannot log in, so the app does not normally meet this code (login answers `INVALID_CREDENTIALS` first) | Your account has not been activated yet. Use the activation code from your administrator. |
-| 403 | `ACCOUNT_NOT_ACTIVE` | Any other status that is not active (a fallback) | Your account is not active. Please contact an administrator. |
+| 403 | `ACCOUNT_NOT_ACTIVE` | Any other status that is not active (a fallback). Also a deleted account, on the rare path where it is deleted between the token check and the endpoint's own read (for example a device key registration); a deleted account's token normally gets 401 `TOKEN_INVALID` first | Your account is not active. Please contact an administrator. For a deleted account: This account has been deleted. Please contact an administrator. |
 | 403 | `FORBIDDEN` | Logged in and active, but this role may not use this endpoint (see [Roles and access](#roles-and-access)) | You do not have permission to do this. |
 
 **401 vs 403:** a 401 means the credentials don't work, and logging in again may help. A 403
@@ -159,6 +161,7 @@ A 403 has no `WWW-Authenticate` header, because the credentials themselves were 
 | `POST /auth/activate` | 30 per 15 minutes | client IP | every request, including invalid ones |
 | `POST /auth/me/password` | 10 per 15 minutes | logged-in user | failed attempts only (every error after the token check, including `VALIDATION_FAILED`). Successful changes are not counted. A request refused for its token never reaches the limiter |
 | `POST /alerts/{id}/review` and `POST /alerts/{id}/dismiss`, together | 60 per 15 minutes | logged-in officer | every request that passes the officer check, including invalid ones (`VALIDATION_FAILED`) and refused ones. Anyone who is not an officer is refused before it and not counted. `GET /alerts` and `GET /alerts/{id}` are not limited |
+| `POST /admin/users/{id}/rename` and `POST /admin/users/{id}/delete`, together | 20 per 15 minutes | logged-in administrator | every request that passes the admin check, including invalid ones (a malformed `{id}` or body, `VALIDATION_FAILED`) and refused ones. Anyone who is not an administrator is refused before it and not counted. The other `/admin/users` endpoints are not counted and have no limit yet. Message: "Too many account changes. Please wait a few minutes and try again." |
 
 The per-IP limits are high on purpose. Zambian mobile networks use carrier-grade NAT, so a
 whole mining site can share one public IP address. The per-username limit is what stops
@@ -244,7 +247,7 @@ the endpoint sections below remain the source of truth for what exists.
 | List accounts; suspend and reactivate them (FR-10): `GET /admin/users`, `/admin/users/{id}/suspend`, `/reactivate` | | | | | ✓ | **Built** |
 | Reset a lost phone's device key (FR-10, [signing spec](signing-spec.md) section 2): `/admin/users/{id}/reset-key` | | | | | ✓ | **Built** |
 | Create officer and admin accounts, and reissue their activation codes (FR-10): `POST /admin/users`, `/admin/users/{id}/activation-code` | | | | | ✓ | **Built** |
-| Change an account's role; delete an account with no history (FR-10) | | | | | ✓ | Planned |
+| Rename an account (full name only) and soft-delete an account, keeping its history (FR-10): `/admin/users/{id}/rename`, `/delete`. A role, username or licence number is never changed | | | | | ✓ | **Built** |
 | Manage licensed GPS extraction zones (FR-11): `/admin/zones` | | | | | ✓ | **Built** |
 | Monitor blockchain anchoring: the worker, stuck and failed steps, a list of problems (System Administrator use case): `GET /admin/anchoring` | | | | | ✓ | **Built** |
 | Trigger a manual re-synchronisation (System Administrator use case): `POST /admin/anchoring/run`, `/admin/anchoring/steps/{id}/retry` | | | | | ✓ | **Built** |
@@ -447,7 +450,7 @@ so it never contains a name or other personal data.
 |---|---|---|---|
 | 400 | `VALIDATION_FAILED` | A field is missing, empty, too long (password over 1024 characters), or not allowed | Some fields are missing or invalid. |
 | 400 | `INVALID_JSON` | The body is not valid JSON | Request body is not valid JSON |
-| 401 | `INVALID_CREDENTIALS` | The username does not exist, **or** the password is wrong, **or** the account is invited and has no password yet. All three are deliberately identical, and take about the same time, so nobody can find out which usernames exist or which accounts are waiting for activation | Username or password is incorrect. |
+| 401 | `INVALID_CREDENTIALS` | The username does not exist, **or** the password is wrong, **or** the account has no password: invited and not activated yet, or [deleted](#post-adminusersiddelete). All are deliberately identical, and take about the same time, so nobody can find out which usernames exist, which accounts are waiting for activation, or which were deleted | Username or password is incorrect. |
 | 403 | `ACCOUNT_PENDING` | Correct password, but the account is waiting for approval | Your account is waiting for approval by an administrator. |
 | 403 | `ACCOUNT_SUSPENDED` | Correct password, but the account is suspended | Your account has been suspended. Please contact an administrator. |
 | 403 | `ACCOUNT_REJECTED` | Correct password, but the account request was not approved | Your account request was not approved. Please contact an administrator. |
@@ -591,7 +594,7 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIG
 | Status | Code | When | Message |
 |---|---|---|---|
 | 401 | `TOKEN_MISSING` | No usable `Authorization: Bearer` header | Please log in to continue. |
-| 401 | `TOKEN_INVALID` | Malformed, forged or tampered token, or the user no longer exists, or the role changed, or the token was issued before the account's last password change | Your session is not valid. Please log in again. |
+| 401 | `TOKEN_INVALID` | Malformed, forged or tampered token, or the user no longer exists or was deleted, or the role changed, or the token was issued before the account's last password change | Your session is not valid. Please log in again. |
 | 401 | `TOKEN_EXPIRED` | The token's lifetime has passed | Your session has expired. Please log in again. |
 | 403 | `ACCOUNT_PENDING` | The account was set back to pending after the token was issued | Your account is waiting for approval by an administrator. |
 | 403 | `ACCOUNT_SUSPENDED` | The account was suspended after the token was issued | Your account has been suspended. Please contact an administrator. |
@@ -782,12 +785,13 @@ the session away over a typing mistake.
 
 ## Admin account management
 
-Eight endpoints let an administrator review account requests (FR-12), create officer and
+Ten endpoints let an administrator review account requests (FR-12), create officer and
 administrator accounts and reissue their activation codes (FR-10), suspend or reactivate
-accounts (FR-10), and remove a lost phone's device key. Changing a role and deleting an
-account are planned for a later step.
+accounts (FR-10), remove a lost phone's device key, correct an account's full name, and
+delete an account (FR-10). A role, username or licence number is never changed through the
+API.
 
-**Account statuses.** Every account has one of five:
+**Account statuses.** Every account has one of six:
 
 | Status | Meaning | Can log in |
 |---|---|---|
@@ -796,18 +800,23 @@ account are planned for a later step.
 | `active` | Approved or activated | Yes |
 | `suspended` | Suspended by an administrator, with a reason | No (403 `ACCOUNT_SUSPENDED`) |
 | `rejected` | The request was refused, with a reason. Final | No (403 `ACCOUNT_REJECTED`) |
+| `deleted` | Deleted by an administrator ([`/delete`](#post-adminusersiddelete)), with a reason. Final. It has no password and no device key; the account and its history are kept | No: login answers `INVALID_CREDENTIALS`, as for an unknown username, and every token issued before the delete gets 401 `TOKEN_INVALID` |
 
-An invited account is not active, so approve, reject, suspend, reactivate and reset key all
-refuse it, and it never counts as one of the active administrators that must remain.
+Invited and deleted accounts are not active, so approve, reject, suspend, reactivate and
+reset key all refuse them, and neither ever counts as one of the active administrators that
+must remain.
 
-**Rules shared by all eight:**
+**Rules shared by all ten:**
 
 - **Admin only.** Every request needs a token, and the account must be an active `admin`.
   Anyone else gets 401 or 403 (see [Roles and access](#roles-and-access)). This applies to
   every path under `/admin/users`, including paths that do not exist: a non-admin gets 403,
   not 404, so the paths cannot be discovered.
 - **No caching.** Every response, errors included, carries `Cache-Control: no-store`.
-- **Rate limits:** none yet. To be reviewed in the security review on Saturday 14 November.
+- **Rate limits:** rename and delete share a limit of 20 per 15 minutes per administrator,
+  counted before validation, so malformed requests count too (see
+  [Rate limits](#rate-limits)). The other eight have no limit yet; they are on the final
+  review list.
 - **One action per endpoint.** Each action moves an account from one status to another, and
   only from that status:
 
@@ -820,28 +829,34 @@ refuse it, and it never counts as one of the active administrators that must rem
   | Reset key | `suspended` | `suspended` (the device key is removed; the status does not change) | `{ "reason": "…" }` | Accounts with a device key: `miner`, `transporter`, `buyer` |
   | Create | (new account) | `invited` | `{ "username", "fullName", "role" }` | `officer`, `admin` only |
   | Reissue activation code | `invited` | `invited` (a new code; the old one stops working) | none, or `{}` | `officer`, `admin` (the only invited accounts) |
+  | Rename | `pending`, `invited`, `active`, `suspended` | the same status (only `fullName` changes) | `{ "fullName": "…" }` | All roles |
+  | Delete | `active`, `suspended`, `invited` | `deleted` | `{ "reason": "…" }` | All roles, with the same two extra rules for administrators as suspend |
 
-  **Rejected is final.** No action leads out of `rejected`. The person must request a new
-  account under a different username.
+  **Rejected and deleted are final.** No action leads out of either, and neither can be
+  renamed. The person must request a new account under a different username: the old one
+  stays taken.
 - **Two administrators acting at once:** the check and the change happen in one database
-  step, so only one of them succeeds. The other gets 409 `INVALID_STATUS_TRANSITION`.
+  step (or, for rename and delete, under a lock on the account), so only one of them
+  succeeds. The other gets 409 `INVALID_STATUS_TRANSITION`.
 - **Every change is recorded** in the audit log, in the same database transaction, with the
   administrator as the actor, their IP address, and `{ from, to }` plus the reason where
   there is one. The actions are `user.approve`, `user.reject`, `user.suspend` and
   `user.reactivate`. A key reset is recorded as `user.key_reset` with `{ reason,
   keyFingerprint }`, naming the removed key by fingerprint. A created account is recorded
   as `user.create` with `{ source: "admin", role, activationExpiresAt }`, and a new code as
-  `user.activation_reissue` with `{ activationExpiresAt }`. An activation code is never
-  recorded.
+  `user.activation_reissue` with `{ activationExpiresAt }`. A rename is recorded as
+  `user.rename` with `{ field: "fullName" }` only, never the old or new name, and a delete as
+  `user.delete` with `{ from, to: "deleted", reason, keyFingerprint }` (`null` when there was
+  no key). An activation code is never recorded.
 - **`{id}`** is the user's id, a UUID. Upper- or lower-case letters are both accepted.
 
-**Reasons.** Reject, suspend and reset key need a reason: 3 to 500 characters after surrounding spaces
+**Reasons.** Reject, suspend, reset key and delete need a reason: 3 to 500 characters after surrounding spaces
 are trimmed. Line breaks are allowed. **A reason is kept permanently** in the append-only
 audit log, where it can never be edited or removed. Keep it short and factual, for example
 `Licence number could not be verified`, and do not add personal details that are not needed.
 The reason is shown to administrators only, never to the account's owner.
 
-**The admin view of a user.** All eight endpoints return users in this form. Unlike
+**The admin view of a user.** All ten endpoints return users in this form. Unlike
 [`GET /auth/me`](#get-authme), it includes the status reason, the approval and the
 activation expiry. It never contains the password hash, the on-chain reference, the
 activation code or its hash, or the device key itself, only the key's fingerprint.
@@ -850,7 +865,7 @@ activation code or its hash, or the device key itself, only the key's fingerprin
 |---|---|
 | `id` | The user's id |
 | `username`, `fullName`, `licenceNumber`, `role`, `status` | As in `/auth/me` |
-| `statusReason` | Why the account is suspended or rejected; `null` otherwise |
+| `statusReason` | Why the account is suspended, rejected or deleted; `null` otherwise |
 | `approvedBy` | The id of the administrator who approved the account; `null` if never approved through the API (for example a seeded account) |
 | `approvedAt` | When it was approved; `null` with `approvedBy` |
 | `createdAt`, `updatedAt` | When the account was requested, and when it last changed |
@@ -861,15 +876,16 @@ activation code or its hash, or the device key itself, only the key's fingerprin
 
 | Status | Code | When | Message |
 |---|---|---|---|
-| 400 | `VALIDATION_FAILED` | `{id}` is not a UUID; a reason is missing, too short or too long; a body or query has a field it should not | Some fields are missing or invalid. |
+| 400 | `VALIDATION_FAILED` | `{id}` is not a UUID; a reason or full name is missing, too short or too long; a body or query has a field it should not | Some fields are missing or invalid. |
 | 403 | `FORBIDDEN` | Logged in and active, but not an administrator | You do not have permission to do this. |
 | 403 | `CANNOT_SUSPEND_SELF` | An administrator tried to suspend their own account | You cannot suspend your own account. |
+| 403 | `CANNOT_DELETE_SELF` | An administrator tried to delete their own account. Checked before anything else | You cannot delete your own account. |
 | 404 | `USER_NOT_FOUND` | No user has this id | No user has this id. |
 | 400 | `ROLE_NOT_CREATABLE` | Create with a role other than `officer` or `admin`. The request schema refuses it first (`VALIDATION_FAILED`, "must be officer or admin"); the service checks again for any other caller | Only officer and administrator accounts are created by an administrator. Miners, transporters and buyers register themselves. |
-| 409 | `INVALID_STATUS_TRANSITION` | The account is not in the status this action starts from (for example approving an active account, resetting the key of an account that is not suspended, reissuing a code for an account that is not invited, or anything on a rejected one) | Only a pending account can be approved. This account is active. (The wording names the action and the actual status, with "an" before `active` and `invited`.) |
+| 409 | `INVALID_STATUS_TRANSITION` | The account is not in the status this action starts from (for example approving an active account, resetting the key of an account that is not suspended, reissuing a code for an account that is not invited, or anything on a rejected or deleted one) | Only a pending account can be approved. This account is active. (The wording names the action and the actual status, with "an" before `active` and `invited`.) Rename and delete have their own fixed messages; see their sections |
 | 409 | `ROLE_NOT_APPROVABLE` | Approve or reject on an officer or administrator account. Those are created by an administrator, never requested | Officer and administrator accounts are created by an administrator, not approved or rejected. |
-| 409 | `USERNAME_TAKEN` | Create with a username that exists already, in any letter case, whatever that account's status (invited, pending and rejected included) | That username is already taken. Please choose another. |
-| 409 | `LAST_ACTIVE_ADMIN` | Suspending this administrator would leave no other active administrator | At least one other active administrator must remain, so this account cannot be suspended. |
+| 409 | `USERNAME_TAKEN` | Create with a username that exists already, in any letter case, whatever that account's status (invited, pending, rejected and deleted included) | That username is already taken. Please choose another. |
+| 409 | `LAST_ACTIVE_ADMIN` | Suspending or deleting this administrator would leave no other active administrator | Suspend: At least one other active administrator must remain, so this account cannot be suspended. Delete: At least one other active administrator must remain, so this account cannot be deleted. |
 | 409 | `NO_PUBLIC_KEY` | Reset key on a suspended account that has no device key | This account has no device key to reset. |
 | 500 | `INTERNAL_ERROR` | Unexpected server fault | Something went wrong |
 
@@ -890,7 +906,7 @@ of pending requests: the queue an administrator works through (FR-12).
 
 | Parameter | Default | Rules |
 |---|---|---|
-| `status` | `pending` | `pending`, `active`, `suspended`, `rejected` or `invited` |
+| `status` | `pending` | `pending`, `active`, `suspended`, `rejected`, `invited` or `deleted` |
 | `limit` | `20` | Whole number, 1 to 100 |
 | `offset` | `0` | Whole number, 0 to 10 000: how many matching accounts to skip |
 
@@ -1217,6 +1233,149 @@ never the code.
 **Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `USER_NOT_FOUND` and
 `INVALID_STATUS_TRANSITION` ("Only an invited account can get a new activation code. This
 account is active."). See [the shared table](#admin-account-management).
+
+---
+
+## POST /admin/users/{id}/rename
+
+Changes an account's full name (FR-10), for example to correct a typing mistake made at
+registration. **Only the full name changes.** A role, username or licence number can never
+be changed this way, or by any other endpoint.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | 20 renames and deletes per 15 minutes per administrator, together |
+
+**Request body**
+
+| Field | Type | Required | Rules |
+|---|---|---|---|
+| `fullName` | string | yes | As at [registration](#post-authregister): surrounding spaces are trimmed, 1–100 characters |
+
+Any other field is refused with `VALIDATION_FAILED` ("is not allowed"), including `role`,
+`username`, `licenceNumber` and `status`.
+
+```
+POST /admin/users/3f2b6c1e-0000-4000-8000-000000000001/rename
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+Content-Type: application/json
+```
+
+```json
+{ "fullName": "Mutale Banda Chanda" }
+```
+
+**200 OK**: the user in the admin view, with the new `fullName` and the same status.
+
+- **Allowed from** `pending`, `invited`, `active` and `suspended`. A pending request can be
+  corrected before it is approved.
+- **The same name again** answers 200 with the account as it is: nothing is written and
+  nothing is recorded, so a retried request adds no second audit entry.
+- **A rename keeps sessions.** The account's tokens keep working, and
+  [`/auth/me`](#get-authme) shows the new name on its next request.
+- **Recorded** in the audit log as `user.rename` with `{ field: "fullName" }` only. The audit
+  log is append-only, so a name written there could never be removed; the name itself lives
+  only in the account.
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `USER_NOT_FOUND` and
+`INVALID_STATUS_TRANSITION`, with these messages:
+
+| Account is | Message |
+|---|---|
+| `rejected` | A rejected account cannot be changed. |
+| `deleted` | A deleted account cannot be changed. |
+
+See [the shared table](#admin-account-management).
+
+---
+
+## POST /admin/users/{id}/delete
+
+Deletes an account (FR-10): a **soft delete**. The account can never sign in again by any
+path, but its row is kept, so every custody step, alert, approval, report row and audit entry
+that names it keeps its meaning, and its anchored steps still point at a real account.
+**A delete cannot be undone.**
+
+POST, not `DELETE`, like the other account actions: a reason travels in the body, and some
+proxies and clients drop the body of a `DELETE` request.
+
+| | |
+|---|---|
+| **Login needed** | Yes, admin only |
+| **Rate limits** | 20 renames and deletes per 15 minutes per administrator, together |
+
+**Request body**: `reason`, with the same rules as for [reject](#post-adminusersidreject).
+
+```
+POST /admin/users/3f2b6c1e-0000-4000-8000-000000000001/delete
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.FAKE-PAYLOAD.FAKE-SIGNATURE
+Content-Type: application/json
+```
+
+```json
+{ "reason": "Left the cooperative" }
+```
+
+**200 OK**
+
+```json
+{
+  "user": {
+    "id": "3f2b6c1e-0000-4000-8000-000000000001",
+    "username": "mutale_banda",
+    "fullName": "Mutale Banda",
+    "licenceNumber": "ZM-ASM-0042",
+    "role": "miner",
+    "status": "deleted",
+    "statusReason": "Left the cooperative",
+    "approvedBy": "3f2b6c1e-0000-4000-8000-0000000000ad",
+    "approvedAt": "2026-11-06T10:15:00.000Z",
+    "createdAt": "2026-11-05T09:00:00.000Z",
+    "updatedAt": "2026-11-15T09:30:00.000Z",
+    "publicKeyFingerprint": null,
+    "activationExpiresAt": null
+  }
+}
+```
+
+**What a delete does**, in one database transaction with its audit entry:
+
+- the status becomes `deleted`, with the reason in `statusReason`;
+- the password hash is erased, so login answers `INVALID_CREDENTIALS`, exactly as for an
+  unknown username;
+- the device key is removed, so nothing more can be signed or synced with it;
+- any activation code is erased, so an invited account can no longer be activated;
+- **every session ends:** every token issued before the delete gets 401 `TOKEN_INVALID`.
+
+**What it keeps:** the username (it stays taken, in any letter case, and can never be used
+again), the full name, the role, the licence number and the approval, and every record that
+names the account. Steps already recorded keep verifying, because each keeps a copy of the
+key that signed it.
+
+- **Allowed from** `active`, `suspended` and `invited`. A pending request is rejected
+  instead, which tells the person why.
+- **Two rules for administrator accounts**, as for [suspend](#post-adminusersidsuspend): an
+  administrator cannot delete themselves (403 `CANNOT_DELETE_SELF`, checked before anything
+  else), and at least one other active administrator must remain (409 `LAST_ACTIVE_ADMIN`),
+  also when two administrators try to delete each other at the same moment.
+- **A sync in progress** when the delete happens either finishes first, signed while the
+  account was active, or waits for the delete and then stores nothing (`deferred`,
+  `NO_DEVICE_KEY`).
+- **Recorded** in the audit log as `user.delete` with `{ from, to: "deleted", reason,
+  keyFingerprint }`: the removed key by fingerprint, or `null` when there was none.
+
+**Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `CANNOT_DELETE_SELF`, `USER_NOT_FOUND`,
+`LAST_ACTIVE_ADMIN` ("At least one other active administrator must remain, so this account
+cannot be deleted.") and `INVALID_STATUS_TRANSITION`, with these messages:
+
+| Account is | Message |
+|---|---|
+| `pending` | A pending account cannot be deleted. Reject the request instead, so the person is told why. |
+| `rejected` | Only an active, suspended or invited account can be deleted. This account is rejected. |
+| `deleted` | This account has already been deleted. |
+
+See [the shared table](#admin-account-management).
 
 ---
 

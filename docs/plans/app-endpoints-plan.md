@@ -4,7 +4,13 @@
 `453d3f9`, B1.2 `f37256e`, B1.3 `c11adc5`; B1.4 is the docs commit that adds this line. What
 was built, and where it differs from this plan, is in `docs/api.md` ("Alerts (FR-08)"),
 `docs/database-schema.md` (alerts, "Closing an alert") and `docs/decisions.md` ("Alerts
-(1)–(8)" and their limitations). B2 and B3 are not built. Written on 15 Nov 2026 for review in chat, to be built in
+(1)–(8)" and their limitations). **B3 (account edit and soft delete) built 15 Nov 2026 in
+B3.1–B3.4:** B3.1 `6a85bbf`, B3.2 `677764e`, B3.3 `e9d9d40`; B3.4 is the docs commit that adds
+this sentence. Details in `docs/api.md` (`/admin/users/{id}/rename` and `/delete`),
+`docs/database-schema.md` (users, "Deleted accounts") and `docs/decisions.md` ("Accounts
+(21)–(30)" and their limitations). **Before the pull request with B3 is merged, the
+users-deleted migration must be run against the production database (see §5).** B2 is not
+built. Written on 15 Nov 2026 for review in chat, to be built in
 sub-steps B1.1–B3.4 on the backend branch planned for Mon 16 Nov 2026. Based on
 `docs/decisions.md` Scope (2)–(9), `docs/api.md`, `docs/database-schema.md`,
 `docs/signing-spec.md` (sections 3, 5 and 7), `docs/contract-spec.md` (section 7) and the code
@@ -269,6 +275,11 @@ raising is recorded by the alert row, not an audit entry.
 
 ### Endpoints (under the existing `/admin/users` guard)
 
+> **Changed 15 Nov 2026 by the developer's decision (Accounts (23)):** built as
+> `POST /admin/users/{id}/rename` (`{ fullName }`) and `POST /admin/users/{id}/delete`
+> (`{ reason }`), not `PATCH` and `DELETE` as in the table below: the same shape as the other
+> account actions and zone rename, and a `DELETE` body may be dropped by proxies or clients.
+
 | Method and path | Body | From statuses | Answer |
 |---|---|---|---|
 | PATCH /admin/users/{id} | `{ fullName }` (`fullNameSchema`, strict: any other field such as `role`, `username`, `licenceNumber` → 400) | `pending`, `invited`, `active`, `suspended` | 200 `{ user }` |
@@ -292,6 +303,25 @@ raising is recorded by the alert row, not an audit entry.
 - **History kept:** no row is removed; steps, alerts, approvals and audit entries keep their
   user id, and `actor_ref` stays, so anchored steps keep their meaning. The username stays
   taken (`users_username_lower_key` covers every status).
+
+**Built** (15 Nov 2026): B3.1 `6a85bbf`, B3.2 `677764e`, B3.3 `e9d9d40`, B3.4 the docs
+commit. Differences from the rows below:
+
+- **POST routes** instead of `PATCH` and `DELETE` (the note above, Accounts (23)).
+- **B3.1 adds a fourth rule,** `users_deleted_has_no_public_key`
+  (`status <> 'deleted' OR public_key IS NULL`), at the developer's request, as defence in
+  depth (Accounts (24)).
+- **B3.2:** `notActiveError('deleted')` reuses `ACCOUNT_NOT_ACTIVE` with its own message
+  rather than a new code (Accounts (27)); the login audit reason became `account_<status>`,
+  so a deleted account is not logged as invited (Accounts (26)); the admin-race test follows
+  the zone deactivate test, because suspend has no two-connection test (Accounts (30)).
+- **B3.3:** the real-stack test makes the miner by registration and approval, since
+  `POST /admin/users` creates only officers and administrators.
+
+> **Production migration: still to do.** Run `1794528000000_users-deleted` against the
+> production database from the laptop, with `verify-full` (`docs/deployment.md`), **before**
+> the pull request containing B3 is merged. Merging deploys automatically, and Render runs
+> no migrations.
 
 | Sub-step | Contents | Size |
 |---|---|---|
@@ -332,7 +362,7 @@ Each sub-step is one commit with `npm test` and `npm run test:db` passing. Total
 unit and +78 DB tests; one migration. Render needs `npm run migrate` against the production
 database after B3.1 (from the laptop, `verify-full`, per `deployment.md`).
 
-**Production migration timing.** The B3.1 migration must be run against the production
+**Production migration timing (still to do, B3 is built).** The B3.1 migration must be run against the production
 database from the laptop, with `verify-full` as `deployment.md` describes, **before** the pull
 request containing B3 is merged. Merging to `main` deploys to Render automatically, so code
 that writes `status = 'deleted'` would otherwise go live against the old constraints.
