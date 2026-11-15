@@ -53,7 +53,7 @@ below.
 | Region and plan | Frankfurt, Free |
 | Created | 12 November 2026, about 23:03 |
 | Expires | about 12 December 2026 (30 days after creation) |
-| Schema | All 10 migrations in `backend/migrations/`, applied from the laptop |
+| Schema | All 11 migrations in `backend/migrations/`, applied from the laptop: 10 on 12–13 Nov, and `1794528000000_users-deleted` on 15 Nov ([Migrations after the first deploy](#migrations-after-the-first-deploy)) |
 | Data at start | One active admin account and the demo GPS zone, from the production-admin-only seed; no demo users |
 
 Render gives two connection strings. The **Internal URL** works only inside Render's private
@@ -102,6 +102,25 @@ The anchoring settings not in this list (`CHAIN_ID`, `ANCHOR_INTERVAL_SECONDS`,
 `ANCHOR_CONFIRMATIONS`, `ANCHOR_MAX_ATTEMPTS`, `ANCHOR_LOW_BALANCE_ETH`,
 `ANCHOR_MAX_FEE_GWEI`) are not set, so the defaults in `backend/src/config.js` apply.
 
+**The chain settings also drive verification.** `SEPOLIA_RPC_URL`,
+`SEPOLIA_RPC_URL_FALLBACK` and `MINECHAIN_CONTRACT_ADDRESS` are read by two parts of the API,
+not one:
+
+- the anchoring worker, which also needs `RECORDER_PRIVATE_KEY` and runs only when
+  `ANCHOR_ENABLED=true`;
+- the consignment view's chain reader (`GET /consignments/by-qr/{qrCode}`), which needs no
+  key and exists whenever `SEPOLIA_RPC_URL` and `MINECHAIN_CONTRACT_ADDRESS` are both set,
+  **even with `ANCHOR_ENABLED=false`**. The fallback stays optional.
+
+If either of the two is unset, the server still starts, with no chain reader. The start-up log
+then says "Verification: no chain reader (RPC URL or contract address not set)", and every
+consignment view reports its chain checks as `chain_unavailable`. A configured reader makes no
+network call at start-up. On its first use of each endpoint it checks that the endpoint is on
+Sepolia and that the code at the contract address has the expected hash (the constant in
+`backend/src/chain/mineChainAbi.js`, the one the anchoring preflight also uses). A failed check
+is logged with the endpoint's role only (primary or fallback) and also gives
+`chain_unavailable`, never a tamper result.
+
 Never on Render:
 
 - **The contract deployer key.** It holds the admin role on the contract and stays on the
@@ -136,6 +155,27 @@ single recorder wallet.
    ([Verification](#verification)).
 7. **14 Nov, 20:35.** Enabled anchoring. Preflight passed, and the worker started ticking.
 8. **14 Nov, 21:15.** First backup ([Backups and restore](#backups-and-restore)).
+9. **15 Nov, about 22:30.** Backup, then migration `1794528000000_users-deleted`, before the
+   branch that needs it was merged
+   ([Migrations after the first deploy](#migrations-after-the-first-deploy)).
+
+### Migrations after the first deploy
+
+Merging to `main` deploys to Render automatically, and Render runs no migrations. A branch that
+adds a migration therefore follows this order:
+
+1. **Back up** production with `pg_dump` ([Backups and restore](#backups-and-restore)).
+2. **Migrate production from the laptop**: `npm run migrate`, over the External URL with
+   `sslmode=verify-full`.
+3. **Confirm**: run `npm run migrate` again; it must say "No migrations to run!".
+4. **Then merge.**
+
+The migration has to stay compatible with the code still running from `main` until the merge
+deploys the new code.
+
+| Date | Migration | What was done |
+|---|---|---|
+| 15 Nov 2026, about 22:30 | `1794528000000_users-deleted` | Backup first, then `npm run migrate` applied it; a second run said "No migrations to run!". Production now has 11 migrations. The development database was already up to date. The branch was not merged yet, so Render was still running `main`. |
 
 ---
 
@@ -238,6 +278,9 @@ The free database has **no automatic backups**, so backups are made by hand.
 
 - **First backup, 14 Nov, 21:15:** `pg_dump` in custom format, 36,192 bytes, over a verified
   TLS connection. It is stored in a folder outside the repository.
+- **Second backup, 15 Nov, about 22:30**, before the users-deleted migration: `pg_dump` in
+  custom format, 36,192 bytes, over a verified TLS connection (`sslmode=verify-full`), stored
+  outside the repository.
 - **Trust store.** On Windows, psql and libpq with `sslrootcert=system` failed. The fix:
   export Node's 149 trusted root certificates to a PEM file and point `PGSSLROOTCERT` at it.
   `sslmode=verify-full` then checks the server's certificate and name.
