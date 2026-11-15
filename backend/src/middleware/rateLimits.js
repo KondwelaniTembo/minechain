@@ -5,7 +5,7 @@ import { AppError } from '../errors.js';
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
 
-// DEV-SHORTCUT: in-memory rate-limit stores (register, login IP, login username, activation, password change, sync, reports, anchoring actions, alert actions and account edits) | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
+// DEV-SHORTCUT: in-memory rate-limit stores (register, login IP, login username, activation, password change, sync, reports, anchoring actions, alert actions, account edits and consignment views) | reset on restart and count per server instance; replace with a shared store (for example PostgreSQL or Redis) before running more than one instance, and give the login username limiter a configured HMAC key instead of a per-process random one
 //
 // Shared settings for every limiter. Each limiter is made by a function rather than created
 // once at import, so each createApp call, and so each test, gets its own counter.
@@ -200,6 +200,25 @@ export function createAccountEditLimiter({ limit = 20, windowMs = FIFTEEN_MINUTE
     keyGenerator: (req) => {
       // Fail closed, as in createSyncLimiter.
       if (!req.user?.id) throw new Error('createAccountEditLimiter ran without requireAuth before it on this route');
+      return `user:${req.user.id}`;
+    },
+  });
+}
+
+// Consignment views per user (GET /consignments/by-qr/{qrCode}, app endpoints plan, B2.5).
+// Each view asks the RPC provider for one receipt per confirmed step plus, at times, the
+// block number, and a free plan has a small quota, so a script scanning codes in a loop
+// would use it up for everyone. 60 per 15 minutes is far more than a person scans by hand.
+// Malformed codes count too (the limiter runs before validation). Keyed by user id for the
+// same reasons as sync. Must run after requireAuth.
+export function createConsignmentViewLimiter({ limit = 60, windowMs = FIFTEEN_MINUTES_MS } = {}) {
+  return createLimiter({
+    limit,
+    windowMs,
+    message: 'Too many consignment scans. Please wait a few minutes and try again.',
+    keyGenerator: (req) => {
+      // Fail closed, as in createSyncLimiter.
+      if (!req.user?.id) throw new Error('createConsignmentViewLimiter ran without requireAuth before it on this route');
       return `user:${req.user.id}`;
     },
   });

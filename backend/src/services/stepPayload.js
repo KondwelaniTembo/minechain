@@ -19,8 +19,10 @@ export const MINERALS = Object.freeze(['gold', 'copper', 'cobalt', 'manganese', 
 
 // Same rule as the consignments_qr_code_format CHECK in the consignments migration:
 // '^[A-Za-z0-9._:/-]+$' and 4 to 128 characters. It has no '=' and no LF, so a code can
-// never break a key=value line.
-const QR_CODE = /^[A-Za-z0-9._:/-]{4,128}$/;
+// never break a key=value line. Exported so the consignment view's route checks a scanned
+// code by exactly the rule sync stores it by.
+export const QR_CODE_PATTERN = /^[A-Za-z0-9._:/-]{4,128}$/;
+const QR_CODE = QR_CODE_PATTERN;
 
 // Lower case only: an upper-case id is a second spelling of the same id, so it is refused
 // rather than folded (the account service lesson: compare ids as written, one form only).

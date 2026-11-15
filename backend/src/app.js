@@ -8,6 +8,7 @@ import { adminAnchoringRoutes } from './routes/adminAnchoring.js';
 import { syncRoutes } from './routes/sync.js';
 import { reportRoutes } from './routes/reports.js';
 import { alertRoutes } from './routes/alerts.js';
+import { consignmentRoutes } from './routes/consignments.js';
 import {
   createRegisterLimiter,
   createLoginIpLimiter,
@@ -19,6 +20,7 @@ import {
   createAnchoringActionLimiter,
   createAlertActionLimiter,
   createAccountEditLimiter,
+  createConsignmentViewLimiter,
 } from './middleware/rateLimits.js';
 import { createRequireAuth } from './middleware/requireAuth.js';
 import { notFound } from './middleware/notFound.js';
@@ -31,7 +33,8 @@ import { errorHandler } from './middleware/errorHandler.js';
 //   rateLimits:     { registerPerHour, loginPerIp, loginPerUsername, activationPerIp,
 //                   passwordChangePerUser, syncPerUser, reportsPerUser,
 //                   anchoringActionsPerAdmin, alertActionsPerOfficer,
-//                   accountEditsPerAdmin } to override the limits, for tests
+//                   accountEditsPerAdmin, consignmentViewsPerUser } to override the
+//                   limits, for tests
 export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } = {}) {
   if (!db || typeof db.query !== 'function') {
     throw new TypeError('createApp needs a db object with a query() method');
@@ -74,6 +77,7 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   const anchoringActionLimiter = createAnchoringActionLimiter({ limit: rateLimits.anchoringActionsPerAdmin });
   const alertActionLimiter = createAlertActionLimiter({ limit: rateLimits.alertActionsPerOfficer });
   const accountEditLimiter = createAccountEditLimiter({ limit: rateLimits.accountEditsPerAdmin });
+  const consignmentViewLimiter = createConsignmentViewLimiter({ limit: rateLimits.consignmentViewsPerUser });
 
   app.use('/health', healthRoutes({ db }));
   const requireAuth = createRequireAuth({ tokens: services.tokens, users: services.users });
@@ -119,6 +123,11 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   // services.alerts is not in the checks above; if it were missing, these routes would fail
   // closed with a logged 500.
   app.use('/alerts', alertRoutes({ alerts: services.alerts, requireAuth, alertActionLimiter }));
+
+  // FR-04 consignment view and verification (Scope (9)). Like alerts, services.consignments is
+  // not in the checks above; if it were missing, the route would fail closed with a logged
+  // 500.
+  app.use('/consignments', consignmentRoutes({ consignments: services.consignments, requireAuth, consignmentViewLimiter }));
 
   // Order matters: these two must come after every route.
   app.use(notFound);
