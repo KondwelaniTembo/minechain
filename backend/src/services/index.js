@@ -10,6 +10,7 @@ import { createZoneService } from './zoneService.js';
 import { createReportService } from './reportService.js';
 import { createAnchorStatusService } from './anchorStatusService.js';
 import { createAlertService } from './alertService.js';
+import { createConsignmentService } from './consignmentService.js';
 
 // The one place where the real services are connected to each other. server.js and the
 // end-to-end DB tests both use it, so the wiring is never written twice. Unit tests skip it
@@ -18,8 +19,8 @@ import { createAlertService } from './alertService.js';
 // anchorWorker: the running worker (createAnchorWorkerFromConfig), or null when anchoring
 // is off; the admin anchoring status reads its snapshot. clock: for the status's ages.
 // chainReader: the key-free reader (createChainReaderFromConfig), or null when the RPC URL or
-// contract address is not set. Accepted now so server.js is wired once; the consignment view
-// (plan B2.4) is its first user.
+// contract address is not set; the consignment view's chain checks then report
+// chain_unavailable.
 export function createServices({ db, config, anchorWorker = null, chainReader = null, clock }) {
   const passwords = createPasswordService();
   const audit = createAuditService();
@@ -35,6 +36,8 @@ export function createServices({ db, config, anchorWorker = null, chainReader = 
   const anchoring = createAnchorStatusService({ db, audit, anchorWorker, intervalSeconds: config.anchor?.intervalSeconds, clock });
   // Officers' alert queue and its two closing actions (FR-08, Scope (5)).
   const alerts = createAlertService({ db, audit });
+  // The consignment view and its live chain check (FR-04, Scope (9)).
+  const consignments = createConsignmentService({ db, chainReader, confirmations: config.anchor?.confirmations });
 
-  return { users, tokens, accounts, signatures, sync, zones, reports, anchoring, alerts };
+  return { users, tokens, accounts, signatures, sync, zones, reports, anchoring, alerts, consignments };
 }

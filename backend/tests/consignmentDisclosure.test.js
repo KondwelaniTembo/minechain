@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { discloseConsignment } from '../src/services/consignmentDisclosure.js';
+import { canSeeConsignment, discloseConsignment } from '../src/services/consignmentDisclosure.js';
 
 // Fake people and records only. Every secret-looking value below is unique text, so a deep
 // scan of a body can tell exactly where it leaked from.
@@ -430,6 +430,45 @@ describe('deep scans of every body', () => {
       }
     };
     check(scenario.run());
+  });
+});
+
+describe('captured_at given as text (B2.4 selects it so)', () => {
+  const withTime = (text) => {
+    const step = { ...REGISTRATION, captured_at: text };
+    return discloseConsignment(VIEWERS.officer, consignment('registered'), [step], facts([step])).steps[0];
+  };
+
+  it('ISO text with milliseconds is shown as it is', () => {
+    expect(withTime('2026-11-10T08:00:00.000Z').capturedAt).toBe('2026-11-10T08:00:00.000Z');
+  });
+
+  it('six fraction digits (an edited row) are shown cut to milliseconds, still ISO', () => {
+    expect(withTime('2026-11-10T08:00:00.000001Z').capturedAt).toBe('2026-11-10T08:00:00.000Z');
+  });
+
+  it.each(['2026-11-10 08:00:00', '2026-11-10T08:00:00Z', 'yesterday'])('refuses time text %s', (text) => {
+    expect(() => withTime(text)).toThrow(TypeError);
+  });
+});
+
+describe('canSeeConsignment', () => {
+  it.each([
+    ['transporter', VIEWERS.transporter, 'registered', {}, true],
+    ['buyer at registered', VIEWERS.buyer, 'registered', {}, false],
+    ['buyer in transit', VIEWERS.buyer, 'in_transit', {}, true],
+    ["buyer after another buyer's purchase", VIEWERS.otherBuyer, 'purchased', {}, false],
+    ['owning buyer', VIEWERS.buyer, 'purchased', { hasAcceptedPurchase: true }, true],
+    ['officer', VIEWERS.officer, 'registered', {}, true],
+  ])('%s: the same answer as the body', (_label, viewer, stage, overrides, expected) => {
+    const f = facts(STEPS_BY_STAGE[stage], overrides);
+
+    expect(canSeeConsignment(viewer, consignment(stage), f)).toBe(expected);
+    expect(discloseConsignment(viewer, consignment(stage), STEPS_BY_STAGE[stage], f) !== null).toBe(expected);
+  });
+
+  it('refuses a role the route guard never lets through', () => {
+    expect(() => canSeeConsignment({ id: IDS.miner, role: 'miner' }, consignment('registered'), facts([]))).toThrow(TypeError);
   });
 });
 

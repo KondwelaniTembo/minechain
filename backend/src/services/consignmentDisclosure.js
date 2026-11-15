@@ -44,10 +44,16 @@ function permissionsFor(viewer, consignment, facts) {
   }
 }
 
-// pg gives timestamptz as a Date; B2.4 may select a time as text instead (B2.2 note).
+// The service selects captured_at as text (so the chain check sees a microsecond edit): ISO
+// with milliseconds, or six fraction digits when the stored time is not a whole millisecond.
+const TIME_TEXT = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3})\d{0,3}Z$/;
+
+// Always ISO with milliseconds, the shape toISOString() writes, whichever form came in. A
+// six-digit time only arises from an edited row, and its check result already says so.
 function timeText(value) {
   if (value instanceof Date) return value.toISOString();
-  if (typeof value === 'string') return value;
+  const match = typeof value === 'string' ? TIME_TEXT.exec(value) : null;
+  if (match) return `${match[1]}Z`;
   throw new TypeError('a time must be a Date or ISO text');
 }
 
@@ -101,6 +107,13 @@ function stepBody(step, viewer, facts, can) {
     });
   }
   return Object.freeze(body);
+}
+
+// Whether this viewer may open the consignment at all, by the same rule the body uses. The
+// service asks first, so a refused viewer costs no chain call and raises no alert.
+export function canSeeConsignment(viewer, consignment, facts) {
+  if (!VIEWER_ROLES.includes(viewer?.role)) throw new TypeError('viewer.role must be transporter, buyer or officer');
+  return permissionsFor(viewer, consignment, facts).visible;
 }
 
 // viewer:      { id, role } from requireAuth
