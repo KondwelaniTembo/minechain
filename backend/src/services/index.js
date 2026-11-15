@@ -17,7 +17,10 @@ import { createAlertService } from './alertService.js';
 // config comes from loadConfig, so the token secret and lifetime are already validated.
 // anchorWorker: the running worker (createAnchorWorkerFromConfig), or null when anchoring
 // is off; the admin anchoring status reads its snapshot. clock: for the status's ages.
-export function createServices({ db, config, anchorWorker = null, clock }) {
+// chainReader: the key-free reader (createChainReaderFromConfig), or null when the RPC URL or
+// contract address is not set. Accepted now so server.js is wired once; the consignment view
+// (plan B2.4) is its first user.
+export function createServices({ db, config, anchorWorker = null, chainReader = null, clock }) {
   const passwords = createPasswordService();
   const audit = createAuditService();
   const tokens = createTokenService({ secret: config.jwtSecret, expiresInSeconds: config.jwtExpiresInSeconds });
