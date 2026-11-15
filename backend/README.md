@@ -31,7 +31,8 @@ from the `backend/` folder.
    - `JWT_SECRET` must be at least 43 random characters (256 bits for HS256). Generate one
      with the command shown in `.env.example`; it gives 64 characters.
    - `TRUST_PROXY` is the number of proxies in front of the API. Keep it at `0` locally.
-     Hosting on Render is planned, and is expected to need `1`. It is a count of hops, never
+     The API is deployed on Render, where `TRUST_PROXY` is the measured hop count (3 on the
+     current path; see [docs/deployment.md](../docs/deployment.md)). It is a count of hops, never
      `true`: the rate limits and the audit log's IP addresses rely on Express taking the
      client address from our own proxy, not from a header the client could forge. With `0`,
      a request that arrives with an `X-Forwarded-For` header makes express-rate-limit log an
@@ -179,7 +180,7 @@ process anchors at a time.
 | Script | What it does |
 |---|---|
 | `npm run dev` | Starts the API and restarts it whenever a file changes (`node --watch`) |
-| `npm start` | Starts the API once. Render will run this (planned) |
+| `npm start` | Starts the API once, for local use. On Render the start command is `node src/server.js` (see [docs/deployment.md](../docs/deployment.md)) |
 | `npm test` | Runs the unit and API tests once (no database needed) |
 | `npm run test:watch` | Re-runs the unit and API tests on every save |
 | `npm run test:db` | Runs the database tests against `TEST_DATABASE_URL` |
@@ -205,5 +206,5 @@ process anchors at a time.
 - [docs/live-run-2026-11-09.md](../docs/live-run-2026-11-09.md): the first anchoring run on
   Sepolia, with its Etherscan links.
 
-`GET /health` needs no login, so Render's health checks will be able to reach it once
-hosting is set up (planned). It returns only `up` or `down`.
+`GET /health` needs no login, so it is Render's health check path. It returns only `up` or
+`down`.

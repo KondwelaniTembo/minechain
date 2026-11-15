@@ -1,7 +1,7 @@
 # MineChain API
 
 The REST API used by the MineChain Android app. During development it runs locally at
-`http://localhost:3000`. Hosting on Render is planned.
+`http://localhost:3000`. It is deployed on Render; see [deployment.md](deployment.md).
 
 Every example on this page uses obviously fake values: IDs such as
 `3f2b6c1e-0000-4000-8000-000000000001`, and tokens that contain the words `FAKE-PAYLOAD`

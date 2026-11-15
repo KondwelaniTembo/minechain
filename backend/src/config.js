@@ -166,7 +166,8 @@ const envSchemaFor = ({ requireChain }) => z
       // Catches a .env copied from .env.example without the placeholder being replaced.
       .refine((value) => !value.startsWith('replace-with'), 'still holds the .env.example placeholder'),
     JWT_EXPIRES_IN: tokenLifetime,
-    // How many proxies sit in front of the app. Render adds one, so it will be 1 there.
+    // How many proxies sit in front of the app: the measured hop count, 3 on the current
+    // Render path (see docs/deployment.md).
     // With 0, req.ip is the direct caller; behind a proxy that would be the proxy itself,
     // and every client would share one rate limit.
     TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),

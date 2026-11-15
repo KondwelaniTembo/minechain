@@ -8,7 +8,7 @@ Every id, code and value in this document is fake. Ids follow the pattern
 `3f2b6c1e-0000-4000-8000-000000000001`, which no real record will ever have.
 
 **Status:** version 1 of the payload format and version 1 of the anchor hash. The test
-vectors (section 9) are produced in a later step.
+vectors (section 9) are in [`signing-vectors.json`](signing-vectors.json).
 
 ---
 
@@ -102,7 +102,7 @@ written as lower-case hex: for example `sha256.convert(spkiBytes).toString()` wi
 5. The user logs in on the new device, which registers a new key.
 
 The user's password should also be changed after a lost phone, in case it was saved on the
-device. There is no password-change feature yet (section 10).
+device. Password change now exists ([decisions.md](decisions.md), Accounts (14)–(19)).
 
 Steps already stored keep verifying, because each one keeps a copy of the key that signed
 it. Records signed by the old phone that arrive after the reset no longer verify, which is
@@ -296,7 +296,7 @@ This string matches JavaScript's `Date.prototype.toISOString()` for years 0000 t
   signature)` (DER encoding), against the logged-in user's registered public key. No
   extra packages are used.
 
-**Transport (built in a later step).** Each step is sent as JSON, roughly
+**Transport (`POST /sync/steps`, see [api.md](api.md)).** Each step is sent as JSON, roughly
 `{ "payload": "<the exact string>", "signature": "<base64>" }`. JSON writes each LF as `\n`,
 and decoding gives back the exact string. The payload grammar has no `"` or `\`, so nothing
 else is ever escaped.
@@ -346,8 +346,9 @@ Uniqueness is:
   stored, a retry of that step hashes with the new key and is answered `STEP_ID_CONFLICT`
   instead of `duplicate`. This only happens after a lost phone, whose queue is lost with it.
 
-`captured_at` is the phone's clock, which the user controls. For now, a time in the future
-or older than 72 hours is accepted and stored as signed (section 10). The server also stores
+`captured_at` is the phone's clock, which the user controls. A time in the future
+or older than 72 hours is accepted and stored as signed (section 10; [decisions.md](decisions.md),
+Anomaly rules (10)). The server also stores
 its own receipt time for every step (`transactions.received_at`, set by the database), so
 both times are always available to the anomaly rules and reports.
 
@@ -440,7 +441,8 @@ How each side uses them:
   check compares each step with the one before, so a swap to a noticeably different lot
   raises an alert. A swap between lots of almost the same weight would not.
 - **The phone's clock is trusted for `captured_at`.** Times in the future or more than 72
-  hours old are accepted and stored as signed. To be revisited with the anomaly rules.
+  hours old are accepted and stored as signed, with no rule ([decisions.md](decisions.md),
+  Anomaly rules (10)).
 - **No low-S rule.** Each valid signature has a second valid form. Handled by never using
   signatures as identifiers (section 5).
 - **No key attestation.** The server does not check that a key really lives in hardware.
@@ -450,7 +452,8 @@ How each side uses them:
 - **A key can be reused after a reset.** Once an administrator resets a key, the old key is
   free again and could in theory be registered on another account. Using it would need the
   lost phone's private key and a second account.
-- **No password change yet.** After a lost phone, suspension and the administrator's
-  confirmed reactivation are the protection; a password-change feature is still to come.
+- **No password change yet** (resolved: see [decisions.md](decisions.md), Accounts
+  (14)–(19)). After a lost phone, suspension, the administrator's confirmed reactivation and
+  a password change are the protection.
 - **No contract-level verification.** The contract trusts the backend's recorders. P-256
   verification on-chain is future work (contract specification, section 9).
