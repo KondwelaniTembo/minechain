@@ -36,16 +36,20 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 12 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
+Updated 14 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
 
-- **Branch:** `feature/backend-logic`. Latest code commit `6c67172` (anchoring admin
-  routes), followed by the anchoring admin docs commit (N5). `main` has Days 1–3 (PR #4).
+- **Backend complete, merged and deployed.** `feature/backend-logic` is merged into `main`
+  (PR #5). Latest commit `044af61` pins Node 22.14.0 for Render.
+- **Deployed on Render** (minechain-api and minechain-db, Frankfurt, Free) on 13–14 Nov,
+  with anchoring running in production since 14 Nov. Setup, checks, backups, the
+  1 December database refresh and the re-check list are in `docs/deployment.md`; the
+  reasons are in `docs/decisions.md`, "Deployment (1)–(12)".
 - **Test totals (confirmed, run 12 Nov 14:05):** `npm test` 1841, `npm run test:db` 787,
   contract 37.
 - **Dev database** (`minechain_dev`) is migrated to `1794441600000_users-activation`.
   `npm run test:db` migrates `minechain_test` itself (`tests/db/globalSetup.js`).
 
-**Done on this branch** (docs updated for all of it):
+**Done on `feature/backend-logic`, now merged** (docs updated for all of it):
 
 - Seed script (`npm run seed`): first admin, demo GPS zone, demo users.
 - Admin account endpoints (FR-10, FR-12): list, approve, reject, suspend, reactivate,
@@ -186,9 +190,7 @@ their known limitations):
 
 **Next, in order:**
 
-1. Merge `feature/backend-logic` into `main` (open the PR).
-2. Render deploy.
-3. Flutter app.
+1. Flutter Android app in `mobile/`, on a new branch `feature/mobile-foundation`.
 
 **Working rules that held all weekend:**
 
