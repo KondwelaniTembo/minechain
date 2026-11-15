@@ -52,8 +52,9 @@ Updated 15 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
   reasons are in `docs/decisions.md`, "Deployment (1)–(12)".
 - **Test totals (confirmed by the developer, 15 Nov, after B2.5a):** `npm test` 2300,
   `npm run test:db` 914. Contract 37 (last run 12 Nov; the contract has not changed).
-- **Dev database** (`minechain_dev`) is migrated to `1794441600000_users-activation`.
-  `npm run test:db` migrates `minechain_test` itself (`tests/db/globalSetup.js`).
+- **Dev database** (`minechain_dev`): check its migration level before Monday; production
+  needs `1794528000000_users-deleted` before the merge. `npm run test:db` migrates
+  `minechain_test` itself (`tests/db/globalSetup.js`).
 
 **Done on `feature/backend-logic`, now merged** (docs updated for all of it):
 
@@ -196,7 +197,8 @@ their known limitations):
 
 **Next, in order:**
 
-1. Flutter Android app in `mobile/`, on a new branch `feature/mobile-foundation`.
+1. Flutter Android app in `mobile/`, on a new app branch. PR #7 (`feature/mobile-foundation`)
+   merged docs only; `mobile/` is still untracked and will be committed on that new branch.
 
 **Working rules that held all weekend:**
 

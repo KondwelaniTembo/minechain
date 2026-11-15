@@ -337,7 +337,10 @@ one database transaction, so every consignment has at least one step.
   - custody chain: `(consignment_id, received_at)`;
   - FR-09 report filters: `(actor_id, received_at)`, `(zone_id, captured_at)` and
     `(captured_at)`;
-  - verification: `(data_hash)`;
+  - `(data_hash)`, `transactions_data_hash_idx`: created for looking rows up by their
+    anchored hash, but **no query uses it**. The consignment view finds steps by consignment
+    (via its QR code), sync compares a stored step's hash in JavaScript after finding it by
+    step id, and the reports only select the column. Kept for now;
   - the anchoring queue: `(received_at)`, limited to approved steps that are pending or
     submitted.
 

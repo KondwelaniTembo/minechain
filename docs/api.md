@@ -169,6 +169,9 @@ A 403 has no `WWW-Authenticate` header, because the credentials themselves were 
 | `POST /auth/login` | 10 per 15 minutes | username (any letter case or surrounding spaces) | failed attempts only (401 and 403). Successful logins are not counted |
 | `POST /auth/activate` | 30 per 15 minutes | client IP | every request, including invalid ones |
 | `POST /auth/me/password` | 10 per 15 minutes | logged-in user | failed attempts only (every error after the token check, including `VALIDATION_FAILED`). Successful changes are not counted. A request refused for its token never reaches the limiter |
+| `POST /sync/steps` | 60 per 15 minutes | logged-in user | every request that passes the role check (miner, transporter or buyer), including invalid ones (`VALIDATION_FAILED`). Anyone else is refused before it and not counted. Message: "Too many sync requests. Please wait a few minutes and try again." |
+| `GET /reports/transactions` and `GET /reports/audit-trail`, together | 20 per 15 minutes | logged-in user | every request under `/reports` that passes the role check (officer, buyer or admin), including invalid ones and refused ones (a buyer or administrator asking for the audit trail, which is for officers only). Anyone else is refused before it and not counted. Message: "Too many report downloads. Please wait a few minutes and try again." |
+| `POST /admin/anchoring/run` and `POST /admin/anchoring/steps/{id}/retry`, together | 20 per 15 minutes | logged-in administrator | every request that passes the admin check, including invalid ones (`VALIDATION_FAILED`) and refused ones. Anyone who is not an administrator is refused before it and not counted. `GET /admin/anchoring` is not limited. Message: "Too many anchoring actions. Please wait a few minutes and try again." |
 | `POST /alerts/{id}/review` and `POST /alerts/{id}/dismiss`, together | 60 per 15 minutes | logged-in officer | every request that passes the officer check, including invalid ones (`VALIDATION_FAILED`) and refused ones. Anyone who is not an officer is refused before it and not counted. `GET /alerts` and `GET /alerts/{id}` are not limited |
 | `POST /admin/users/{id}/rename` and `POST /admin/users/{id}/delete`, together | 20 per 15 minutes | logged-in administrator | every request that passes the admin check, including invalid ones (a malformed `{id}` or body, `VALIDATION_FAILED`) and refused ones. Anyone who is not an administrator is refused before it and not counted. The other `/admin/users` endpoints are not counted and have no limit yet. Message: "Too many account changes. Please wait a few minutes and try again." |
 | `GET /consignments/by-qr/{qrCode}` | 60 per 15 minutes | logged-in user | every request that passes the role check, including malformed QR codes (`VALIDATION_FAILED`) and unknown ones (`CONSIGNMENT_NOT_FOUND`). A miner or administrator is refused before it and not counted. Message: "Too many consignment scans. Please wait a few minutes and try again." |
@@ -248,9 +251,9 @@ the endpoint sections below remain the source of truth for what exists.
 | Change own password (FR-06): `POST /auth/me/password` | ✓ | ✓ | ✓ | ✓ | ✓ | **Built** |
 | Activate an account an administrator created (FR-10): `POST /auth/activate`, no login | | | | ✓ | ✓ | **Built** |
 | Register a device key (FR-02): `PUT /auth/me/public-key` | ✓ | ✓ | ✓ | | | **Built** |
-| Register a consignment at extraction (FR-01, FR-02) | ✓ | | | | | Planned |
-| Record a handoff to a transporter (FR-02, FR-03) | | ✓ | | | | Planned |
-| Record a purchase (FR-02, FR-03) | | | ✓ | | | Planned |
+| Register a consignment at extraction (FR-01, FR-02): sent as a signed `registration` step to `POST /sync/steps` | ✓ | | | | | API **Built**; app screen planned |
+| Record a handoff to a transporter (FR-02, FR-03): a signed `handoff` step to `POST /sync/steps` | | ✓ | | | | API **Built**; app screen planned |
+| Record a purchase (FR-02, FR-03): a signed `purchase` step to `POST /sync/steps` | | | ✓ | | | API **Built**; app screen planned |
 | Sync signed work recorded offline (FR-03, FR-07): `POST /sync/steps` | ✓ | ✓ | ✓ | | | **Built** |
 | Verify a consignment by QR code (FR-04): `GET /consignments/by-qr/{qrCode}` (a buyer only in transit or after their own purchase) | | ✓ | ✓ | ✓ | | **Built** |
 | View a consignment's full custody chain, with GPS and signature evidence (FR-04, FR-05): the same endpoint (a buyer once they have an accepted purchase; officers also see flagged and rejected steps) | | | ✓ | ✓ | | **Built** |

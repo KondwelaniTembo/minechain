@@ -24,7 +24,8 @@ const DEFAULT_TIMEOUT_MS = 8_000;
 
 const refusal = (code, reason) => Object.freeze({ code, action: 'stop', reason });
 
-// The guard's two refusals. A person has to fix the configuration, hence 'stop'.
+// The guard's three refusals: WRONG_CHAIN, NO_CONTRACT_CODE and WRONG_CONTRACT_CODE. A
+// person has to fix the configuration, hence 'stop'.
 export const READER_REFUSALS = Object.freeze({
   WRONG_CHAIN: refusal('WRONG_CHAIN', 'the RPC provider is not on Sepolia'),
   NO_CONTRACT_CODE: refusal('NO_CONTRACT_CODE', 'there is no contract at MINECHAIN_CONTRACT_ADDRESS on this RPC'),
