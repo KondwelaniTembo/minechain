@@ -1,7 +1,7 @@
-// The MineChain app, F4: the API address is checked at start-up and handed to
-// the rest of the app through Riverpod (F3), and a temporary "Check server"
-// tile calls the API through the pinned TLS 1.3 client. A theme, shared
-// widgets and a temporary sample home come from F2.
+// The MineChain app, F5: the API address is checked at start-up and handed to
+// the rest of the app through Riverpod (F3); the sample home checks the server
+// once through the API client and shows a banner while it wakes up. A theme,
+// shared widgets and a temporary sample home come from F2.
 
 import 'package:flutter/material.dart';
 // flutter_riverpod gives us ProviderScope, the store that holds all of the
@@ -10,12 +10,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/config/app_config.dart';
 import 'core/config/config_provider.dart';
-import 'core/network/network_providers.dart';
-import 'core/network/temporary_server_check.dart';
+import 'core/network/server_status.dart';
 import 'core/riverpod/no_retry.dart';
 import 'core/text/app_text.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/home_scaffold.dart';
+import 'core/widgets/server_status_banner.dart';
 
 // main() is where every Dart program starts. Android launches the app, the
 // Flutter engine starts, and then it calls this function.
@@ -126,9 +126,9 @@ class ConfigErrorApp extends StatelessWidget {
 // TEMPORARY (F2): a sample home to see the theme and tiles on the phone.
 // Replaced in F7 by the real miner home, reached through login and routing.
 //
-// A ConsumerStatefulWidget is a StatefulWidget that can also read Riverpod
-// providers (through `ref`). It needs state of its own for one thing: whether
-// the temporary server check is running.
+// A ConsumerStatefulWidget is a StatefulWidget that can also use Riverpod
+// (through `ref`). It is stateful only to run one thing once, when the screen
+// first appears: the server check.
 class SampleHomeScreen extends ConsumerStatefulWidget {
   const SampleHomeScreen({super.key});
 
@@ -137,7 +137,17 @@ class SampleHomeScreen extends ConsumerStatefulWidget {
 }
 
 class _SampleHomeScreenState extends ConsumerState<SampleHomeScreen> {
-  bool _checking = false;
+  @override
+  void initState() {
+    super.initState();
+    // Check the server once, so a sleeping server starts waking while the
+    // user looks at the screen. Not straight away: initState runs while
+    // Flutter is building, and Riverpod forbids changing a provider's state
+    // during a build. addPostFrameCallback waits until this frame is drawn.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(serverStatusControllerProvider.notifier).check();
+    });
+  }
 
   // ScaffoldMessenger shows snack bars (short messages at the bottom). The
   // hide call first removes any message still showing, so quick taps do not
@@ -148,41 +158,9 @@ class _SampleHomeScreenState extends ConsumerState<SampleHomeScreen> {
       ..showSnackBar(SnackBar(content: Text(text)));
   }
 
-  // TEMPORARY (F4): GET /health through the pinned client. Replaced in F5 by
-  // the API client and the "waking the server" banner.
-  Future<void> _checkServer() async {
-    if (_checking) return; // one check at a time
-    setState(() => _checking = true);
-
-    ServerCheck result;
-    try {
-      // The address comes from the checked settings, never from
-      // String.fromEnvironment here.
-      final base = ref.read(appConfigProvider).apiBaseUri;
-      final client = await ref.read(pinnedHttpClientProvider.future);
-      result = await checkServerHealth(client, base.replace(path: '/health'));
-    } catch (_) {
-      // For example a PinningSetupError if a certificate file were missing:
-      // the app still makes no connection, and says only that it failed.
-      result = ServerCheck.other;
-    }
-
-    // The user may have left this screen during the wait (up to 90 s). A
-    // State that is no longer on screen must not touch its context.
-    if (!mounted) return;
-    setState(() => _checking = false);
-    _say(switch (result) {
-      ServerCheck.ready => AppText.serverReady,
-      ServerCheck.insecure => AppText.insecureConnection,
-      ServerCheck.noConnection => AppText.noConnection,
-      ServerCheck.timedOut => AppText.timedOut,
-      ServerCheck.other => AppText.serverCheckFailed,
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    // Every other tile does the same thing for now: "Coming soon".
+    // Every tile does the same thing for now: "Coming soon".
     void comingSoon() => _say(AppText.comingSoon);
 
     // The miner's tiles from plan section 4.2. The screen only lists what it
@@ -191,6 +169,8 @@ class _SampleHomeScreenState extends ConsumerState<SampleHomeScreen> {
     return HomeScaffold(
       title: AppText.appTitle,
       onAccountPressed: comingSoon,
+      // Says nothing while the server is fine.
+      header: const ServerStatusBanner(),
       actions: [
         HomeAction(
           icon: Icons.qr_code_scanner,
@@ -207,12 +187,6 @@ class _SampleHomeScreenState extends ConsumerState<SampleHomeScreen> {
           icon: Icons.cloud_upload,
           label: AppText.sendMyWork,
           onTap: comingSoon,
-        ),
-        // TEMPORARY (F4): replaced in F5.
-        HomeAction(
-          icon: _checking ? Icons.hourglass_top : Icons.lock,
-          label: _checking ? AppText.checking : AppText.checkServer,
-          onTap: _checkServer,
         ),
       ],
     );

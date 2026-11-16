@@ -35,6 +35,7 @@ class HomeScaffold extends StatelessWidget {
     required this.title,
     required this.actions,
     required this.onAccountPressed,
+    this.header,
   }) : assert(
          actions.where((a) => a.primary).length <= 1,
          'A home screen has at most one primary action.',
@@ -43,6 +44,10 @@ class HomeScaffold extends StatelessWidget {
   final String title;
   final List<HomeAction> actions;
   final VoidCallback onAccountPressed;
+
+  /// Optional content above the tiles, such as the server status banner. It
+  /// scrolls with the tiles, so it never pushes them off a small screen.
+  final Widget? header;
 
   @override
   Widget build(BuildContext context) {
@@ -98,7 +103,11 @@ class HomeScaffold extends StatelessWidget {
               padding: const EdgeInsets.all(AppSizes.spaceM),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: _withGaps(children),
+                // The header is outside the gaps: it may be empty (a banner
+                // with nothing to say), and an empty header must not leave a
+                // gap. A header that shows something adds its own spacing.
+                // `?header` adds it only if it is not null.
+                children: [?header, ..._withGaps(children)],
               ),
             );
           },
