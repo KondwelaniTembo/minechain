@@ -62,8 +62,53 @@ class AuthRepository {
   /// on; it is never kept or saved.
   Future<LoginResult> login(String username, String password) async {
     final api = await _apiOrInsecure();
-    final response = await api.login(username, password);
+    return _saveSignIn(await api.login(username, password));
+  }
 
+  /// Activates an invited account and signs in with the answer, exactly as
+  /// a login does (api.md: "The answer is the same as a login's").
+  ///
+  /// The code and the password are only passed on; neither is kept or saved.
+  Future<LoginResult> activate({
+    required String username,
+    required String code,
+    required String password,
+  }) async {
+    final api = await _apiOrInsecure();
+    return _saveSignIn(
+      await api.activate(username: username, code: code, password: password),
+    );
+  }
+
+  /// Requests a new account. Nothing is saved on the phone: the account is
+  /// pending and there is no token until an administrator approves it and
+  /// the person logs in.
+  ///
+  /// An empty or blank [licenceNumber] is sent as "no licence", because the
+  /// field is optional and the server refuses an empty one.
+  Future<void> register({
+    required String username,
+    required String fullName,
+    required String password,
+    required Role role,
+    String? licenceNumber,
+  }) async {
+    final api = await _apiOrInsecure();
+    final licence =
+        (licenceNumber == null || licenceNumber.trim().isEmpty)
+        ? null
+        : licenceNumber;
+    await api.register(
+      username: username,
+      fullName: fullName,
+      password: password,
+      role: role,
+      licenceNumber: licence,
+    );
+  }
+
+  /// Saves a login-shaped answer (login, activate) as the session.
+  Future<LoginResult> _saveSignIn(LoginResponse response) async {
     final User user;
     switch (response.user) {
       case UserParsed(user: final parsed):

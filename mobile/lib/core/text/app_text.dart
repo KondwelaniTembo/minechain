@@ -45,6 +45,65 @@ abstract final class AppText {
   static const String loggedOut =
       'You have been logged out. Please log in again.';
 
+  // The login screen's two links (F9).
+  static const String requestAccountLink = 'Request an account';
+  static const String haveActivationCodeLink = 'I have an activation code';
+
+  // ---- Shared by the register and activate forms ----
+
+  static const String confirmPassword = 'Type the password again';
+  static const String enterConfirmPassword = 'Type the password again.';
+  static const String passwordsDoNotMatch =
+      'The two passwords are not the same.';
+
+  /// The password policy (api.md, "Password policy"), as a hint under the
+  /// field. The server checks it; this only says what it wants.
+  static const String passwordPolicyHint =
+      'Use at least 12 characters. A few words with spaces works well. '
+      'Do not include your username.';
+
+  static const String sending = 'Sending…';
+
+  // ---- Request an account (features/auth/presentation/register_screen.dart)
+
+  static const String registerTitle = 'Request an account';
+  static const String chooseRoleLabel = 'I am a';
+  static const String minerRoleHint = 'I mine and register minerals.';
+  static const String transporterRoleHint = 'I carry minerals from the mine.';
+  static const String buyerRoleHint = 'I buy minerals as a licensed buyer.';
+  static const String licenceNumberOptional = 'Licence number (optional)';
+  static const String licenceNumberHint =
+      'If you have a mining or trading licence, enter its number.';
+  static const String sendRequest = 'Send request';
+
+  static const String enterFullName = 'Enter your full name.';
+  static const String enterNewUsername = 'Choose a username.';
+  static const String choosePassword = 'Choose a password.';
+  static const String chooseRole = 'Choose what you do.';
+
+  /// Under the username field for USERNAME_TAKEN (api.md's own words).
+  static const String usernameTaken =
+      'That username is already taken. Please choose another.';
+
+  // The confirmation after a request was accepted.
+  static const String requestSentTitle = 'Request sent';
+  static const String requestSentBody =
+      'An administrator will review it. You can log in once it is approved.';
+  static const String backToLogin = 'Back to login';
+
+  // ---- Activate (features/auth/presentation/activate_screen.dart) ----
+
+  static const String activateTitle = 'Activate your account';
+  static const String activateExplanation =
+      'Your administrator gave you a username and an activation code. Enter '
+      'them here and choose your own password. Nobody else will know it.';
+  static const String activationCode = 'Activation code';
+  static const String activationCodeHint =
+      '12 letters and numbers. Spaces and dashes do not matter.';
+  static const String enterActivationCode = 'Enter your activation code.';
+  static const String newPassword = 'New password';
+  static const String activateButton = 'Activate account';
+
   // ---- Account (features/account/presentation/account_screen.dart) ----
 
   static const String fullName = 'Full name';
@@ -134,6 +193,11 @@ abstract final class AppText {
   static const String notAllowed = 'You are not allowed to do this.';
   static const String tooManyTries =
       'Too many tries. Please wait a few minutes, then try again.';
+  static const String weakPassword =
+      'Choose a stronger password. See the note under the password.';
+  static const String activationInvalid =
+      'This activation code is not valid. Check it, or ask an administrator '
+      'for a new one.';
   static const String checkTheForm =
       'Some details are missing or wrong. Please check them and try again.';
   static const String somethingWentWrong =

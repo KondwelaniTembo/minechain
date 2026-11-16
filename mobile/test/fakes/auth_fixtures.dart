@@ -35,9 +35,22 @@ String loginAnswer({
   'user': user ?? userJson(),
 });
 
+/// POST /auth/register's 201 answer: the pending account and a message, and
+/// no token (api.md).
+String registerAnswer({Map<String, Object?>? user}) => jsonEncode({
+  'user': user ?? userJson(status: 'pending'),
+  'message':
+      'Your account has been requested. An administrator must approve it '
+      'before you can log in.',
+});
+
 String meAnswer({Map<String, Object?>? user}) =>
     jsonEncode({'user': user ?? userJson()});
 
-String errorAnswer(String code, [String message = 'Refused.']) => jsonEncode({
-  'error': {'code': code, 'message': message},
+String errorAnswer(
+  String code, [
+  String message = 'Refused.',
+  List<Map<String, String>>? details,
+]) => jsonEncode({
+  'error': {'code': code, 'message': message, 'details': ?details},
 });

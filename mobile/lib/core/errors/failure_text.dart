@@ -37,8 +37,9 @@ String failureText(AppFailure failure) {
 /// Our own sentence for a code the app handles now, or null for any other.
 ///
 /// These are the login and session codes of plan section 4.3, plus
-/// TOO_MANY_REQUESTS and VALIDATION_FAILED. More are added as screens need
-/// them; until then the server's own message is used.
+/// TOO_MANY_REQUESTS and VALIDATION_FAILED, and (F9) WEAK_PASSWORD and
+/// ACTIVATION_INVALID. More are added as screens need them; until then the
+/// server's own message is used.
 String? _ourTextFor(String code) {
   return switch (code) {
     ApiCodes.invalidCredentials => AppText.invalidCredentials,
@@ -51,6 +52,9 @@ String? _ourTextFor(String code) {
     ApiCodes.forbidden => AppText.notAllowed,
     ApiCodes.tooManyRequests => AppText.tooManyTries,
     ApiCodes.validationFailed => AppText.checkTheForm,
+    // F9: the register and activate forms.
+    ApiCodes.weakPassword => AppText.weakPassword,
+    ApiCodes.activationInvalid => AppText.activationInvalid,
     _ => null,
   };
 }

@@ -31,11 +31,23 @@ class FakeServer {
   FakeServer({
     Future<http.Response> Function(http.Request)? onLogin,
     Future<http.Response> Function(http.Request)? onMe,
+    Future<http.Response> Function(http.Request)? onRegister,
+    Future<http.Response> Function(http.Request)? onActivate,
   }) : onLogin = onLogin ?? ((_) async => http.Response(loginAnswer(), 200)),
-       onMe = onMe ?? ((_) async => http.Response(meAnswer(), 200));
+       onMe = onMe ?? ((_) async => http.Response(meAnswer(), 200)),
+       onRegister =
+           onRegister ?? ((_) async => http.Response(registerAnswer(), 201)),
+       onActivate =
+           onActivate ??
+           ((_) async => http.Response(
+             loginAnswer(user: userJson(role: 'officer')),
+             200,
+           ));
 
   Future<http.Response> Function(http.Request) onLogin;
   Future<http.Response> Function(http.Request) onMe;
+  Future<http.Response> Function(http.Request) onRegister;
+  Future<http.Response> Function(http.Request) onActivate;
   final List<http.Request> requests = [];
 
   late final MockClient client = MockClient((request) {
@@ -43,6 +55,8 @@ class FakeServer {
     return switch (request.url.path) {
       '/auth/login' => onLogin(request),
       '/auth/me' => onMe(request),
+      '/auth/register' => onRegister(request),
+      '/auth/activate' => onActivate(request),
       _ => Future.value(http.Response(errorAnswer('NOT_FOUND'), 404)),
     };
   });
@@ -451,6 +465,178 @@ void main() {
       await h.auth.restore();
       expect(await h.auth.reauthenticate(fakePassword), isA<LoginIgnored>());
       expect(h.server.requests, isEmpty);
+    });
+  });
+
+  group('register (POST /auth/register)', () {
+    Future<RegisterOutcome> register(
+      Harness h, {
+      Role role = Role.miner,
+      String? licence = 'ZM-ASM-0042',
+    }) => h.auth.register(
+      username: 'mutale_banda',
+      fullName: 'Mutale Banda',
+      password: fakePassword,
+      role: role,
+      licenceNumber: licence,
+    );
+
+    test('the body is exactly the documented fields', () async {
+      final h = Harness();
+      await h.auth.restore();
+      await register(h);
+
+      final request = h.server.requests.single;
+      expect(request.method, 'POST');
+      expect(request.url.path, '/auth/register');
+      expect(request.headers['authorization'], isNull); // no login needed
+      expect(jsonDecode(request.body), {
+        'username': 'mutale_banda',
+        'fullName': 'Mutale Banda',
+        'password': fakePassword,
+        'role': 'miner',
+        'licenceNumber': 'ZM-ASM-0042',
+      });
+    });
+
+    // The licence is optional for every role that may register (api.md:
+    // "Required: no"), so for each one an empty licence is left out.
+    for (final role in registrableRoles) {
+      for (final (name, licence) in [
+        ('no licence', null),
+        ('an empty licence', ''),
+        ('a blank licence', '   '),
+      ]) {
+        test('${role.name} with $name: the field is left out', () async {
+          final h = Harness();
+          await h.auth.restore();
+          expect(
+            await register(h, role: role, licence: licence),
+            isA<RegisterSent>(),
+          );
+          final body = jsonDecode(h.server.requests.single.body) as Map;
+          expect(body.containsKey('licenceNumber'), isFalse);
+          expect(body['role'], role.name);
+        });
+      }
+    }
+
+    test('success -> RegisterSent, still signed out, nothing saved',
+        () async {
+      final h = Harness();
+      await h.auth.restore();
+      final announced = <User>[];
+      h.container.read(signedInEventsProvider).users.listen(announced.add);
+
+      expect(await register(h), isA<RegisterSent>());
+
+      expect(h.state, isA<SignedOut>());
+      expect(h.store.values, isEmpty);
+      await settle();
+      expect(announced, isEmpty);
+    });
+
+    test('WEAK_PASSWORD -> RegisterFailed with its details', () async {
+      final h = Harness(
+        server: FakeServer(
+          onRegister: (_) async => http.Response(
+            errorAnswer(ApiCodes.weakPassword, 'Choose a stronger password.', [
+              {
+                'field': 'password',
+                'code': ApiCodes.passwordTooShort,
+                'message': 'Use at least 12 characters.',
+              },
+            ]),
+            400,
+          ),
+        ),
+      );
+      await h.auth.restore();
+
+      final outcome = await register(h);
+
+      final failure = (outcome as RegisterFailed).failure as ServerRefused;
+      expect(failure.code, ApiCodes.weakPassword);
+      expect(failure.details.single.code, ApiCodes.passwordTooShort);
+      expect(h.store.values, isEmpty);
+    });
+
+    test('an officer role is refused before anything is sent', () async {
+      final h = Harness();
+      await h.auth.restore();
+      await expectLater(
+        () => register(h, role: Role.officer),
+        throwsArgumentError,
+      );
+      expect(h.server.requests, isEmpty);
+    });
+  });
+
+  group('activate (POST /auth/activate)', () {
+    Future<LoginOutcome> activate(Harness h) => h.auth.activate(
+      username: 'chanda_mwale',
+      code: '7kq4 m2xd 9tne',
+      password: 'copper hill solwezi',
+    );
+
+    test('the body is exactly the documented fields, code as typed',
+        () async {
+      final h = Harness();
+      await h.auth.restore();
+      await activate(h);
+
+      final request = h.server.requests.single;
+      expect(request.url.path, '/auth/activate');
+      expect(request.headers['authorization'], isNull);
+      expect(jsonDecode(request.body), {
+        'username': 'chanda_mwale',
+        'code': '7kq4 m2xd 9tne',
+        'password': 'copper hill solwezi',
+      });
+    });
+
+    test('success -> SignedIn, saved, and announced, like a login', () async {
+      final h = Harness();
+      await h.auth.restore();
+      final announced = <User>[];
+      h.container.read(signedInEventsProvider).users.listen(announced.add);
+
+      expect(await activate(h), isA<LoginSucceeded>());
+
+      final state = h.state as SignedIn;
+      expect(state.user.role, Role.officer);
+      expect(state.token, fakeToken);
+      expect(h.store.values.keys.toSet(), SessionKeys.all.toSet());
+      for (final value in h.store.values.values) {
+        expect(value, isNot(contains('copper hill solwezi')));
+        expect(value, isNot(contains('7kq4')));
+      }
+      await settle();
+      expect(announced, hasLength(1));
+    });
+
+    test('ACTIVATION_INVALID -> failure, still signed out, nothing saved',
+        () async {
+      final h = Harness(
+        server: FakeServer(
+          onActivate: (_) async =>
+              http.Response(errorAnswer(ApiCodes.activationInvalid), 401),
+        ),
+      );
+      await h.auth.restore();
+
+      final outcome = await activate(h);
+
+      expect(
+        outcome,
+        isA<LoginFailed>().having(
+          (o) => (o.failure as ServerRefused).code,
+          'code',
+          ApiCodes.activationInvalid,
+        ),
+      );
+      expect(h.state, isA<SignedOut>());
+      expect(h.store.values, isEmpty);
     });
   });
 

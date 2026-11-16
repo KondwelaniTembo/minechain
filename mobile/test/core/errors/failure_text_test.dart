@@ -27,6 +27,8 @@ void main() {
       ApiCodes.forbidden: AppText.notAllowed,
       ApiCodes.tooManyRequests: AppText.tooManyTries,
       ApiCodes.validationFailed: AppText.checkTheForm,
+      ApiCodes.weakPassword: AppText.weakPassword,
+      ApiCodes.activationInvalid: AppText.activationInvalid,
     };
     handled.forEach((code, sentence) {
       test(code, () => expect(failureText(refused(code)), sentence));

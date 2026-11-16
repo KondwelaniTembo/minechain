@@ -11,11 +11,13 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/errors/api_codes.dart';
 import '../../../core/errors/app_failure.dart';
 import '../../../core/errors/failure_text.dart';
 import '../../../core/network/server_status.dart';
+import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/sizes.dart';
 import '../../../core/widgets/form_message.dart';
@@ -235,6 +237,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               ],
                             )
                           : const Text(AppText.logIn),
+                    ),
+                    const SizedBox(height: AppSizes.spaceM),
+                    // The two ways in for someone who cannot log in yet.
+                    // push (not go) keeps this screen underneath, so the
+                    // back arrow and Android's back button return here.
+                    // Disabled while a login runs, so the screen does not
+                    // change under it.
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, AppSizes.tapTargetMin),
+                      ),
+                      onPressed: _sending
+                          ? null
+                          : () => context.push(AppRoutes.register),
+                      child: const Text(
+                        AppText.requestAccountLink,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        minimumSize: const Size(0, AppSizes.tapTargetMin),
+                      ),
+                      onPressed: _sending
+                          ? null
+                          : () => context.push(AppRoutes.activate),
+                      child: const Text(
+                        AppText.haveActivationCodeLink,
+                        textAlign: TextAlign.center,
+                      ),
                     ),
                   ],
                 ),

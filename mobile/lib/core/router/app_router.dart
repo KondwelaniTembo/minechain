@@ -15,7 +15,9 @@ import '../../features/account/presentation/account_screen.dart';
 import '../../features/admin/presentation/admin_home_screen.dart';
 import '../../features/auth/domain/auth_state.dart';
 import '../../features/auth/presentation/auth_controller.dart';
+import '../../features/auth/presentation/activate_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
+import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/buyer/presentation/buyer_home_screen.dart';
 import '../../features/miner/presentation/miner_home_screen.dart';
@@ -59,6 +61,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.login,
         builder: (context, state) => const LoginScreen(),
+      ),
+      // Signed out only (redirect rule 2). The login screen opens them with
+      // push(), so their back arrow returns to it.
+      GoRoute(
+        path: AppRoutes.register,
+        builder: (context, state) => const RegisterScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.activate,
+        builder: (context, state) => const ActivateScreen(),
       ),
       GoRoute(
         path: AppRoutes.miner,

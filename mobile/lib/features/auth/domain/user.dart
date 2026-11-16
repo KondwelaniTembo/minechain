@@ -10,6 +10,11 @@
 /// The five roles (FR-06). The names are exactly the API's.
 enum Role { miner, transporter, buyer, officer, admin }
 
+/// The roles a person may request for themselves with POST /auth/register
+/// (api.md: "`miner`, `transporter` or `buyer`"). Officer and administrator
+/// accounts are created by an administrator and activated with a code.
+const List<Role> registrableRoles = [Role.miner, Role.transporter, Role.buyer];
+
 /// The six account statuses (api.md "Account statuses").
 enum AccountStatus { pending, active, suspended, rejected, invited, deleted }
 

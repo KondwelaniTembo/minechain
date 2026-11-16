@@ -15,12 +15,31 @@ import 'auth_fixtures.dart';
 /// answers with [reauthAnswer]; by default it succeeds and becomes SignedIn,
 /// as the real controller would. logOut and checkExpiry only count (logOut
 /// also becomes SignedOut, so the router moves).
+///
+/// register records what the form sent and answers with [registerAnswer]
+/// (RegisterSent by default), never changing the state. activate records
+/// its arguments and answers with [activateAnswer]; by default it signs in
+/// as an officer, as the real controller would after a good code.
 class FakeAuthController extends AuthController {
-  FakeAuthController(this.initial, {this.answer, this.reauthAnswer});
+  FakeAuthController(
+    this.initial, {
+    this.answer,
+    this.reauthAnswer,
+    this.registerAnswer,
+    this.activateAnswer,
+  });
 
   final AuthState initial;
   Future<LoginOutcome> Function(String username, String password)? answer;
   Future<LoginOutcome> Function(String password)? reauthAnswer;
+  Future<RegisterOutcome> Function()? registerAnswer;
+  Future<LoginOutcome> Function()? activateAnswer;
+
+  /// Every register call's fields, in order (test-only, password included).
+  final List<Map<String, Object?>> registerCalls = [];
+
+  /// Every activate call's fields, in order (test-only).
+  final List<Map<String, String>> activateCalls = [];
 
   /// Every logIn call, in order. (Test-only: the real controller keeps no
   /// password anywhere.)
@@ -57,6 +76,41 @@ class FakeAuthController extends AuthController {
       token: fakeToken,
       expiresAt: DateTime.utc(2026, 11, 16, 10),
     );
+    return const LoginSucceeded();
+  }
+
+  @override
+  Future<RegisterOutcome> register({
+    required String username,
+    required String fullName,
+    required String password,
+    required Role role,
+    String? licenceNumber,
+  }) async {
+    registerCalls.add({
+      'username': username,
+      'fullName': fullName,
+      'password': password,
+      'role': role,
+      'licenceNumber': licenceNumber,
+    });
+    return registerAnswer?.call() ?? const RegisterSent();
+  }
+
+  @override
+  Future<LoginOutcome> activate({
+    required String username,
+    required String code,
+    required String password,
+  }) async {
+    activateCalls.add({
+      'username': username,
+      'code': code,
+      'password': password,
+    });
+    final custom = activateAnswer;
+    if (custom != null) return custom();
+    state = signedInAs(Role.officer);
     return const LoginSucceeded();
   }
 

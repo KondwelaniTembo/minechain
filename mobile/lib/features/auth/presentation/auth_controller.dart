@@ -2,7 +2,8 @@
 // 6.1-6.3; decision Q2).
 //
 // Screens (from F7) watch `authControllerProvider` to know who is signed in,
-// and call logIn / reauthenticate / logOut. They never touch the token, the
+// and call logIn / reauthenticate / logOut, and (F9) register / activate.
+// They never touch the token, the
 // saved session or the API.
 //
 // Dependency direction: auth uses the network layer (ApiClient, SessionEvents),
@@ -55,6 +56,29 @@ final class LoginNotPossible extends LoginOutcome {
 /// there was nothing to do (a password re-entered while not asked for).
 final class LoginIgnored extends LoginOutcome {
   const LoginIgnored();
+}
+
+/// What an account request came to, for the register form. Sealed: exactly
+/// these three. A request never signs anyone in (the account is pending).
+sealed class RegisterOutcome {
+  const RegisterOutcome();
+}
+
+/// The server accepted the request. Show the confirmation.
+final class RegisterSent extends RegisterOutcome {
+  const RegisterSent();
+}
+
+/// Refused or failed; the form shows the failure (and any details under
+/// their fields).
+final class RegisterFailed extends RegisterOutcome {
+  const RegisterFailed(this.failure);
+  final AppFailure failure;
+}
+
+/// Another sign-in, sign-out or request was already running; nothing sent.
+final class RegisterIgnored extends RegisterOutcome {
+  const RegisterIgnored();
 }
 
 /// Announces each fresh sign-in (a login, a re-entered password, or a saved
@@ -149,7 +173,58 @@ class AuthController extends Notifier<AuthState> {
         return LoginFailed(failure);
       }
       return _apply(result);
-    });
+    }, ignored: const LoginIgnored());
+  }
+
+  /// Activates an officer or administrator account with the code from an
+  /// administrator, and signs in exactly like a login: the session is saved,
+  /// SignedInEvents hears of it, and the router moves to the role's home.
+  Future<LoginOutcome> activate({
+    required String username,
+    required String code,
+    required String password,
+  }) {
+    return _exclusively(() async {
+      final LoginResult result;
+      try {
+        result = await _repository.activate(
+          username: username,
+          code: code,
+          password: password,
+        );
+      } on AppFailure catch (failure) {
+        // ACTIVATION_INVALID, WEAK_PASSWORD, no network, ...: nothing was
+        // saved, still signed out.
+        return LoginFailed(failure);
+      }
+      return _apply(result);
+    }, ignored: const LoginIgnored());
+  }
+
+  /// Requests a new account. Never changes the sign-in state: the account is
+  /// pending until an administrator approves it, and only then can its owner
+  /// log in.
+  Future<RegisterOutcome> register({
+    required String username,
+    required String fullName,
+    required String password,
+    required Role role,
+    String? licenceNumber,
+  }) {
+    return _exclusively(() async {
+      try {
+        await _repository.register(
+          username: username,
+          fullName: fullName,
+          password: password,
+          role: role,
+          licenceNumber: licenceNumber,
+        );
+      } on AppFailure catch (failure) {
+        return RegisterFailed(failure);
+      }
+      return const RegisterSent();
+    }, ignored: const RegisterIgnored());
   }
 
   /// Enters the password again after the token expired (decision Q2), for
@@ -176,7 +251,7 @@ class AuthController extends Notifier<AuthState> {
         return LoginFailed(failure);
       }
       return _apply(result);
-    });
+    }, ignored: const LoginIgnored());
   }
 
   /// Has the token run out by the phone's clock? If so, forget it and ask for
@@ -212,16 +287,21 @@ class AuthController extends Notifier<AuthState> {
     await _exclusively(() async {
       await _signOut(null);
       return const LoginSucceeded();
-    });
+    }, ignored: const LoginIgnored());
   }
 
   // ---- inside ----
 
-  /// Runs [action] unless another sign-in or sign-out is already running.
-  Future<LoginOutcome> _exclusively(
-    Future<LoginOutcome> Function() action,
-  ) async {
-    if (_busy) return const LoginIgnored();
+  /// Runs [action] unless another sign-in, sign-out or account request is
+  /// already running; then it answers [ignored] at once and sends nothing.
+  ///
+  /// `<T>` makes it generic: the same guard works for actions that answer a
+  /// LoginOutcome and for ones that answer a RegisterOutcome.
+  Future<T> _exclusively<T>(
+    Future<T> Function() action, {
+    required T ignored,
+  }) async {
+    if (_busy) return ignored;
     _busy = true;
     try {
       return await action();
