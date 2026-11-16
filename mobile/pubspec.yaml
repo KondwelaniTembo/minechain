@@ -31,6 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
   flutter_riverpod: 3.5.0
+  flutter_secure_storage: 11.2.0
   http: 1.6.0
 
 dev_dependencies:

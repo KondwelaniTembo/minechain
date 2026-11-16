@@ -1,7 +1,10 @@
-// The MineChain app, F5: the API address is checked at start-up and handed to
-// the rest of the app through Riverpod (F3); the sample home checks the server
-// once through the API client and shows a banner while it wakes up. A theme,
-// shared widgets and a temporary sample home come from F2.
+// The MineChain app, F6: the API address is checked at start-up and handed to
+// the rest of the app through Riverpod (F3); the saved session is read at
+// start-up (F6); the sample home checks the server once and shows a banner
+// while it wakes up (F5). A theme, shared widgets and a temporary sample home
+// come from F2.
+
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 // flutter_riverpod gives us ProviderScope, the store that holds all of the
@@ -16,6 +19,7 @@ import 'core/text/app_text.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/home_scaffold.dart';
 import 'core/widgets/server_status_banner.dart';
+import 'features/auth/presentation/auth_controller.dart';
 
 // main() is where every Dart program starts. Android launches the app, the
 // Flutter engine starts, and then it calls this function.
@@ -27,21 +31,37 @@ void main() {
   // ConfigResult is sealed, so these two cases are all there can be.
   switch (result) {
     case ConfigOk(:final config):
+      // Secure storage talks to Android through Flutter's "platform channels",
+      // which only work once Flutter's engine binding is set up. runApp does
+      // this itself, but we read the saved session just before runApp.
+      WidgetsFlutterBinding.ensureInitialized();
+
+      // A ProviderContainer is the store that keeps each provider's value, so
+      // any screen can read shared state without passing it down by hand.
+      // Made here, rather than inside ProviderScope, so main() can start
+      // reading the saved session before the first screen is drawn.
+      //
+      // retry: noRetry turns off Riverpod's automatic retry (see
+      // no_retry.dart for why). Tests pass the same function.
+      //
+      // overrides: appConfigProvider has no value of its own; here it is
+      // given the checked settings, and every later piece of code reads the
+      // address from it.
+      final container = ProviderContainer(
+        retry: noRetry,
+        overrides: [appConfigProvider.overrideWithValue(config)],
+      );
+
+      // Read the saved session (F6). Not awaited: the app appears at once,
+      // and the sign-in state moves from AuthUnknown when the read finishes.
+      // Nothing shows it yet; the router does from F7.
+      unawaited(container.read(authControllerProvider.notifier).restore());
+
       // runApp() makes the widget it is given the root of the whole screen.
+      // UncontrolledProviderScope hands the container above to the widgets.
       runApp(
-        // ProviderScope must sit above everything that uses Riverpod. It
-        // creates the container that keeps each provider's value, so any
-        // screen can read shared state without passing it down by hand.
-        //
-        // retry: noRetry turns off Riverpod's automatic retry (see
-        // no_retry.dart for why). Tests pass the same function.
-        //
-        // overrides: appConfigProvider has no value of its own; here it is
-        // given the checked settings, and every later piece of code reads the
-        // address from it.
-        ProviderScope(
-          retry: noRetry,
-          overrides: [appConfigProvider.overrideWithValue(config)],
+        UncontrolledProviderScope(
+          container: container,
           child: const MineChainApp(),
         ),
       );
