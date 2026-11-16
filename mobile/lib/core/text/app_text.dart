@@ -25,11 +25,54 @@ abstract final class AppText {
   static const String comingSoon = 'Coming soon';
   static const String myAccount = 'My account';
 
-  // ---- Miner home ----
+  // ---- Login (features/auth/presentation/login_screen.dart) ----
 
+  static const String username = 'Username';
+  static const String password = 'Password';
+  static const String logIn = 'Log in';
+  static const String loggingIn = 'Logging in…';
+  static const String showPassword = 'Show password';
+  static const String hidePassword = 'Hide password';
+  static const String enterUsername = 'Enter your username.';
+  static const String enterPassword = 'Enter your password.';
+
+  // Why the user was signed out (SignedOut.reason), shown on the login
+  // screen. The API's own reasons reuse the sentences further down.
+  static const String unsupportedApp =
+      'This version of the app does not support your account. Please update it.';
+  static const String accountChanged =
+      'This phone was signed in to a different account. Please log in again.';
+  static const String loggedOut =
+      'You have been logged out. Please log in again.';
+
+  // ---- Homes ----
+
+  static const String minerTitle = 'Miner';
+  static const String transporterTitle = 'Transporter';
+  static const String buyerTitle = 'Buyer';
+  static const String officerTitle = 'Officer';
+  static const String adminTitle = 'Administrator';
+
+  /// Shown on a home while the token has expired (decision Q2).
+  static const String needsPasswordNotice =
+      'Enter your password the next time you send your work.';
+
+  // Tiles (plan section 4.2).
   static const String registerConsignment = 'Register consignment';
   static const String myConsignments = 'My consignments';
   static const String sendMyWork = 'Send my work';
+  static const String takeCustody = 'Take custody';
+  static const String checkConsignment = 'Check a consignment';
+  static const String myHandoffs = 'My handoffs';
+  static const String recordPurchase = 'Record purchase';
+  static const String myPurchases = 'My purchases';
+  static const String reports = 'Reports';
+  static const String alerts = 'Alerts';
+  static const String auditTrail = 'Audit trail';
+  static const String accountRequests = 'Account requests';
+  static const String accounts = 'Accounts';
+  static const String gpsZones = 'GPS zones';
+  static const String anchoring = 'Anchoring';
 
   // ---- Server status banner (core/widgets/server_status_banner.dart) ----
 

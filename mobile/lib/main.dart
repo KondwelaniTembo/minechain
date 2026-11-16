@@ -1,8 +1,7 @@
-// The MineChain app, F6: the API address is checked at start-up and handed to
+// The MineChain app, F7: the API address is checked at start-up and handed to
 // the rest of the app through Riverpod (F3); the saved session is read at
-// start-up (F6); the sample home checks the server once and shows a banner
-// while it wakes up (F5). A theme, shared widgets and a temporary sample home
-// come from F2.
+// start-up (F6); go_router shows the splash, the login screen or the role's
+// home, following the sign-in state (F7).
 
 import 'dart:async';
 
@@ -13,12 +12,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/config/app_config.dart';
 import 'core/config/config_provider.dart';
-import 'core/network/server_status.dart';
 import 'core/riverpod/no_retry.dart';
+import 'core/router/app_router.dart';
 import 'core/text/app_text.dart';
 import 'core/theme/app_theme.dart';
-import 'core/widgets/home_scaffold.dart';
-import 'core/widgets/server_status_banner.dart';
 import 'features/auth/presentation/auth_controller.dart';
 
 // main() is where every Dart program starts. Android launches the app, the
@@ -52,9 +49,8 @@ void main() {
         overrides: [appConfigProvider.overrideWithValue(config)],
       );
 
-      // Read the saved session (F6). Not awaited: the app appears at once,
-      // and the sign-in state moves from AuthUnknown when the read finishes.
-      // Nothing shows it yet; the router does from F7.
+      // Read the saved session (F6). Not awaited: the app appears at once on
+      // the splash screen, and the router moves on when the read finishes.
       unawaited(container.read(authControllerProvider.notifier).restore());
 
       // runApp() makes the widget it is given the root of the whole screen.
@@ -75,15 +71,23 @@ void main() {
   }
 }
 
-/// The root widget: theme and first screen.
-class MineChainApp extends StatelessWidget {
+/// The root widget: theme and router.
+///
+/// A ConsumerWidget is a StatelessWidget that can read providers; here it
+/// reads the router.
+class MineChainApp extends ConsumerWidget {
   const MineChainApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     // MaterialApp sets up what every screen shares: theme, title, text
     // direction and navigation. There is exactly one, at the top.
-    return MaterialApp(
+    //
+    // MaterialApp.router hands navigation to go_router: which screen shows is
+    // decided by the current path and the redirect (core/router/), not by a
+    // fixed `home:`.
+    return MaterialApp.router(
+      routerConfig: ref.watch(appRouterProvider),
       // Shown in Android's recent-apps list. The name under the launcher icon
       // comes from android:label in AndroidManifest.xml.
       title: AppText.appTitle,
@@ -93,7 +97,6 @@ class MineChainApp extends StatelessWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.system,
-      home: const SampleHomeScreen(),
     );
   }
 }
@@ -139,76 +142,6 @@ class ConfigErrorApp extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-}
-
-// TEMPORARY (F2): a sample home to see the theme and tiles on the phone.
-// Replaced in F7 by the real miner home, reached through login and routing.
-//
-// A ConsumerStatefulWidget is a StatefulWidget that can also use Riverpod
-// (through `ref`). It is stateful only to run one thing once, when the screen
-// first appears: the server check.
-class SampleHomeScreen extends ConsumerStatefulWidget {
-  const SampleHomeScreen({super.key});
-
-  @override
-  ConsumerState<SampleHomeScreen> createState() => _SampleHomeScreenState();
-}
-
-class _SampleHomeScreenState extends ConsumerState<SampleHomeScreen> {
-  @override
-  void initState() {
-    super.initState();
-    // Check the server once, so a sleeping server starts waking while the
-    // user looks at the screen. Not straight away: initState runs while
-    // Flutter is building, and Riverpod forbids changing a provider's state
-    // during a build. addPostFrameCallback waits until this frame is drawn.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) ref.read(serverStatusControllerProvider.notifier).check();
-    });
-  }
-
-  // ScaffoldMessenger shows snack bars (short messages at the bottom). The
-  // hide call first removes any message still showing, so quick taps do not
-  // queue up a line of identical messages.
-  void _say(String text) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(text)));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    // Every tile does the same thing for now: "Coming soon".
-    void comingSoon() => _say(AppText.comingSoon);
-
-    // The miner's tiles from plan section 4.2. The screen only lists what it
-    // offers; HomeScaffold decides the layout. This is how widgets compose:
-    // small pieces, each with one job, fitted together.
-    return HomeScaffold(
-      title: AppText.appTitle,
-      onAccountPressed: comingSoon,
-      // Says nothing while the server is fine.
-      header: const ServerStatusBanner(),
-      actions: [
-        HomeAction(
-          icon: Icons.qr_code_scanner,
-          label: AppText.registerConsignment,
-          onTap: comingSoon,
-          primary: true,
-        ),
-        HomeAction(
-          icon: Icons.inventory_2,
-          label: AppText.myConsignments,
-          onTap: comingSoon,
-        ),
-        HomeAction(
-          icon: Icons.cloud_upload,
-          label: AppText.sendMyWork,
-          onTap: comingSoon,
-        ),
-      ],
     );
   }
 }
