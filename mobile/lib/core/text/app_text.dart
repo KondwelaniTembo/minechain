@@ -72,8 +72,12 @@ abstract final class AppText {
   static const String transporterRoleHint = 'I carry minerals from the mine.';
   static const String buyerRoleHint = 'I buy minerals as a licensed buyer.';
   static const String licenceNumberOptional = 'Licence number (optional)';
-  static const String licenceNumberHint =
-      'If you have a mining or trading licence, enter its number.';
+  // The example must match LicenceNumberFormat.example. It is written out
+  // because this file imports nothing from features/; the formatter's test
+  // checks that the two stay the same.
+  static const String licenceNumberHint = 'For example ZM-ASM-0001';
+  static const String licenceIncomplete =
+      'Enter the full licence number, like ZM-ASM-0001';
   static const String sendRequest = 'Send request';
 
   static const String enterFullName = 'Enter your full name.';

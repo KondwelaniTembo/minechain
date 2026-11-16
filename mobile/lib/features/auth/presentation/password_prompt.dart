@@ -20,6 +20,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/errors/failure_text.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/sizes.dart';
+import '../../../core/widgets/field_errors_mixin.dart';
 import '../../../core/widgets/form_message.dart';
 import '../domain/auth_state.dart';
 import 'auth_controller.dart';
@@ -49,14 +50,15 @@ class PasswordPromptDialog extends ConsumerStatefulWidget {
       _PasswordPromptDialogState();
 }
 
-class _PasswordPromptDialogState extends ConsumerState<PasswordPromptDialog> {
+/// The one field's key for FieldErrorsMixin.
+const _passwordField = 'password';
+
+class _PasswordPromptDialogState extends ConsumerState<PasswordPromptDialog>
+    with FieldErrorsMixin<PasswordPromptDialog> {
   final _password = TextEditingController();
 
   bool _sending = false;
   bool _hidden = true;
-
-  /// "Enter your password." under the field when it was left empty.
-  String? _fieldError;
 
   /// The sentence for the last failed attempt, or null.
   String? _failure;
@@ -75,7 +77,7 @@ class _PasswordPromptDialogState extends ConsumerState<PasswordPromptDialog> {
       // Nothing is sent for an empty field: it could only fail, and failed
       // logins count towards the server's limit.
       setState(() {
-        _fieldError = AppText.enterPassword;
+        setFieldErrors({_passwordField: AppText.enterPassword});
         _failure = null;
       });
       return;
@@ -88,7 +90,7 @@ class _PasswordPromptDialogState extends ConsumerState<PasswordPromptDialog> {
     _password.clear();
     setState(() {
       _sending = true;
-      _fieldError = null;
+      setFieldErrors(const {});
       _failure = null;
     });
 
@@ -151,10 +153,12 @@ class _PasswordPromptDialogState extends ConsumerState<PasswordPromptDialog> {
               onSubmitted: (_) => _submit(),
               autocorrect: false,
               enableSuggestions: false,
+              // Typing again takes "Enter your password." away.
+              onChanged: (_) => clearFieldError(_passwordField),
               decoration: InputDecoration(
                 labelText: AppText.password,
                 prefixIcon: const Icon(Icons.lock),
-                errorText: _fieldError,
+                errorText: fieldError(_passwordField),
                 errorMaxLines: 3,
                 suffixIcon: IconButton(
                   tooltip: _hidden ? AppText.showPassword : AppText.hidePassword,

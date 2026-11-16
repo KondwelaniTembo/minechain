@@ -60,7 +60,16 @@ class AppHarness {
 
 /// Scrolls [finder] into view, then taps it: on a small screen or at large
 /// text, much of a form is below the fold.
+///
+/// It settles FIRST. A text field that was just typed into has asked, for
+/// the next frame, to scroll its caret back into view (EditableText's
+/// _scheduleShowCaretOnScreen). ensureVisible itself only jumps the scroll
+/// position and draws no frame, so without this the caret's scroll would run
+/// during the settle below and undo the jump, leaving [finder] off screen
+/// when tapped. typeInto settles for the same reason; this covers a test that
+/// calls enterText directly.
 Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+  await tester.pumpAndSettle();
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
   await tester.tap(finder);
@@ -68,8 +77,13 @@ Future<void> tapVisible(WidgetTester tester, Finder finder) async {
 }
 
 /// Scrolls the text field [finder] into view and types [text] into it.
+///
+/// Settles at the end: typing makes the field scroll its caret into view on
+/// the next frame (see tapVisible). Letting that finish here means it cannot
+/// move the page under whatever the test does next.
 Future<void> typeInto(WidgetTester tester, Finder finder, String text) async {
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
   await tester.enterText(finder, text);
+  await tester.pumpAndSettle();
 }

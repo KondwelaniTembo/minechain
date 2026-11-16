@@ -24,11 +24,13 @@ import '../../../core/errors/field_errors.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/sizes.dart';
 import '../../../core/widgets/busy_button.dart';
+import '../../../core/widgets/field_errors_mixin.dart';
 import '../../../core/widgets/form_message.dart';
 import '../../../core/widgets/form_page.dart';
 import '../../../core/widgets/password_field.dart';
 import '../domain/user.dart';
 import 'auth_controller.dart';
+import 'licence_number_formatter.dart';
 
 /// Field keys for the error map. The first five are the API's own field
 /// names, so server details land under the right field with no translation.
@@ -50,7 +52,8 @@ class RegisterScreen extends ConsumerStatefulWidget {
   ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _RegisterScreenState extends ConsumerState<RegisterScreen> {
+class _RegisterScreenState extends ConsumerState<RegisterScreen>
+    with FieldErrorsMixin<RegisterScreen> {
   final _fullName = TextEditingController();
   final _username = TextEditingController();
   final _licence = TextEditingController();
@@ -66,11 +69,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   /// True once the server accepted the request: the confirmation shows.
   bool _sent = false;
 
-  /// One sentence under the whole form, or null.
+  /// One sentence under the whole form, or null. (Sentences under single
+  /// fields, keyed by [_Field], are kept by FieldErrorsMixin.)
   String? _formError;
-
-  /// Sentences under single fields, keyed by [_Field].
-  Map<String, String> _fieldErrors = const {};
 
   @override
   void dispose() {
@@ -97,6 +98,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       if (_username.text.trim().isEmpty)
         _Field.username: AppText.enterNewUsername,
       if (_role == null) _Field.role: AppText.chooseRole,
+      // Optional, but if something is typed it must be whole. The formatter
+      // already keeps the shape, so only "too short" can be left. The server
+      // is the authority on licence numbers; this only catches a number left
+      // half-typed.
+      if (_licence.text.isNotEmpty &&
+          !LicenceNumberFormat.isComplete(_licence.text))
+        _Field.licenceNumber: AppText.licenceIncomplete,
       // Passwords are never trimmed: spaces may be part of them.
       if (_password.text.isEmpty)
         _Field.password: AppText.choosePassword
@@ -113,7 +121,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     final problems = _checkLocally();
     if (problems.isNotEmpty) {
       setState(() {
-        _fieldErrors = problems;
+        setFieldErrors(problems);
         _formError = null;
         // Two different passwords: nobody can see which one is wrong, so
         // both are typed again.
@@ -132,7 +140,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     _confirm.clear();
     setState(() {
       _sending = true;
-      _fieldErrors = const {};
+      setFieldErrors(const {});
       _formError = null;
     });
 
@@ -167,14 +175,14 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     if (failure is ServerRefused) {
       if (failure.code == ApiCodes.usernameTaken) {
         // Only the username is wrong; say so right under it.
-        _fieldErrors = {_Field.username: AppText.usernameTaken};
+        setFieldErrors({_Field.username: AppText.usernameTaken});
         return;
       }
-      _fieldErrors = fieldErrorsFrom(failure.details);
+      setFieldErrors(fieldErrorsFrom(failure.details));
       // A weak password with its reasons is fully explained under the
       // password field; a second sentence below the form would only repeat it.
       if (failure.code == ApiCodes.weakPassword &&
-          _fieldErrors.containsKey(_Field.password)) {
+          hasFieldError(_Field.password)) {
         return;
       }
     }
@@ -200,10 +208,13 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           // Capital letter at the start of each word: "Mutale Banda".
           textCapitalization: TextCapitalization.words,
           textInputAction: TextInputAction.next,
+          // Each field's sentence goes as soon as the user edits that field
+          // (FieldErrorsMixin). Send checks everything again.
+          onChanged: (_) => clearFieldError(_Field.fullName),
           decoration: InputDecoration(
             labelText: AppText.fullName,
             prefixIcon: const Icon(Icons.person),
-            errorText: _fieldErrors[_Field.fullName],
+            errorText: fieldError(_Field.fullName),
             errorMaxLines: 3,
           ),
         ),
@@ -215,10 +226,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           textInputAction: TextInputAction.next,
           autocorrect: false,
           enableSuggestions: false,
+          onChanged: (_) => clearFieldError(_Field.username),
           decoration: InputDecoration(
             labelText: AppText.username,
             prefixIcon: const Icon(Icons.badge),
-            errorText: _fieldErrors[_Field.username],
+            errorText: fieldError(_Field.username),
             errorMaxLines: 3,
           ),
         ),
@@ -226,8 +238,12 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
         _RoleChooser(
           selected: _role,
           enabled: !_sending,
-          errorText: _fieldErrors[_Field.role],
-          onChanged: (role) => setState(() => _role = role),
+          errorText: fieldError(_Field.role),
+          // Choosing a role is the role picker's "edit": its sentence goes.
+          onChanged: (role) {
+            setState(() => _role = role);
+            clearFieldError(_Field.role);
+          },
         ),
         const SizedBox(height: AppSizes.spaceM),
         // Optional for all three roles (api.md lists licenceNumber as
@@ -239,12 +255,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           textCapitalization: TextCapitalization.characters,
           textInputAction: TextInputAction.next,
           autocorrect: false,
+          enableSuggestions: false,
+          // The formatter keeps it in the ZM-ABC-1234 shape as it is typed.
+          inputFormatters: const [LicenceNumberFormatter()],
+          onChanged: (_) => clearFieldError(_Field.licenceNumber),
           decoration: InputDecoration(
             labelText: AppText.licenceNumberOptional,
             prefixIcon: const Icon(Icons.verified),
             helperText: AppText.licenceNumberHint,
             helperMaxLines: 3,
-            errorText: _fieldErrors[_Field.licenceNumber],
+            errorText: fieldError(_Field.licenceNumber),
             errorMaxLines: 3,
           ),
         ),
@@ -254,14 +274,16 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
           label: AppText.password,
           enabled: !_sending,
           helperText: AppText.passwordPolicyHint,
-          errorText: _fieldErrors[_Field.password],
+          errorText: fieldError(_Field.password),
+          onChanged: (_) => clearFieldError(_Field.password),
         ),
         const SizedBox(height: AppSizes.spaceM),
         PasswordField(
           controller: _confirm,
           label: AppText.confirmPassword,
           enabled: !_sending,
-          errorText: _fieldErrors[_Field.confirm],
+          errorText: fieldError(_Field.confirm),
+          onChanged: (_) => clearFieldError(_Field.confirm),
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => _submit(),
         ),

@@ -16,6 +16,8 @@ import 'package:go_router/go_router.dart';
 import '../../../core/errors/api_codes.dart';
 import '../../../core/errors/app_failure.dart';
 import '../../../core/errors/failure_text.dart';
+import '../../../core/errors/field_errors.dart';
+import '../../../core/widgets/field_errors_mixin.dart';
 import '../../../core/network/server_status.dart';
 import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
@@ -45,7 +47,15 @@ class LoginScreen extends ConsumerStatefulWidget {
   ConsumerState<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends ConsumerState<LoginScreen> {
+/// Field keys for the error sentences: the API's own names, so the server's
+/// details land under the right field.
+abstract final class _Field {
+  static const username = 'username';
+  static const password = 'password';
+}
+
+class _LoginScreenState extends ConsumerState<LoginScreen>
+    with FieldErrorsMixin<LoginScreen> {
   // A TextEditingController holds what is typed in a text field. The State
   // creates it once and must dispose of it when the screen closes, or it stays
   // in memory.
@@ -55,12 +65,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _sending = false;
   bool _passwordHidden = true;
 
-  /// The sentence under the form after a failed attempt, or null.
+  /// The sentence under the form after a failed attempt, or null. (The
+  /// sentences under single fields are kept by FieldErrorsMixin.)
   String? _formError;
-
-  /// Per-field sentences: "enter your username", or the server's details.
-  String? _usernameError;
-  String? _passwordError;
 
   @override
   void initState() {
@@ -91,8 +98,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final passwordMissing = _password.text.isEmpty;
     setState(() {
       _formError = null;
-      _usernameError = usernameMissing ? AppText.enterUsername : null;
-      _passwordError = passwordMissing ? AppText.enterPassword : null;
+      setFieldErrors({
+        if (usernameMissing) _Field.username: AppText.enterUsername,
+        if (passwordMissing) _Field.password: AppText.enterPassword,
+      });
     });
     if (usernameMissing || passwordMissing) return;
 
@@ -114,7 +123,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           break;
         case LoginFailed(:final failure):
           _formError = failureText(failure);
-          _showFieldDetails(failure);
+          // For VALIDATION_FAILED, the server's message for each field
+          // goes under that field.
+          if (failure is ServerRefused) {
+            setFieldErrors(fieldErrorsFrom(failure.details));
+          }
         case LoginNotPossible(:final reason):
           _formError = signOutReasonText(reason);
         case LoginIgnored():
@@ -123,16 +136,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       // The username stays, so only the password has to be typed again.
       _password.clear();
     });
-  }
-
-  /// For VALIDATION_FAILED, the server's message for each field goes under
-  /// that field.
-  void _showFieldDetails(AppFailure failure) {
-    if (failure is! ServerRefused) return;
-    for (final detail in failure.details) {
-      if (detail.field == 'username') _usernameError = detail.message;
-      if (detail.field == 'password') _passwordError = detail.message;
-    }
   }
 
   @override
@@ -175,10 +178,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       textInputAction: TextInputAction.next,
                       autocorrect: false,
                       enableSuggestions: false,
+                      // The user is fixing it: take the old sentence away.
+                      onChanged: (_) => clearFieldError(_Field.username),
                       decoration: InputDecoration(
                         labelText: AppText.username,
                         prefixIcon: const Icon(Icons.person),
-                        errorText: _usernameError,
+                        errorText: fieldError(_Field.username),
                         errorMaxLines: 3,
                       ),
                     ),
@@ -193,10 +198,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       onSubmitted: (_) => _submit(),
                       autocorrect: false,
                       enableSuggestions: false,
+                      onChanged: (_) => clearFieldError(_Field.password),
                       decoration: InputDecoration(
                         labelText: AppText.password,
                         prefixIcon: const Icon(Icons.lock),
-                        errorText: _passwordError,
+                        errorText: fieldError(_Field.password),
                         errorMaxLines: 3,
                         suffixIcon: IconButton(
                           tooltip: _passwordHidden

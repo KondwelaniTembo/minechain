@@ -161,6 +161,58 @@ void main() {
     expect(find.text(AppText.weakPassword), findsNothing);
   });
 
+  group('a field\'s error clears when that field is edited', () {
+    testWidgets('local checks: gone on edit, back on Activate',
+        (tester) async {
+      await openActivate(tester);
+      await tapVisible(tester, activateButton);
+      expect(errorUnder(tester, codeField), AppText.enterActivationCode);
+      expect(errorUnder(tester, usernameField), AppText.enterUsername);
+
+      await typeInto(tester, codeField, '7');
+      await tester.pump();
+      expect(errorUnder(tester, codeField), isNull);
+      // Only the edited field's error goes.
+      expect(errorUnder(tester, usernameField), AppText.enterUsername);
+
+      await typeInto(tester, codeField, ' ');
+      await tapVisible(tester, activateButton);
+      expect(errorUnder(tester, codeField), AppText.enterActivationCode);
+      expect(app.auth.activateCalls, isEmpty);
+    });
+
+    testWidgets('a server detail (WEAK_PASSWORD): gone on edit, back on '
+        'Activate', (tester) async {
+      await openActivate(
+        tester,
+        answer: () async => const LoginFailed(
+          ServerRefused(
+            status: 400,
+            code: ApiCodes.weakPassword,
+            serverMessage: 'Choose a stronger password.',
+            details: [
+              FieldProblem(
+                field: 'password',
+                code: ApiCodes.passwordTooCommon,
+                message: 'This password is too common.',
+              ),
+            ],
+          ),
+        ),
+      );
+      await fill(tester);
+      expect(errorUnder(tester, passwordField), 'This password is too common.');
+
+      await typeInto(tester, passwordField, 'c');
+      await tester.pump();
+      expect(errorUnder(tester, passwordField), isNull);
+
+      await fill(tester); // the server refuses it again
+      expect(errorUnder(tester, passwordField), 'This password is too common.');
+      expect(app.auth.activateCalls, hasLength(2));
+    });
+  });
+
   group('fits small screens and large text', () {
     for (final (name, size, scale) in [
       ('portrait 360x640', const Size(360, 640), 1.0),

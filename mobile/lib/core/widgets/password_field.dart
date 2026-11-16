@@ -17,6 +17,7 @@ class PasswordField extends StatefulWidget {
     this.helperText,
     this.textInputAction = TextInputAction.next,
     this.onSubmitted,
+    this.onChanged,
     this.autofillHints = const [AutofillHints.newPassword],
   });
 
@@ -33,6 +34,11 @@ class PasswordField extends StatefulWidget {
 
   final TextInputAction textInputAction;
   final ValueChanged<String>? onSubmitted;
+
+  /// Called on each edit by the user (not when the form clears the field);
+  /// forms use it to take the field's error away.
+  final ValueChanged<String>? onChanged;
+
   final Iterable<String> autofillHints;
 
   @override
@@ -51,6 +57,7 @@ class _PasswordFieldState extends State<PasswordField> {
       autofillHints: widget.autofillHints,
       textInputAction: widget.textInputAction,
       onSubmitted: widget.onSubmitted,
+      onChanged: widget.onChanged,
       // No autocorrect or suggestions: the keyboard must not learn or offer
       // the password.
       autocorrect: false,

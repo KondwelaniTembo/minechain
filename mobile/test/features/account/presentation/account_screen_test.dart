@@ -20,6 +20,7 @@ import 'package:minechain/features/auth/presentation/auth_controller.dart';
 import 'package:minechain/features/auth/presentation/password_prompt.dart';
 import 'package:minechain/main.dart';
 
+import '../../../fakes/app_harness.dart' show tapVisible;
 import '../../../fakes/auth_fixtures.dart';
 import '../../../fakes/fake_controllers.dart';
 
@@ -112,10 +113,10 @@ const wrongPassword = LoginFailed(
 
 /// Opens the prompt from the account screen's notice.
 Future<void> openPrompt(WidgetTester tester) async {
-  final button = find.widgetWithText(FilledButton, AppText.enterYourPassword);
-  await tester.ensureVisible(button);
-  await tester.tap(button);
-  await tester.pumpAndSettle();
+  await tapVisible(
+    tester,
+    find.widgetWithText(FilledButton, AppText.enterYourPassword),
+  );
   expect(prompt, findsOneWidget);
 }
 
@@ -264,6 +265,28 @@ void main() {
       expect(prompt, findsOneWidget);
     });
 
+    testWidgets('the empty-field error goes on typing, back on Continue',
+        (tester) async {
+      await pumpAccount(tester, SignedInNeedsPassword(userOf(Role.miner)));
+      await openPrompt(tester);
+      String? error() =>
+          tester.widget<TextField>(promptField).decoration!.errorText;
+
+      await tester.tap(promptContinue);
+      await tester.pump();
+      expect(error(), AppText.enterPassword);
+
+      await tester.enterText(promptField, 'g');
+      await tester.pump();
+      expect(error(), isNull);
+
+      await tester.enterText(promptField, '');
+      await tester.tap(promptContinue);
+      await tester.pump();
+      expect(error(), AppText.enterPassword);
+      expect(auth.reauthenticateCalls, isEmpty);
+    });
+
     testWidgets('a wrong password: the sentence, the field cleared, still open',
         (tester) async {
       await pumpAccount(
@@ -408,9 +431,7 @@ void main() {
           size: size,
           textScale: scale,
         );
-        await tester.ensureVisible(screenLogOut);
-        await tester.tap(screenLogOut);
-        await tester.pumpAndSettle();
+        await tapVisible(tester, screenLogOut);
         expect(find.text(AppText.logOutQuestion), findsOneWidget);
         expect(tester.takeException(), isNull);
       });

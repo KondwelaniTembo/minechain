@@ -270,12 +270,128 @@ void main() {
       matching: find.byType(FilledButton),
     );
     expect(tester.widget<FilledButton>(busy).onPressed, isNull);
-    await tester.tap(busy, warnIfMissed: false);
+    // A disabled button still receives the tap (nothing blocks pointers);
+    // it just does nothing, which is what is being checked.
+    await tester.tap(busy);
     expect(app.auth.registerCalls, hasLength(1));
 
     answer.complete(const RegisterSent());
     await tester.pumpAndSettle();
     expect(find.text(AppText.requestSentTitle), findsOneWidget);
+  });
+
+  group('a field\'s error clears when that field is edited', () {
+    testWidgets('text fields: gone on edit, back on Send', (tester) async {
+      await openRegister(tester);
+      await tapVisible(tester, sendButton);
+      expect(errorUnder(tester, fullNameField), AppText.enterFullName);
+      expect(errorUnder(tester, usernameField), AppText.enterNewUsername);
+
+      await typeInto(tester, fullNameField, 'M');
+      await tester.pump();
+      expect(errorUnder(tester, fullNameField), isNull);
+      // Only the edited field's error goes.
+      expect(errorUnder(tester, usernameField), AppText.enterNewUsername);
+
+      await typeInto(tester, fullNameField, '   ');
+      await tapVisible(tester, sendButton);
+      expect(errorUnder(tester, fullNameField), AppText.enterFullName);
+      expect(app.auth.registerCalls, isEmpty);
+    });
+
+    testWidgets('the role picker: gone on choosing, back on Send if still '
+        'unchosen', (tester) async {
+      await openRegister(tester);
+      await tapVisible(tester, sendButton);
+      expect(find.text(AppText.chooseRole), findsOneWidget);
+
+      await tapVisible(tester, roleOption(Role.buyer));
+      expect(find.text(AppText.chooseRole), findsNothing);
+
+      // A fresh form, Send without a role: it comes back.
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      await tapVisible(tester, find.text(AppText.requestAccountLink));
+      await tapVisible(tester, sendButton);
+      expect(find.text(AppText.chooseRole), findsOneWidget);
+    });
+
+    testWidgets('the passwords: the mismatch goes on editing the confirm '
+        'field, back on Send', (tester) async {
+      await openRegister(tester);
+      await fill(tester, confirm: 'gold river kasempb');
+      expect(errorUnder(tester, confirmField), AppText.passwordsDoNotMatch);
+
+      await typeInto(tester, confirmField, 'g');
+      await tester.pump();
+      expect(errorUnder(tester, confirmField), isNull);
+
+      await typeInto(tester, passwordField, 'gold river kasempa');
+      await typeInto(tester, confirmField, 'gold river kasempx');
+      await tapVisible(tester, sendButton);
+      expect(errorUnder(tester, confirmField), AppText.passwordsDoNotMatch);
+      expect(app.auth.registerCalls, isEmpty);
+    });
+
+    testWidgets('a half-typed licence: gone on edit, back on Send',
+        (tester) async {
+      await openRegister(tester);
+      await fill(tester, licence: 'zm-as');
+      expect(app.auth.registerCalls, isEmpty);
+      expect(errorUnder(tester, licenceField), AppText.licenceIncomplete);
+
+      await typeInto(tester, licenceField, 'ZM-ASM-00');
+      await tester.pump();
+      expect(errorUnder(tester, licenceField), isNull);
+
+      // Still not whole. (A local refusal keeps the passwords: nothing was
+      // sent, and they matched.)
+      expect(textOf(tester, licenceField), 'ZM-ASM-00');
+      await tapVisible(tester, sendButton);
+      expect(errorUnder(tester, licenceField), AppText.licenceIncomplete);
+      expect(app.auth.registerCalls, isEmpty);
+    });
+
+    testWidgets('a server error (USERNAME_TAKEN): gone on edit, back on Send',
+        (tester) async {
+      await openRegister(
+        tester,
+        answer: () async =>
+            RegisterFailed(refused(ApiCodes.usernameTaken, status: 409)),
+      );
+      await fill(tester);
+      expect(errorUnder(tester, usernameField), AppText.usernameTaken);
+
+      await typeInto(tester, usernameField, 'mutale_banda2');
+      await tester.pump();
+      expect(errorUnder(tester, usernameField), isNull);
+
+      await typeInto(tester, passwordField, 'gold river kasempa');
+      await typeInto(tester, confirmField, 'gold river kasempa');
+      await tapVisible(tester, sendButton);
+      expect(errorUnder(tester, usernameField), AppText.usernameTaken);
+      expect(app.auth.registerCalls, hasLength(2));
+    });
+  });
+
+  group('the licence field', () {
+    testWidgets('formats what is typed as ZM-ABC-1234', (tester) async {
+      await openRegister(tester);
+      await typeInto(tester, licenceField, 'zm asm 0001');
+      await tester.pump();
+      expect(textOf(tester, licenceField), 'ZM-ASM-0001');
+    });
+
+    testWidgets('shows the example as its hint', (tester) async {
+      await openRegister(tester);
+      expect(find.text(AppText.licenceNumberHint), findsOneWidget);
+    });
+
+    testWidgets('a whole licence is sent as shown', (tester) async {
+      await openRegister(tester);
+      await fill(tester, licence: 'zmasm0007');
+      expect(app.auth.registerCalls.single['licenceNumber'], 'ZM-ASM-0007');
+    });
   });
 
   group('fits small screens and large text', () {

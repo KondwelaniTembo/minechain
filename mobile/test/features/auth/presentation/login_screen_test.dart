@@ -188,6 +188,57 @@ void main() {
     expect(find.byTooltip(AppText.hidePassword), findsOneWidget);
   });
 
+  group('a field\'s error clears when that field is edited', () {
+    String? errorUnder(WidgetTester tester, Finder field) =>
+        tester.widget<TextField>(field).decoration!.errorText;
+
+    testWidgets('a local check: gone on edit, back on Log in', (tester) async {
+      await pumpLogin(tester);
+      await tester.tap(logInButton);
+      await tester.pump();
+      expect(errorUnder(tester, usernameField), AppText.enterUsername);
+      expect(errorUnder(tester, passwordField), AppText.enterPassword);
+
+      await tester.enterText(usernameField, 'm');
+      await tester.pump();
+      expect(errorUnder(tester, usernameField), isNull);
+      // Only the edited field's error goes.
+      expect(errorUnder(tester, passwordField), AppText.enterPassword);
+
+      await tester.enterText(usernameField, '');
+      await tester.tap(logInButton);
+      await tester.pump();
+      expect(errorUnder(tester, usernameField), AppText.enterUsername);
+      expect(auth.logInCalls, isEmpty);
+    });
+
+    testWidgets('a server detail: gone on edit, back on Log in',
+        (tester) async {
+      await pumpLogin(
+        tester,
+        answer: (_, _) async => const LoginFailed(
+          ServerRefused(
+            status: 400,
+            code: ApiCodes.validationFailed,
+            serverMessage: 'Some fields are missing or invalid.',
+            details: [FieldProblem(field: 'username', message: 'is too long')],
+          ),
+        ),
+      );
+      await fillAndSubmit(tester);
+      await tester.pump();
+      expect(errorUnder(tester, usernameField), 'is too long');
+
+      await tester.enterText(usernameField, 'mutale_band');
+      await tester.pump();
+      expect(errorUnder(tester, usernameField), isNull);
+
+      await fillAndSubmit(tester);
+      await tester.pump();
+      expect(errorUnder(tester, usernameField), 'is too long');
+    });
+  });
+
   group('a sign-out reason is shown on arrival', () {
     final reasons = {
       ApiCodes.tokenInvalid: AppText.sessionNotValid,

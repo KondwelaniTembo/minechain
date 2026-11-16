@@ -26,6 +26,7 @@ import '../../../core/errors/field_errors.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/sizes.dart';
 import '../../../core/widgets/busy_button.dart';
+import '../../../core/widgets/field_errors_mixin.dart';
 import '../../../core/widgets/form_message.dart';
 import '../../../core/widgets/form_page.dart';
 import '../../../core/widgets/password_field.dart';
@@ -47,15 +48,17 @@ class ActivateScreen extends ConsumerStatefulWidget {
   ConsumerState<ActivateScreen> createState() => _ActivateScreenState();
 }
 
-class _ActivateScreenState extends ConsumerState<ActivateScreen> {
+class _ActivateScreenState extends ConsumerState<ActivateScreen>
+    with FieldErrorsMixin<ActivateScreen> {
   final _username = TextEditingController();
   final _code = TextEditingController();
   final _password = TextEditingController();
   final _confirm = TextEditingController();
 
   bool _sending = false;
+
+  /// The sentence under the form; field sentences are in FieldErrorsMixin.
   String? _formError;
-  Map<String, String> _fieldErrors = const {};
 
   @override
   void dispose() {
@@ -89,7 +92,7 @@ class _ActivateScreenState extends ConsumerState<ActivateScreen> {
     final problems = _checkLocally();
     if (problems.isNotEmpty) {
       setState(() {
-        _fieldErrors = problems;
+        setFieldErrors(problems);
         _formError = null;
         if (problems[_Field.confirm] == AppText.passwordsDoNotMatch) {
           _password.clear();
@@ -104,7 +107,7 @@ class _ActivateScreenState extends ConsumerState<ActivateScreen> {
     _confirm.clear();
     setState(() {
       _sending = true;
-      _fieldErrors = const {};
+      setFieldErrors(const {});
       _formError = null;
     });
 
@@ -140,9 +143,9 @@ class _ActivateScreenState extends ConsumerState<ActivateScreen> {
 
   void _showFailure(AppFailure failure) {
     if (failure is ServerRefused) {
-      _fieldErrors = fieldErrorsFrom(failure.details);
+      setFieldErrors(fieldErrorsFrom(failure.details));
       if (failure.code == ApiCodes.weakPassword &&
-          _fieldErrors.containsKey(_Field.password)) {
+          hasFieldError(_Field.password)) {
         return; // fully explained under the password field
       }
     }
@@ -164,10 +167,13 @@ class _ActivateScreenState extends ConsumerState<ActivateScreen> {
           textInputAction: TextInputAction.next,
           autocorrect: false,
           enableSuggestions: false,
+          // Each field's sentence goes as soon as the user edits that field
+          // (FieldErrorsMixin). Activate checks everything again.
+          onChanged: (_) => clearFieldError(_Field.username),
           decoration: InputDecoration(
             labelText: AppText.username,
             prefixIcon: const Icon(Icons.badge),
-            errorText: _fieldErrors[_Field.username],
+            errorText: fieldError(_Field.username),
             errorMaxLines: 3,
           ),
         ),
@@ -184,12 +190,13 @@ class _ActivateScreenState extends ConsumerState<ActivateScreen> {
           keyboardType: TextInputType.visiblePassword,
           autocorrect: false,
           enableSuggestions: false,
+          onChanged: (_) => clearFieldError(_Field.code),
           decoration: InputDecoration(
             labelText: AppText.activationCode,
             prefixIcon: const Icon(Icons.pin),
             helperText: AppText.activationCodeHint,
             helperMaxLines: 3,
-            errorText: _fieldErrors[_Field.code],
+            errorText: fieldError(_Field.code),
             errorMaxLines: 3,
           ),
         ),
@@ -199,14 +206,16 @@ class _ActivateScreenState extends ConsumerState<ActivateScreen> {
           label: AppText.newPassword,
           enabled: !_sending,
           helperText: AppText.passwordPolicyHint,
-          errorText: _fieldErrors[_Field.password],
+          errorText: fieldError(_Field.password),
+          onChanged: (_) => clearFieldError(_Field.password),
         ),
         const SizedBox(height: AppSizes.spaceM),
         PasswordField(
           controller: _confirm,
           label: AppText.confirmPassword,
           enabled: !_sending,
-          errorText: _fieldErrors[_Field.confirm],
+          errorText: fieldError(_Field.confirm),
+          onChanged: (_) => clearFieldError(_Field.confirm),
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => _submit(),
         ),
