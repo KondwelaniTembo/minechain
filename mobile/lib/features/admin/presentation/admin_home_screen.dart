@@ -2,7 +2,9 @@
 // says "Coming soon" until its module is built.
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/widgets/coming_soon.dart';
 import '../../../core/widgets/home_scaffold.dart';
@@ -18,8 +20,9 @@ class AdminHomeScreen extends StatelessWidget {
     return HomeScaffold(
       title: AppText.adminTitle,
       header: const HomeHeader(),
-      // The account screen comes in F8.
-      onAccountPressed: soon,
+      // push (not go): the account screen goes on top of this home, so its
+      // back arrow and Android's back button return here.
+      onAccountPressed: () => context.push(AppRoutes.account),
       actions: [
         HomeAction(
           icon: Icons.person_add,

@@ -1,7 +1,8 @@
-// The MineChain app, F7: the API address is checked at start-up and handed to
+// The MineChain app, F8: the API address is checked at start-up and handed to
 // the rest of the app through Riverpod (F3); the saved session is read at
 // start-up (F6); go_router shows the splash, the login screen or the role's
-// home, following the sign-in state (F7).
+// home, following the sign-in state (F7); the token's expiry is checked each
+// time the app comes back to the screen (F8).
 
 import 'dart:async';
 
@@ -17,6 +18,7 @@ import 'core/router/app_router.dart';
 import 'core/text/app_text.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/auth_controller.dart';
+import 'features/auth/presentation/session_expiry_watcher.dart';
 
 // main() is where every Dart program starts. Android launches the app, the
 // Flutter engine starts, and then it calls this function.
@@ -86,17 +88,24 @@ class MineChainApp extends ConsumerWidget {
     // MaterialApp.router hands navigation to go_router: which screen shows is
     // decided by the current path and the redirect (core/router/), not by a
     // fixed `home:`.
-    return MaterialApp.router(
-      routerConfig: ref.watch(appRouterProvider),
-      // Shown in Android's recent-apps list. The name under the launcher icon
-      // comes from android:label in AndroidManifest.xml.
-      title: AppText.appTitle,
-      debugShowCheckedModeBanner: false,
-      // Both themes are given, and themeMode.system picks the one matching the
-      // phone's dark-mode setting, switching live if the user changes it.
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.system,
+    //
+    // SessionExpiryWatcher sits above everything, so it lives exactly as long
+    // as the app does and sees every return to the foreground, whichever
+    // screen is showing (F8).
+    return SessionExpiryWatcher(
+      child: MaterialApp.router(
+        routerConfig: ref.watch(appRouterProvider),
+        // Shown in Android's recent-apps list. The name under the launcher
+        // icon comes from android:label in AndroidManifest.xml.
+        title: AppText.appTitle,
+        debugShowCheckedModeBanner: false,
+        // Both themes are given, and themeMode.system picks the one matching
+        // the phone's dark-mode setting, switching live if the user changes
+        // it.
+        theme: AppTheme.light,
+        darkTheme: AppTheme.dark,
+        themeMode: ThemeMode.system,
+      ),
     );
   }
 }

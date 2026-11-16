@@ -15,6 +15,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/clock.dart';
 import '../../../core/errors/api_codes.dart';
 import '../../../core/errors/app_failure.dart';
 import '../../../core/network/network_providers.dart';
@@ -123,6 +124,12 @@ class AuthController extends Notifier<AuthState> {
     state = restored;
 
     if (restored is SignedIn) {
+      // The repository has just compared the saved expiry with the clock;
+      // asking checkExpiry() once more keeps "has the token run out?" decided
+      // by one rule everywhere (here, and on resume). It costs nothing.
+      await checkExpiry();
+      if (!ref.mounted || state is! SignedIn) return;
+
       _announceSignedIn(restored.user);
       // Deliberately not awaited: start-up must not wait for the server,
       // which may take a minute to wake.
@@ -172,7 +179,35 @@ class AuthController extends Notifier<AuthState> {
     });
   }
 
+  /// Has the token run out by the phone's clock? If so, forget it and ask for
+  /// the password again (decision Q2), exactly as if the server had answered
+  /// TOKEN_EXPIRED, but without sending anything.
+  ///
+  /// Called when the app comes back to the screen (SessionExpiryWatcher) and
+  /// once after restore(). A phone in a pocket for two hours wakes up already
+  /// knowing it must ask for the password, instead of finding out from a
+  /// refused request, which needs a network the miner may not have.
+  ///
+  /// "At or after" expiresAt counts as expired. expiresAt is already a minute
+  /// before the server's own limit (plan 6.2), so the app stops one minute
+  /// early rather than one second late.
+  Future<void> checkExpiry() async {
+    // A login or logout is running and will set the state itself.
+    if (_busy) return;
+    final current = state;
+    // Only a SignedIn session has a token that can run out.
+    if (current is! SignedIn) return;
+
+    final now = ref.read(clockProvider)();
+    if (now.isBefore(current.expiresAt)) return;
+    await _expireToken(current);
+  }
+
   /// Signs out by the user's choice.
+  ///
+  /// Local only: the API has no logout endpoint, because its tokens are
+  /// stateless (api.md, "Authentication"). Forgetting the token on this phone
+  /// is the whole logout.
   Future<void> logOut() async {
     await _exclusively(() async {
       await _signOut(null);
@@ -250,14 +285,7 @@ class AuthController extends Notifier<AuthState> {
     if (code == ApiCodes.tokenExpired) {
       // Keep the user and their offline work; ask for the password before
       // the next server action (decision Q2).
-      if (current is SignedIn) {
-        try {
-          await _repository.forgetToken();
-        } on SecureStoreException {
-          // The token is no longer used either way.
-        }
-        if (ref.mounted) state = SignedInNeedsPassword(current.user);
-      }
+      if (current is SignedIn) await _expireToken(current);
       return;
     }
 
@@ -265,6 +293,24 @@ class AuthController extends Notifier<AuthState> {
       await _signOut(code);
     }
     // Any other code (for example FORBIDDEN) changes nothing here.
+  }
+
+  /// Forgets [session]'s token but keeps the user: SignedIn becomes
+  /// SignedInNeedsPassword. Shared by TOKEN_EXPIRED and checkExpiry().
+  Future<void> _expireToken(SignedIn session) async {
+    try {
+      await _repository.forgetToken();
+    } on SecureStoreException {
+      // The token is no longer used either way.
+    }
+    if (!ref.mounted) return;
+    final current = state;
+    // Only if that same session is still signed in: a logout that finished
+    // meanwhile must not be turned back into "signed in".
+    if (current is SignedIn && current.token == session.token) {
+      // current.user, not session.user: it may have been refreshed since.
+      state = SignedInNeedsPassword(current.user);
+    }
   }
 
   /// Removes the saved session and shows the user as signed out.

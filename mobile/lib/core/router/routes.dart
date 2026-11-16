@@ -4,8 +4,8 @@
 // Writing them once as constants means a typo is a compile error, not a
 // screen that silently never opens.
 //
-// Paths not built yet: /register and /activate come in F9, /account in F8.
-// The redirect rules already know about /register and /activate.
+// Paths not built yet: /register and /activate come in F9. The redirect rules
+// already know about them.
 
 abstract final class AppRoutes {
   /// Start-up: shown while the saved session is read.
@@ -27,6 +27,10 @@ abstract final class AppRoutes {
   static const String buyer = '/buyer';
   static const String officer = '/officer';
   static const String admin = '/admin';
+
+  /// The signed-in user's own account and Log out. Open to every role, so it
+  /// is not under a home's path.
+  static const String account = '/account';
 
   /// The pages a signed-out user may see.
   static const Set<String> signedOutPages = {login, register, activate};

@@ -28,7 +28,8 @@ String homeOf(Role role) => switch (role) {
 ///     /login.
 ///  3. Signed in and on a signed-out page or /start -> the role's home.
 ///  4. Signed in and on another role's page -> the role's home.
-///  5. Otherwise stay.
+///  5. Otherwise stay (the role's own pages, and /account, which every
+///     signed-in role may open).
 ///
 /// "Signed in" includes SignedInNeedsPassword (decision Q2): the home and
 /// offline work stay open; only server actions need the password again.
@@ -51,6 +52,10 @@ String? redirectFor(AuthState auth, String location) {
     case SignedInNeedsPassword(user: final signedIn):
       user = signedIn;
   }
+
+  // Rule 5: the account screen belongs to every role. Only the exact path:
+  // nothing lives under /account yet, so /account/anything goes home below.
+  if (path == AppRoutes.account) return null;
 
   final home = homeOf(user.role);
   // Rule 5: the role's own home, or any page under it.

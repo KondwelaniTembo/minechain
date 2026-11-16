@@ -25,6 +25,8 @@ final paths = [
   AppRoutes.login,
   AppRoutes.register,
   AppRoutes.activate,
+  AppRoutes.account,
+  '${AppRoutes.account}/something', // nothing lives under /account
   ...homes.values,
   for (final home in homes.values) '$home/something',
   '/nowhere',
@@ -70,7 +72,10 @@ void main() {
     ]) {
       group('${state.runtimeType} as ${role.name}', () {
         for (final path in paths) {
-          final ownPage = path == home || path.startsWith('$home/');
+          // The role's own pages, plus /account, which every role may open.
+          final ownPage = path == home ||
+              path.startsWith('$home/') ||
+              path == AppRoutes.account;
           test('$path -> ${ownPage ? 'stays' : home}', () {
             expect(redirectFor(state, path), ownPage ? isNull : home);
           });

@@ -51,12 +51,15 @@ class FakeServer {
 class Harness {
   Harness({FakeServer? server, FakeSecureStore? store, DateTime? at})
     : server = server ?? FakeServer(),
-      store = store ?? FakeSecureStore() {
+      store = store ?? FakeSecureStore(),
+      time = at ?? now {
     container = ProviderContainer.test(
       retry: noRetry,
       overrides: [
         secureStoreProvider.overrideWithValue(this.store),
-        clockProvider.overrideWithValue(() => at ?? now),
+        // The clock reads [time] each time it is asked, so a test can move
+        // it forward: "an hour later..."
+        clockProvider.overrideWithValue(() => time),
         apiClientProvider.overrideWith(
           (ref) => ApiClient(
             client: this.server.client,
@@ -72,6 +75,9 @@ class Harness {
   final FakeServer server;
   final FakeSecureStore store;
   late final ProviderContainer container;
+
+  /// What the phone's clock says now.
+  DateTime time;
 
   AuthController get auth => container.read(authControllerProvider.notifier);
   AuthState get state => container.read(authControllerProvider);
@@ -448,6 +454,66 @@ void main() {
     });
   });
 
+  group('checkExpiry (the phone clock, no request)', () {
+    Future<(Harness, DateTime)> signedIn() async {
+      final h = Harness();
+      h.store.values['db.key'] = 'unrelated secret';
+      await h.auth.logIn('mutale_banda', fakePassword);
+      return (h, (h.state as SignedIn).expiresAt);
+    }
+
+    test('before expiresAt -> still SignedIn, token kept', () async {
+      final (h, expiresAt) = await signedIn();
+      h.time = expiresAt.subtract(const Duration(seconds: 1));
+
+      await h.auth.checkExpiry();
+
+      expect(h.state, isA<SignedIn>());
+      expect(h.store.values.keys.toSet(), {...SessionKeys.all, 'db.key'});
+      expect(h.server.requests, hasLength(1)); // only the login
+    });
+
+    for (final (name, offset) in [
+      ('exactly at expiresAt', Duration.zero),
+      ('after expiresAt', const Duration(hours: 2)),
+    ]) {
+      test('$name -> needs password, token forgotten, user kept', () async {
+        final (h, expiresAt) = await signedIn();
+        h.time = expiresAt.add(offset);
+
+        await h.auth.checkExpiry();
+
+        expect(
+          h.state,
+          isA<SignedInNeedsPassword>().having(
+            (s) => s.user.username,
+            'username',
+            'mutale_banda',
+          ),
+        );
+        expect(h.store.values.keys.toSet(), {SessionKeys.user, 'db.key'});
+        expect(h.server.requests, hasLength(1)); // nothing new was sent
+      });
+    }
+
+    test('signed out -> nothing happens', () async {
+      final h = Harness();
+      await h.auth.restore();
+      h.time = now.add(const Duration(days: 1));
+      await h.auth.checkExpiry();
+      expect(h.state, isA<SignedOut>());
+    });
+
+    test('already needing the password -> nothing happens', () async {
+      final h = Harness();
+      saveSession(h.store, expiresAt: now.subtract(const Duration(minutes: 1)));
+      await h.auth.restore();
+      final before = h.state;
+      await h.auth.checkExpiry();
+      expect(h.state, same(before));
+    });
+  });
+
   test('logOut clears only the session keys', () async {
     final h = Harness();
     h.store.values['db.key'] = 'unrelated secret';
@@ -457,6 +523,8 @@ void main() {
 
     expect(h.state, isA<SignedOut>().having((s) => s.reason, 'r', isNull));
     expect(h.store.values, {'db.key': 'unrelated secret'});
+    // Local only: the API has no logout endpoint, so nothing is sent.
+    expect(h.server.requests, hasLength(1)); // only the login
   });
 
   test('a broken store at start-up -> SignedOut', () async {

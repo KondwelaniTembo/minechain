@@ -18,6 +18,7 @@ import '../../../core/errors/failure_text.dart';
 import '../../../core/network/server_status.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/sizes.dart';
+import '../../../core/widgets/form_message.dart';
 import '../../../core/widgets/server_status_banner.dart';
 import '../domain/auth_state.dart';
 import 'auth_controller.dart';
@@ -212,7 +213,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     if (message != null) ...[
                       const SizedBox(height: AppSizes.spaceM),
-                      _FormMessage(message),
+                      FormMessage(message),
                     ],
                     const SizedBox(height: AppSizes.spaceL),
                     FilledButton(
@@ -241,31 +242,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// A sentence under the form: an icon and words, never colour alone.
-class _FormMessage extends StatelessWidget {
-  const _FormMessage(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    // liveRegion: TalkBack reads it out when it appears.
-    return Semantics(
-      liveRegion: true,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.error_outline, color: scheme.error),
-          const SizedBox(width: AppSizes.spaceS),
-          Expanded(
-            child: Text(text, style: TextStyle(color: scheme.error)),
-          ),
-        ],
       ),
     );
   }

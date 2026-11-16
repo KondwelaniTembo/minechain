@@ -45,6 +45,40 @@ abstract final class AppText {
   static const String loggedOut =
       'You have been logged out. Please log in again.';
 
+  // ---- Account (features/account/presentation/account_screen.dart) ----
+
+  static const String fullName = 'Full name';
+  static const String role = 'Role';
+  static const String licenceNumber = 'Licence number';
+  static const String logOut = 'Log out';
+  static const String cancel = 'Cancel';
+
+  /// The question asked before logging out.
+  static const String logOutQuestion = 'Log out of MineChain?';
+
+  /// Under the question: logging out never deletes work saved on the phone
+  /// (plan section 6.2).
+  static const String logOutExplanation =
+      'Work saved on this phone stays on this phone.';
+
+  /// On the account screen while the token has expired (decision Q2).
+  static const String accountNeedsPassword =
+      'Your session has expired. Enter your password before you send work '
+      'to the server.';
+
+  // ---- Password prompt (features/auth/presentation/password_prompt.dart) ----
+
+  /// The prompt's title, and the account screen's button that opens it.
+  static const String enterYourPassword = 'Enter your password';
+
+  /// The shorter button on a home's notice that opens the same prompt.
+  static const String enterPasswordButton = 'Enter password';
+
+  static const String passwordPromptExplanation =
+      'Your session has expired. Enter your password to keep using the server.';
+  static const String continueLabel = 'Continue';
+  static const String checkingPassword = 'Checking…';
+
   // ---- Homes ----
 
   static const String minerTitle = 'Miner';
