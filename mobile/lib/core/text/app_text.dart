@@ -292,8 +292,12 @@ abstract final class AppText {
 
   // ---- Problems reaching the server ----
 
+  /// Shown for any request that could not reach the server, the login
+  /// included. It no longer says "Your work is safe on this phone" (plan
+  /// §3): that is only true once a step has really been saved, and the sync
+  /// screen (M6) says it there, with the count.
   static const String noConnection =
-      'No internet connection. Your work is safe on this phone.';
+      'No internet connection. Try again when you have a signal.';
   static const String timedOut =
       'The server took too long to answer. Please try again.';
   static const String insecureConnection =

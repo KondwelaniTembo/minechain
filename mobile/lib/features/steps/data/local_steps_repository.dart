@@ -1,0 +1,231 @@
+// The phone's saved custody steps (plan M3 and §2), on the local database.
+//
+// Every query uses `?` parameters; no value is ever joined into SQL text.
+// Rows are never deleted: not by logout, not by sync, not by any outcome.
+// A rejected step is signed evidence and stays.
+//
+// The work functions below are top-level, not methods, on purpose: they are
+// sent to the database's background isolate, and a closure that used `this`
+// would try to send the whole repository with it.
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sqlite3/sqlite3.dart';
+
+import '../../../core/database/local_database.dart';
+import '../domain/local_step.dart';
+
+/// Saving a step failed because a step with this `step_id` is already
+/// saved. Every step gets a fresh id, so this means a bug (or a double tap
+/// handled twice).
+final class LocalStepConflict implements Exception {
+  const LocalStepConflict();
+
+  @override
+  String toString() => 'LocalStepConflict()';
+}
+
+/// SQLite refused something else. [operation] says what; the SQLite text is
+/// dropped, because it can repeat the statement's values (a payload).
+final class LocalStepsFailure implements Exception {
+  const LocalStepsFailure(this.operation);
+  final String operation;
+
+  @override
+  String toString() => 'LocalStepsFailure($operation)';
+}
+
+class LocalStepsRepository {
+  LocalStepsRepository(this._db);
+
+  final LocalDatabase _db;
+
+  /// The most steps sent in one sync request (api.md: 1 to 50).
+  static const int batchSize = 50;
+
+  /// Saves [step] as `queued`. Returns once the row is committed: only then
+  /// may the screen say "Saved on this phone" (plan §3).
+  ///
+  /// Throws [LocalStepConflict] or [LocalStepsFailure].
+  Future<void> insert(NewLocalStep step) => _db.run((db) => _insert(db, step));
+
+  /// [actorId]'s steps, newest first (the "My consignments" list).
+  Future<List<LocalStep>> listForActor(String actorId) =>
+      _db.run((db) => _listForActor(db, actorId));
+
+  /// The next steps to send for [actorId], oldest first, at most
+  /// [batchSize]: those `queued`, and those `deferred` whose wait is over at
+  /// [now]. With [ignoreBackoff] (the user tapped Send), every deferred one.
+  Future<List<LocalStep>> dueForSync({
+    required String actorId,
+    required DateTime now,
+    bool ignoreBackoff = false,
+  }) =>
+      _db.run((db) => _dueForSync(db, actorId, storedTime(now), ignoreBackoff));
+
+  /// Writes down the server's answers, all in one transaction. Only rows
+  /// still `queued` or `deferred` change: an answer never moves a synced,
+  /// flagged or rejected step back. Returns how many rows changed.
+  Future<int> applyResults(
+    List<StepSyncUpdate> updates, {
+    required DateTime at,
+  }) => _db.run((db) => _applyResults(db, updates, storedTime(at)));
+}
+
+final localStepsRepositoryProvider = FutureProvider<LocalStepsRepository>((
+  ref,
+) async {
+  return LocalStepsRepository(await ref.watch(localDatabaseProvider.future));
+});
+
+// ---- The work, run on the database's isolate --------------------------------
+
+/// SQLite's extended code for a PRIMARY KEY clash (SQLITE_CONSTRAINT_PRIMARYKEY).
+const int _primaryKeyClash = 1555;
+
+void _insert(Database db, NewLocalStep step) {
+  try {
+    db.execute(
+      '''
+      INSERT INTO local_steps (
+        step_id, actor_id, type, qr_code, mineral, weight_mg, latitude,
+        longitude, captured_at, payload, signature, key_fingerprint,
+        gps_accuracy_m, sync_state, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)
+      ''',
+      [
+        step.stepId,
+        step.actorId,
+        step.type,
+        step.qrCode,
+        step.mineral,
+        step.weightMg,
+        step.latitude,
+        step.longitude,
+        step.capturedAt,
+        step.payload,
+        step.signature,
+        step.keyFingerprint,
+        step.gpsAccuracyM,
+        storedTime(step.createdAt),
+      ],
+    );
+  } on SqliteException catch (e) {
+    if (e.extendedResultCode == _primaryKeyClash) {
+      throw const LocalStepConflict();
+    }
+    throw const LocalStepsFailure('insert');
+  }
+}
+
+List<LocalStep> _listForActor(Database db, String actorId) {
+  try {
+    return db
+        .select(
+          'SELECT * FROM local_steps WHERE actor_id = ? '
+          'ORDER BY created_at DESC, step_id DESC',
+          [actorId],
+        )
+        .map(LocalStep.fromRow)
+        .toList();
+  } on SqliteException {
+    throw const LocalStepsFailure('list');
+  }
+}
+
+List<LocalStep> _dueForSync(
+  Database db,
+  String actorId,
+  String now,
+  bool ignoreBackoff,
+) {
+  try {
+    return db
+        .select(
+          '''
+          SELECT * FROM local_steps
+          WHERE actor_id = ?
+            AND (sync_state = 'queued'
+                 OR (sync_state = 'deferred'
+                     AND (? = 1 OR next_attempt_at IS NULL
+                          OR next_attempt_at <= ?)))
+          ORDER BY created_at ASC, step_id ASC
+          LIMIT ?
+          ''',
+          [actorId, ignoreBackoff ? 1 : 0, now, LocalStepsRepository.batchSize],
+        )
+        .map(LocalStep.fromRow)
+        .toList();
+  } on SqliteException {
+    throw const LocalStepsFailure('due');
+  }
+}
+
+int _applyResults(Database db, List<StepSyncUpdate> updates, String at) {
+  // Only an unanswered step may change.
+  const open = "sync_state IN ('queued', 'deferred')";
+  var changed = 0;
+  try {
+    db.execute('BEGIN IMMEDIATE');
+    for (final update in updates) {
+      switch (update) {
+        case StepSynced(
+          :final stepId,
+          :final reviewStatus,
+          :final transactionId,
+        ):
+          db.execute(
+            "UPDATE local_steps SET sync_state = 'synced', review_status = ?, "
+            'server_transaction_id = ?, last_code = NULL, last_message = NULL, '
+            'next_attempt_at = NULL, synced_at = ? '
+            'WHERE step_id = ? AND $open',
+            [reviewStatus, transactionId, at, stepId],
+          );
+        case StepFlagged(
+          :final stepId,
+          :final code,
+          :final message,
+          :final reviewStatus,
+          :final transactionId,
+        ):
+          db.execute(
+            "UPDATE local_steps SET sync_state = 'flagged', review_status = ?, "
+            'server_transaction_id = ?, last_code = ?, last_message = ?, '
+            'next_attempt_at = NULL, synced_at = ? '
+            'WHERE step_id = ? AND $open',
+            [reviewStatus, transactionId, code, message, at, stepId],
+          );
+        case StepRejected(:final stepId, :final code, :final message):
+          db.execute(
+            "UPDATE local_steps SET sync_state = 'rejected', last_code = ?, "
+            'last_message = ?, next_attempt_at = NULL '
+            'WHERE step_id = ? AND $open',
+            [code, message, stepId],
+          );
+        case StepDeferred(
+          :final stepId,
+          :final code,
+          :final message,
+          :final nextAttemptAt,
+        ):
+          db.execute(
+            "UPDATE local_steps SET sync_state = 'deferred', last_code = ?, "
+            'last_message = ?, attempts = attempts + 1, '
+            'first_deferred_at = COALESCE(first_deferred_at, ?), '
+            'next_attempt_at = ? '
+            'WHERE step_id = ? AND $open',
+            [code, message, at, storedTime(nextAttemptAt), stepId],
+          );
+      }
+      changed += db.updatedRows;
+    }
+    db.execute('COMMIT');
+    return changed;
+  } on SqliteException {
+    try {
+      db.execute('ROLLBACK');
+    } on SqliteException {
+      // Nothing more to undo.
+    }
+    throw const LocalStepsFailure('apply');
+  }
+}
