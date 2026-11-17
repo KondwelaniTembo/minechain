@@ -680,11 +680,15 @@ officer or administrator.
   refused, the screen explains why and offers "Open settings". There is no way to type a code
   instead: FR-01 says scan, and the spec says "exactly as scanned".
 - **Format:** QR only (`BarcodeFormat.qrCode`).
-- **A valid code** follows the server's grammar: 4–128 characters from
-  `A–Z a–z 0–9 . _ : / -`, for example `MC-2026-000123`. The value is used **exactly as
-  scanned**: never trimmed, never case-changed.
-- Anything else, such as a website link or a shop barcode: "This is not a MineChain custody
-  record." The camera stays open.
+- **A valid code** is a custody record ID: `MC-<4 digits>-<3 capitals>-<4 digits>`, for
+  example `MC-2026-LSK-0001` (decision Mobile (25), `isCustodyRecordId`). The value is
+  checked and used **exactly as scanned**: never trimmed, never case-changed. Every such ID
+  also passes the server's grammar (4–128 characters from `A–Z a–z 0–9 . _ : / -`), so the
+  payload rules and the signing vectors are unchanged.
+- Anything else, such as a website link or a shop barcode: "This QR code is not a MineChain
+  custody record." The camera keeps scanning, and section 1 stays empty.
+- Server-side check still uses the wide grammar — tightening it is logged for the security
+  review.
 - **Duplicates:**
   - The phone cannot ask the server: a miner gets 403 on `GET /consignments/by-qr`.
   - **On the phone:** if `local_steps` already holds a registration with this `qr_code`, from
