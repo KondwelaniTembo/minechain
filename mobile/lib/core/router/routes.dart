@@ -26,6 +26,10 @@ abstract final class AppRoutes {
   static const String officer = '/officer';
   static const String admin = '/admin';
 
+  /// Register a consignment (plan M5). Under /miner, so the redirect's role
+  /// rule keeps it for miners only.
+  static const String minerRegister = '/miner/register';
+
   /// The administrator's list of pending account requests. Under /admin, so
   /// the redirect's role rule keeps it for administrators only.
   static const String adminRequests = '/admin/requests';

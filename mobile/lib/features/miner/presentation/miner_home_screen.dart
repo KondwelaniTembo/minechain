@@ -1,5 +1,6 @@
-// The miner's home (plan section 4.2). Placeholder tiles for now: each says
-// "Coming soon" until its module is built. Above them, the shared header and
+// The miner's home (plan section 4.2). "Register consignment" opens its
+// screen (plan M5); the other tiles say "Coming soon" until their module is
+// built. Above them, the shared header and
 // the device key notice (plan M2), shown only when this phone may not sign.
 
 import 'package:flutter/material.dart';
@@ -33,7 +34,7 @@ class MinerHomeScreen extends StatelessWidget {
         HomeAction(
           icon: Icons.qr_code_scanner,
           label: AppText.registerConsignment,
-          onTap: soon,
+          onTap: () => context.push(AppRoutes.minerRegister),
           primary: true,
         ),
         HomeAction(

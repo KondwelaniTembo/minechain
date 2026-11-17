@@ -173,6 +173,105 @@ abstract final class AppText {
   static const String gpsZones = 'GPS zones';
   static const String anchoring = 'Anchoring';
 
+  // ---- Register a consignment (features/registration/presentation/
+  //      register_consignment_screen.dart, plan M5) ----
+
+  static const String openingSavedWork = 'Opening your saved work…';
+  static const String savedWorkProblem =
+      'Your saved work cannot be opened on this phone. Do not uninstall the '
+      'app: ask an administrator for help.';
+  static const String checkingDeviceKey = 'Checking this phone\'s device key…';
+
+  static const String scanStep = '1. Scan the custody record';
+  static const String locationStep = '2. Location';
+  static const String mineralStep = '3. Mineral';
+  static const String weightStep = '4. Weight';
+
+  static const String scanHint =
+      'Hold the QR code on the custody record inside the camera view.';
+  static String scannedRecord(String code) => 'Custody record $code ✓';
+  static const String scanAnother = 'Scan another record';
+  static const String notOurRecord =
+      'This QR code is not a MineChain custody record.';
+
+  /// Shown in place of the camera until the location question is answered:
+  /// Android shows one permission dialog at a time.
+  static const String cameraWaiting = 'The camera starts in a moment.';
+  static String alreadyRegistered(DateTime on) =>
+      'This custody record was already registered on this phone on '
+      '${on.day} ${_months[on.month - 1]}.';
+
+  static const String cameraNeeded =
+      'The camera is needed to scan the custody record. Allow it to '
+      'continue.';
+  static const String allowCamera = 'Allow camera';
+  static const String openSettings = 'Open settings';
+  static const String noCamera = 'This phone has no camera the app can use.';
+  static const String cameraFailed = 'The camera could not start.';
+
+  static const String startingLocation = 'Starting the location…';
+  static const String locationOff =
+      'Turn on Location to register a consignment.';
+  static const String turnOnLocation = 'Turn on Location';
+  static const String locationNeeded =
+      'The app needs your location to record where the minerals were found. '
+      'It is only read while this screen is open.';
+  static const String allowLocation = 'Allow location';
+  static const String locationRefused =
+      'Location is not allowed for MineChain. Open the settings and allow '
+      'Location for this app.';
+  static const String locationApproximate =
+      'Only your approximate location is allowed. Open the settings and turn '
+      'on "Use precise location" for MineChain.';
+  static String findingLocation(double? accuracyM) => accuracyM == null
+      ? 'Finding your location…'
+      : 'Finding your location… ${accuracyM.round()} m';
+  static const String stillLooking =
+      'Still looking. Stand in the open, away from buildings and trees.';
+  static const String fakeLocation =
+      'This phone is using a fake location. Turn off any fake-GPS app to '
+      'continue.';
+  static const String locationFailed = 'The location could not be read.';
+  static String locationFound(double accuracyM) =>
+      'Location found ✓ (within ${accuracyM.round()} m)';
+
+  static const String gold = 'Gold';
+  static const String copper = 'Copper';
+  static const String cobalt = 'Cobalt';
+  static const String manganese = 'Manganese';
+  static const String emerald = 'Emerald';
+  static const String amethyst = 'Amethyst';
+
+  static const String weightInGrams = 'Weight in grams';
+  static const String weightInKilograms = 'Weight in kilograms';
+  static const String grams = 'g';
+  static const String kilograms = 'kg';
+  static const String chooseMineralFirst = 'Choose the mineral first.';
+  static const String weightNegative = 'The weight cannot be below zero.';
+  static const String weightNotANumber =
+      'Enter the weight as a number, like 12.5.';
+  static String weightTooManyDecimals(int decimals) =>
+      'Use at most $decimals digits after the point.';
+  static const String weightZero = 'The weight must be more than zero.';
+  static const String weightTooLarge =
+      'That weight is too large. Check the number.';
+
+  static const String save = 'Save';
+  static const String saving = 'Saving…';
+  static const String savedOnPhone =
+      'Saved on this phone. It will be sent when you are online.';
+  static const String registerAnother = 'Register another';
+  static const String backToHome = 'Back to home';
+  static const String saveKeyNotUsable =
+      'This phone cannot sign records for you right now. Open My account to '
+      'see why.';
+  static const String saveInvalid =
+      'Something in this record is not valid. Scan the custody record again.';
+  static const String saveSigningFailed =
+      'The phone could not sign the record. Nothing was saved. Try again.';
+  static const String saveFailed =
+      'Something went wrong. Nothing was saved. Try again.';
+
   // ---- Device key (features/device_key/, plan M2) ----
 
   /// The account screen's row label.

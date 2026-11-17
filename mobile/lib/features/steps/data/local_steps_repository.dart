@@ -62,6 +62,13 @@ class LocalStepsRepository {
   }) =>
       _db.run((db) => _dueForSync(db, actorId, storedTime(now), ignoreBackoff));
 
+  /// When [qrCode] was first registered on this phone, by ANY account, or
+  /// null if never (the duplicate check, plan §6). A registration the server
+  /// rejected does not count: it was never stored there, so registering the
+  /// record again is the right thing to do.
+  Future<DateTime?> registeredOn(String qrCode) =>
+      _db.run((db) => _registeredOn(db, qrCode));
+
   /// Writes down the server's answers, all in one transaction. Only rows
   /// still `queued` or `deferred` change: an answer never moves a synced,
   /// flagged or rejected step back. Returns how many rows changed.
@@ -129,6 +136,21 @@ List<LocalStep> _listForActor(Database db, String actorId) {
         .toList();
   } on SqliteException {
     throw const LocalStepsFailure('list');
+  }
+}
+
+DateTime? _registeredOn(Database db, String qrCode) {
+  try {
+    final rows = db.select(
+      "SELECT min(created_at) AS first FROM local_steps "
+      "WHERE qr_code = ? AND type = 'registration' "
+      "AND sync_state <> 'rejected'",
+      [qrCode],
+    );
+    final first = rows.single['first'] as String?;
+    return first == null ? null : DateTime.parse(first);
+  } on SqliteException {
+    throw const LocalStepsFailure('registered-on');
   }
 }
 

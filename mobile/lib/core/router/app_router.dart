@@ -23,6 +23,7 @@ import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/buyer/presentation/buyer_home_screen.dart';
 import '../../features/miner/presentation/miner_home_screen.dart';
 import '../../features/officer/presentation/officer_home_screen.dart';
+import '../../features/registration/presentation/register_consignment_screen.dart';
 import '../../features/transporter/presentation/transporter_home_screen.dart';
 import 'redirect.dart';
 import 'routes.dart';
@@ -76,6 +77,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.miner,
         builder: (context, state) => const MinerHomeScreen(),
+      ),
+      // Under /miner, so redirect rule 4 sends every other role home. The
+      // miner home opens it with push(), so the back arrow returns there.
+      GoRoute(
+        path: AppRoutes.minerRegister,
+        builder: (context, state) => const RegisterConsignmentScreen(),
       ),
       GoRoute(
         path: AppRoutes.transporter,

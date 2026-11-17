@@ -39,6 +39,8 @@ dependencies:
   http: 1.6.0
   sqlite3: 3.9.1
   path_provider: 2.1.6
+  mobile_scanner: 7.5.0
+  geolocator: 14.1.2
 
 dev_dependencies:
   flutter_test:
