@@ -173,6 +173,28 @@ abstract final class AppText {
   static const String gpsZones = 'GPS zones';
   static const String anchoring = 'Anchoring';
 
+  // ---- Device key (features/device_key/, plan M2) ----
+
+  /// The account screen's row label.
+  static const String deviceKey = 'Device key';
+  static const String deviceKeyChecking = 'Checking…';
+
+  /// "Registered ✓ 4d61912d": the tick and the word, never colour alone,
+  /// and the start of the fingerprint, to compare with an administrator's
+  /// screen.
+  static String deviceKeyRegistered(String shortFingerprint) =>
+      'Registered ✓ $shortFingerprint';
+  static const String deviceKeyNotRegistered =
+      'Not registered yet (will be sent when online)';
+
+  /// The plan's §4 sentence for a phone whose key is not the registered one.
+  static const String deviceKeyOtherDevice =
+      'This phone is not your registered phone. Ask an administrator to '
+      'reset your device key.';
+  static const String deviceKeyProblem =
+      'This phone could not set up its device key. Close the app and open '
+      'it again. If it keeps happening, ask an administrator.';
+
   // ---- Account requests (features/admin/presentation/
   //      account_requests_screen.dart) ----
 

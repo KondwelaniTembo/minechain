@@ -1,5 +1,6 @@
 // The miner's home (plan section 4.2). Placeholder tiles for now: each says
-// "Coming soon" until its module is built.
+// "Coming soon" until its module is built. Above them, the shared header and
+// the device key notice (plan M2), shown only when this phone may not sign.
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +10,7 @@ import '../../../core/text/app_text.dart';
 import '../../../core/widgets/coming_soon.dart';
 import '../../../core/widgets/home_scaffold.dart';
 import '../../auth/presentation/home_header.dart';
+import '../../device_key/presentation/device_key_notice.dart';
 
 class MinerHomeScreen extends StatelessWidget {
   const MinerHomeScreen({super.key});
@@ -19,7 +21,11 @@ class MinerHomeScreen extends StatelessWidget {
 
     return HomeScaffold(
       title: AppText.minerTitle,
-      header: const HomeHeader(),
+      header: const Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [HomeHeader(), DeviceKeyNotice()],
+      ),
       // push (not go): the account screen goes on top of this home, so its
       // back arrow and Android's back button return here.
       onAccountPressed: () => context.push(AppRoutes.account),

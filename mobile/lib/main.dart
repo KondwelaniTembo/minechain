@@ -19,6 +19,7 @@ import 'core/text/app_text.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/auth_controller.dart';
 import 'features/auth/presentation/session_expiry_watcher.dart';
+import 'features/device_key/presentation/device_key_controller.dart';
 
 // main() is where every Dart program starts. Android launches the app, the
 // Flutter engine starts, and then it calls this function.
@@ -50,6 +51,12 @@ void main() {
         retry: noRetry,
         overrides: [appConfigProvider.overrideWithValue(config)],
       );
+
+      // The device key controller (M2) must be listening to SignedInEvents
+      // BEFORE the saved session is restored, or it would miss the sign-in
+      // that restore() announces. Reading it creates it; it then lives for
+      // the whole run.
+      container.read(deviceKeyControllerProvider);
 
       // Read the saved session (F6). Not awaited: the app appears at once on
       // the splash screen, and the router moves on when the read finishes.
