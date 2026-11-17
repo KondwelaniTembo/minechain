@@ -38,6 +38,10 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # On-device tests in integration_test/ (the Keystore, later the encrypted
+  # database). Part of the Flutter SDK, so it has no version of its own.
+  integration_test:
+    sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
