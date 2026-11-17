@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/account/presentation/account_screen.dart';
+import '../../features/admin/presentation/account_requests_screen.dart';
 import '../../features/admin/presentation/admin_home_screen.dart';
 import '../../features/auth/domain/auth_state.dart';
 import '../../features/auth/presentation/auth_controller.dart';
@@ -91,6 +92,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.admin,
         builder: (context, state) => const AdminHomeScreen(),
+      ),
+      // Under /admin, so redirect rule 4 sends every other role home. The
+      // admin home opens it with push(), so the back arrow returns there.
+      GoRoute(
+        path: AppRoutes.adminRequests,
+        builder: (context, state) => const AccountRequestsScreen(),
       ),
       // Every signed-in role, including SignedInNeedsPassword (redirect rule
       // 5). The homes open it with push(), so it sits on top of the home and

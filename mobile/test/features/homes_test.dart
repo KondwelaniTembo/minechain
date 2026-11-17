@@ -118,9 +118,14 @@ void main() {
         }
       });
 
+      // The last tile, because a home's main tile opens its real screen
+      // once its module is built (the admin's "Account requests", plan A1),
+      // and that needs the router, which this test leaves out.
       testWidgets('a tile says "Coming soon"', (tester) async {
         await pumpHome(tester, screen, signedInAs(role));
-        await tester.tap(tile(labels.first));
+        await tester.ensureVisible(tile(labels.last));
+        await tester.pump();
+        await tester.tap(tile(labels.last));
         await tester.pump();
         expect(find.text(AppText.comingSoon), findsOneWidget);
       });

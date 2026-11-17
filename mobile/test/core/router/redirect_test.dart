@@ -29,6 +29,7 @@ final paths = [
   '${AppRoutes.account}/something', // nothing lives under /account
   ...homes.values,
   for (final home in homes.values) '$home/something',
+  AppRoutes.adminRequests, // administrators only (plan A1)
   '/nowhere',
   '/',
   '/minerx', // looks like /miner, but is not under it

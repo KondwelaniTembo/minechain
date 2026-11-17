@@ -8,7 +8,9 @@
 // Rule: everyday words, short, no technical terms (plan section 7). For
 // example "Send my work", not "Sync".
 
-/// The app's text. Constants only.
+/// The app's text. Constants, plus a few small functions for sentences that
+/// carry a value (a name, a number, a date), so the whole sentence still
+/// lives here rather than being glued together in a screen.
 abstract final class AppText {
   // ---- App ----
 
@@ -170,6 +172,65 @@ abstract final class AppText {
   static const String accounts = 'Accounts';
   static const String gpsZones = 'GPS zones';
   static const String anchoring = 'Anchoring';
+
+  // ---- Account requests (features/admin/presentation/
+  //      account_requests_screen.dart) ----
+
+  static const String refreshList = 'Refresh the list';
+  static const String loadingRequests = 'Loading account requests…';
+  static const String noRequestsWaiting = 'No account requests waiting.';
+  static const String noLicenceNumber = 'No licence number';
+  static const String showMore = 'Show more';
+  static const String approve = 'Approve';
+  static const String reject = 'Reject';
+
+  /// Above the list. "1 request waiting", "3 requests waiting", or, when
+  /// only part of the list is loaded, "Showing 20 of 45 requests".
+  static String requestsCount({required int shown, required int total}) {
+    if (shown < total) return 'Showing $shown of $total requests.';
+    return total == 1 ? '1 request waiting.' : '$total requests waiting.';
+  }
+
+  /// When the account was requested, for example "Requested 5 Nov 2026".
+  static String requestedOn(DateTime date) =>
+      'Requested ${date.day} ${_months[date.month - 1]} ${date.year}';
+
+  static const List<String> _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  /// Shown instead of the list while the token has expired (decision Q2).
+  static const String requestsNeedPassword =
+      'Your session has expired. Enter your password to see account requests.';
+
+  // Approve.
+  static const String approveQuestion = 'Approve this request?';
+  static String approveExplanation(String name, String role) =>
+      '$name ($role) will be able to log in with the password they chose '
+      'when they asked for the account.';
+  static String approved(String name) => '$name can now log in.';
+
+  // Reject.
+  static const String rejectQuestion = 'Reject this request?';
+  static String rejectExplanation(String name) =>
+      '$name will not be able to log in. This cannot be undone: they would '
+      'have to ask again with a different username.';
+  static const String rejectReason = 'Reason';
+  static const String rejectReasonHint =
+      'For example: Licence number could not be verified';
+  static const String rejectReasonWarning =
+      'This reason is kept permanently and can never be changed. Keep it '
+      'short and factual, and leave out personal details. Only '
+      'administrators see it.';
+  static const String rejectReasonTooShort = 'Write at least 3 characters.';
+  static String rejected(String name) =>
+      'The request from $name was rejected.';
+
+  /// 404 or 409 on approve or reject: another administrator got there first.
+  static const String requestAlreadyHandled =
+      'Someone else has already dealt with this request. The list has been '
+      'updated.';
 
   // ---- Server status banner (core/widgets/server_status_banner.dart) ----
 
