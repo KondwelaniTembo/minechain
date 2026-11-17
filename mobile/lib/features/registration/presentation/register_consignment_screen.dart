@@ -146,6 +146,13 @@ class _Form extends ConsumerStatefulWidget {
 
 class _FormState extends ConsumerState<_Form> with WidgetsBindingObserver {
   final _weight = TextEditingController();
+  final _weightFocus = FocusNode();
+
+  /// Whether the weight's format problems are shown. Not while typing:
+  /// "12." is on its way to "12.5", not a mistake (found on the A57). They
+  /// appear when the field loses focus or when the greyed-out Save is
+  /// tapped, and go again as soon as the weight is edited.
+  bool _showWeightProblems = false;
 
   @override
   void initState() {
@@ -153,13 +160,32 @@ class _FormState extends ConsumerState<_Form> with WidgetsBindingObserver {
     // To try the location again when the user comes back from the phone's
     // settings page (location switched on, or permission allowed there).
     WidgetsBinding.instance.addObserver(this);
+    _weightFocus.addListener(_onWeightFocus);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _weightFocus
+      ..removeListener(_onWeightFocus)
+      ..dispose();
     _weight.dispose();
     super.dispose();
+  }
+
+  void _onWeightFocus() {
+    if (!_weightFocus.hasFocus) _revealWeightProblems();
+  }
+
+  void _revealWeightProblems() {
+    if (mounted && !_showWeightProblems) {
+      setState(() => _showWeightProblems = true);
+    }
+  }
+
+  void _weightEdited(String text) {
+    ref.read(registrationControllerProvider.notifier).weightChanged(text);
+    if (_showWeightProblems) setState(() => _showWeightProblems = false);
   }
 
   @override
@@ -182,6 +208,7 @@ class _FormState extends ConsumerState<_Form> with WidgetsBindingObserver {
         duration: form.saveDuration,
         onAnother: () {
           _weight.clear();
+          _showWeightProblems = false;
           controller.registerAnother();
         },
       );
@@ -211,19 +238,26 @@ class _FormState extends ConsumerState<_Form> with WidgetsBindingObserver {
                 title: AppText.weightStep,
                 child: _WeightPart(
                   form: form,
-                  controller: controller,
                   text: _weight,
+                  focus: _weightFocus,
+                  showProblems: _showWeightProblems,
+                  onChanged: _weightEdited,
                 ),
               ),
-              FilledButton.icon(
-                onPressed: form.canSave ? controller.save : null,
-                icon: form.saving
-                    ? const SizedBox.square(
-                        dimension: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save),
-                label: Text(form.saving ? AppText.saving : AppText.save),
+              // A disabled button ignores taps, so this catches a tap on the
+              // greyed-out Save and shows why it cannot save yet.
+              GestureDetector(
+                onTap: form.canSave ? null : _revealWeightProblems,
+                child: FilledButton.icon(
+                  onPressed: form.canSave ? controller.save : null,
+                  icon: form.saving
+                      ? const SizedBox.square(
+                          dimension: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.save),
+                  label: Text(form.saving ? AppText.saving : AppText.save),
+                ),
               ),
               if (form.result case final SaveResult result
                   when result is! SaveDone) ...[
@@ -578,10 +612,14 @@ class _MineralPart extends StatelessWidget {
 
 // ---- 4. Weight ---------------------------------------------------------------
 
-String? _weightError(RegistrationState form) {
+/// The sentence under the weight field, if any. "Choose the mineral first"
+/// shows at once (the unit depends on it); format problems only when
+/// [showProblems].
+String? _weightError(RegistrationState form, {required bool showProblems}) {
   if (form.weightText.trim().isEmpty) return null; // nothing typed yet
   final mineral = form.mineral;
   if (mineral == null) return AppText.chooseMineralFirst;
+  if (!showProblems) return null;
   return switch (form.weight) {
     WeightRefused(problem: WeightProblem.empty) || WeightOk() || null => null,
     WeightRefused(problem: WeightProblem.negative) => AppText.weightNegative,
@@ -597,26 +635,34 @@ String? _weightError(RegistrationState form) {
 class _WeightPart extends StatelessWidget {
   const _WeightPart({
     required this.form,
-    required this.controller,
     required this.text,
+    required this.focus,
+    required this.showProblems,
+    required this.onChanged,
   });
   final RegistrationState form;
-  final RegistrationController controller;
   final TextEditingController text;
+  final FocusNode focus;
+  final bool showProblems;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final unit = form.mineral?.unit;
     return TextField(
       controller: text,
+      focusNode: focus,
       enabled: !form.saving,
+      // "Done" on the keyboard closes it, and leaving the field shows any
+      // problem with what was typed.
+      textInputAction: TextInputAction.done,
       // The number keyboard with a decimal key.
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       // No suggestions or learning: weights are not words, and the keyboard
       // must not remember them.
       autocorrect: false,
       enableSuggestions: false,
-      onChanged: controller.weightChanged,
+      onChanged: onChanged,
       decoration: InputDecoration(
         labelText: unit == WeightUnit.kilograms
             ? AppText.weightInKilograms
@@ -624,7 +670,7 @@ class _WeightPart extends StatelessWidget {
         suffixText: unit == WeightUnit.kilograms
             ? AppText.kilograms
             : AppText.grams,
-        errorText: _weightError(form),
+        errorText: _weightError(form, showProblems: showProblems),
         errorMaxLines: 3,
       ),
     );

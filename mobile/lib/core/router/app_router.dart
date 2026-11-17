@@ -24,6 +24,7 @@ import '../../features/buyer/presentation/buyer_home_screen.dart';
 import '../../features/miner/presentation/miner_home_screen.dart';
 import '../../features/officer/presentation/officer_home_screen.dart';
 import '../../features/registration/presentation/register_consignment_screen.dart';
+import '../../features/sync/presentation/send_work_screen.dart';
 import '../../features/transporter/presentation/transporter_home_screen.dart';
 import 'redirect.dart';
 import 'routes.dart';
@@ -83,6 +84,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.minerRegister,
         builder: (context, state) => const RegisterConsignmentScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.minerSync,
+        builder: (context, state) => const SendWorkScreen(),
       ),
       GoRoute(
         path: AppRoutes.transporter,

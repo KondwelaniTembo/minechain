@@ -150,14 +150,21 @@ class FakeRegisterConsignment extends RegisterConsignment {
   }
 }
 
-/// A device key controller holding a fixed state.
+/// A device key controller holding a fixed state. check() only counts, and
+/// moves to [afterCheck] when one is given (the key PUT succeeding).
 class StaticDeviceKeyController extends DeviceKeyController {
-  StaticDeviceKeyController(this.initial);
+  StaticDeviceKeyController(this.initial, {this.afterCheck});
   final DeviceKeyState initial;
+  final DeviceKeyState? afterCheck;
+  int checks = 0;
 
   @override
   DeviceKeyState build() => initial;
 
   @override
-  Future<void> check(User user) async {}
+  Future<void> check(User user) async {
+    checks++;
+    final next = afterCheck;
+    if (next != null) state = next;
+  }
 }

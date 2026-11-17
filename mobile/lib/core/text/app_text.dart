@@ -272,6 +272,100 @@ abstract final class AppText {
   static const String saveFailed =
       'Something went wrong. Nothing was saved. Try again.';
 
+  // ---- Send my work (features/sync/presentation/send_work_screen.dart,
+  //      plan M6 and §3) ----
+
+  static const String sendNow = 'Send now';
+  static const String sendingNow = 'Sending…';
+
+  /// "3 records are safe on this phone and waiting to be sent." Shown only
+  /// from the database's own count (plan §3, "Your work is safe").
+  static String waitingOnPhone(int n) => n == 1
+      ? '1 record is safe on this phone and waiting to be sent.'
+      : '$n records are safe on this phone and waiting to be sent.';
+  static const String nothingWaiting = 'Nothing is waiting to be sent.';
+
+  /// Every record the server has, flagged ones included: a flagged record
+  /// has left the phone too.
+  static String countSentToServer(int n) => 'Sent to the server: $n';
+
+  /// Shown indented under [countSentToServer]: part of it, not extra.
+  static String countOfWhichUnderReview(int n) => 'of which under review: $n';
+
+  /// Records the server refused; kept on the phone as evidence.
+  static String countNeedsAttention(int n) => 'Needs attention: $n';
+  static const String stuckDeferred =
+      'Some records were not accepted yet after 3 days. Ask your '
+      'administrator.';
+
+  static String sendingProgress(int done, int total) =>
+      'Sending your work… $done of $total';
+  static const String sendingSlowServer =
+      'This can take up to a minute if the server is waking up.';
+
+  // The last run's result.
+
+  /// "Last send, 22:06 — you tapped Send now". [localTime] is already in
+  /// the phone's own time zone; [why] is one of the three below.
+  static String lastSendAt(DateTime localTime, String why) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return 'Last send, ${two(localTime.hour)}:${two(localTime.minute)} — $why';
+  }
+
+  static const String sendYouTapped = 'you tapped Send now';
+  static const String sendAfterSave = 'after you saved';
+  static const String sendAutomatic = 'started automatically';
+
+  static const String nothingToSend = 'There was nothing to send.';
+
+  /// "3 sent to the server ✓", or "3 sent to the server — 2 under review".
+  static String resultSentToServer(int n, {required int underReview}) =>
+      underReview == 0
+      ? '$n sent to the server ✓'
+      : '$n sent to the server — $underReview under review';
+  static String resultRejected(int n) => '$n not accepted';
+  static String resultWaiting(int n) => '$n still waiting to be sent';
+
+  /// Debug builds only: how long the send took, for NFR-03's 10 s.
+  static String sendTook(Duration elapsed) =>
+      'The send took ${(elapsed.inMilliseconds / 1000).toStringAsFixed(1)} s.';
+
+  /// One flagged step: the code and the server's message as given.
+  static String underReviewLine(String qrCode, String message) =>
+      '$qrCode: under review. $message';
+
+  /// One rejected step (plan §3: the code, and "Show this to your
+  /// administrator").
+  static String rejectedLine(String qrCode, String code) =>
+      '$qrCode: this record could not be accepted ($code). Show this to your '
+      'administrator.';
+  static String updateAppLine(String qrCode) =>
+      '$qrCode: this record could not be accepted. Please update the app.';
+
+  // Why a send stopped. Every one says the work is still on the phone,
+  // because it is: a stop never changes a saved record.
+  static const String notSentOffline =
+      'Not sent: no internet connection. Your work is safe on this phone.';
+  static const String notSentTimedOut =
+      'Not sent: the server did not answer in time. Your work is safe on '
+      'this phone. Try again in a minute.';
+  static const String notSentServer =
+      'Not sent: the server had a problem. Your work is safe on this phone. '
+      'Try again later.';
+  static const String notSentAppProblem =
+      'Something is wrong with the app. Your work is safe on this phone.';
+  static const String notSentNeedsPassword =
+      'Your session has expired. Enter your password to send your work.';
+  static const String notSentSignedOut =
+      'You are signed out. Log in again to send your work. Your work is '
+      'safe on this phone.';
+  static const String notSentKeyProblem =
+      'This phone cannot send records for you right now. Open My account '
+      'to see why. Your work is safe on this phone.';
+  static const String unmatchedAnswers =
+      'Some answers from the server did not match the records sent. Those '
+      'records stay on this phone and will be sent again.';
+
   // ---- Device key (features/device_key/, plan M2) ----
 
   /// The account screen's row label.

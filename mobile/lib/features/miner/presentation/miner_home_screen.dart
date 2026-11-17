@@ -1,6 +1,6 @@
-// The miner's home (plan section 4.2). "Register consignment" opens its
-// screen (plan M5); the other tiles say "Coming soon" until their module is
-// built. Above them, the shared header and
+// The miner's home (plan section 4.2). "Register consignment" (plan M5) and
+// "Send my work" (plan M6) open their screens; "My consignments" says
+// "Coming soon" until M7. Above them, the shared header and
 // the device key notice (plan M2), shown only when this phone may not sign.
 
 import 'package:flutter/material.dart';
@@ -45,7 +45,7 @@ class MinerHomeScreen extends StatelessWidget {
         HomeAction(
           icon: Icons.cloud_upload,
           label: AppText.sendMyWork,
-          onTap: soon,
+          onTap: () => context.push(AppRoutes.minerSync),
         ),
       ],
     );

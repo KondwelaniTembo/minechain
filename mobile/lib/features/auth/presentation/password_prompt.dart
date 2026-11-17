@@ -2,8 +2,8 @@
 // user is still signed in (decision Q2).
 //
 // It is its own widget, opened through one function, so any screen can ask
-// for the password before it talks to the server. A later module will do
-// exactly that before "Send my work":
+// for the password before it talks to the server. "Send my work" does
+// exactly that:
 //
 //   if (auth is SignedInNeedsPassword && !await showPasswordPrompt(context)) {
 //     return; // cancelled: nothing is sent
@@ -25,25 +25,47 @@ import '../../../core/widgets/form_message.dart';
 import '../domain/auth_state.dart';
 import 'auth_controller.dart';
 
+/// The prompt open now, if any.
+Future<bool>? _openPrompt;
+
 /// Opens the password prompt and waits until it closes.
 ///
 /// Returns true if the password was accepted (the state is SignedIn again),
 /// false if the user cancelled, or if they were signed out meanwhile (the
 /// router then shows the login screen with the reason).
-Future<bool> showPasswordPrompt(BuildContext context) async {
+///
+/// At most one prompt is open at a time. Four places can open it (the
+/// home's notice, My account, Account requests, Send my work), each only on
+/// a tap; a second call while one is open (a quick double tap, or a tap
+/// that lands before the first dialog is drawn) gets the same answer
+/// instead of a second dialog on top.
+Future<bool> showPasswordPrompt(BuildContext context) {
+  final open = _openPrompt;
+  if (open != null) return open;
+
+  late final Future<bool> prompt;
+  void forget() {
+    if (identical(_openPrompt, prompt)) _openPrompt = null;
+  }
+
   // showDialog puts the dialog on top of the current screen and returns a
   // Future. That Future completes with whatever the dialog passes to
   // Navigator.pop(...), or with null if it was dismissed some other way.
-  final accepted = await showDialog<bool>(
+  prompt = showDialog<bool>(
     context: context,
-    builder: (_) => const PasswordPromptDialog(),
-  );
-  return accepted ?? false;
+    builder: (_) => PasswordPromptDialog(onGone: forget),
+  ).then((accepted) => accepted ?? false).whenComplete(forget);
+  _openPrompt = prompt;
+  return prompt;
 }
 
 /// The dialog itself. Open it with [showPasswordPrompt], not directly.
 class PasswordPromptDialog extends ConsumerStatefulWidget {
-  const PasswordPromptDialog({super.key});
+  const PasswordPromptDialog({super.key, this.onGone});
+
+  /// Called when the dialog leaves the screen for good, even if its Future
+  /// never completes (the whole screen torn down under it).
+  final VoidCallback? onGone;
 
   @override
   ConsumerState<PasswordPromptDialog> createState() =>
@@ -68,6 +90,7 @@ class _PasswordPromptDialogState extends ConsumerState<PasswordPromptDialog>
     // Clear, then dispose, as on the login screen.
     _password.clear();
     _password.dispose();
+    widget.onGone?.call();
     super.dispose();
   }
 

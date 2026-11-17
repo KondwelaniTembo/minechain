@@ -17,6 +17,8 @@ import '../../../core/database/local_settings.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../steps/data/local_steps_repository.dart';
+import '../../sync/data/sync_service.dart';
+import '../../sync/domain/sync_report.dart';
 import '../data/location_source.dart';
 import '../data/register_consignment.dart';
 import '../domain/custody_record.dart';
@@ -449,6 +451,12 @@ class RegistrationController extends Notifier<RegistrationState> {
     if (result is SaveDone) {
       // Remembered for the next registration (Q5).
       unawaited(_rememberMineral(form.mineral!));
+      // Sent at once if there is a network (M6, approved point 7). Not
+      // awaited: the miner sees "Saved on this phone" whatever happens, and
+      // a failed send leaves the step safely queued.
+      unawaited(
+        ref.read(syncServiceProvider.notifier).syncNow(SyncTrigger.afterSave),
+      );
     }
   }
 

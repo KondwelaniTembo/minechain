@@ -235,6 +235,7 @@ class ApiClient {
             code: code,
             serverMessage: message,
             details: _detailsFrom(error['details']),
+            retryAfter: _retryAfterFrom(response.headers['retry-after']),
           );
         }
       }
@@ -242,6 +243,16 @@ class ApiClient {
       // Falls through: HTML from Cloudflare, an empty body, broken JSON.
     }
     return BadResponse(status: status);
+  }
+
+  /// A `Retry-After` of whole seconds (the form express-rate-limit sends).
+  /// The other allowed form, an HTTP date, is not used by this API and gives
+  /// null, as does anything odd: the caller then picks its own wait.
+  static Duration? _retryAfterFrom(String? header) {
+    if (header == null || !RegExp(r'^[0-9]{1,6}$').hasMatch(header.trim())) {
+      return null;
+    }
+    return Duration(seconds: int.parse(header.trim()));
   }
 
   /// The `details` list, keeping only well-formed entries. A missing or odd

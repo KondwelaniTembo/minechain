@@ -26,6 +26,8 @@ import 'package:minechain/features/registration/presentation/qr_scanner_view.dar
 import 'package:minechain/features/registration/presentation/registration_controller.dart';
 import 'package:minechain/features/steps/data/local_steps_repository.dart';
 import 'package:minechain/features/steps/domain/local_step.dart';
+import 'package:minechain/features/sync/data/sync_service.dart';
+import 'package:minechain/features/sync/domain/sync_report.dart';
 
 import '../../../fakes/app_harness.dart';
 import '../../../fakes/fake_controllers.dart';
@@ -124,6 +126,13 @@ Future<void> typeWeight(WidgetTester tester, String text) async {
   await tester.ensureVisible(weightField);
   await tester.pump();
   await tester.enterText(weightField, text);
+  await frames(tester);
+}
+
+/// Leaves the weight field with the keyboard's Done key, which shows any
+/// problem with what was typed.
+Future<void> leaveWeight(WidgetTester tester) async {
+  await tester.testTextInput.receiveAction(TextInputAction.done);
   await frames(tester);
 }
 
@@ -265,6 +274,7 @@ void main() {
       await fillIn(tester);
       await typeWeight(tester, '0');
       expect(enabled(tester, saveButton), isFalse);
+      await leaveWeight(tester);
       expect(find.text(AppText.weightZero), findsOneWidget);
     });
 
@@ -575,9 +585,49 @@ void main() {
         await open(tester);
         await tapIt(tester, chip(AppText.gold));
         await typeWeight(tester, typed);
+        await leaveWeight(tester);
         expect(find.text(sentence), findsOneWidget);
       });
     }
+
+    testWidgets('no format error while typing "12."; shown on leaving, '
+        'cleared on edit', (tester) async {
+      await open(tester);
+      await tapIt(tester, chip(AppText.gold));
+
+      // On the way to "12.5": not a mistake yet (found on the A57).
+      await typeWeight(tester, '12.');
+      expect(find.text(AppText.weightNotANumber), findsNothing);
+
+      // Leaving the field shows it.
+      await leaveWeight(tester);
+      expect(find.text(AppText.weightNotANumber), findsOneWidget);
+
+      // Editing clears it at once, even before the number is right.
+      await typeWeight(tester, '12.x');
+      expect(find.text(AppText.weightNotANumber), findsNothing);
+
+      await typeWeight(tester, '12.5');
+      await leaveWeight(tester);
+      expect(find.text(AppText.weightNotANumber), findsNothing);
+    });
+
+    testWidgets('a tap on the greyed-out Save shows the weight problem', (
+      tester,
+    ) async {
+      await open(tester);
+      await scan(tester, goodCode);
+      await fix(tester);
+      await tapIt(tester, chip(AppText.gold));
+      await typeWeight(tester, '12.');
+      expect(enabled(tester, saveButton), isFalse);
+      expect(find.text(AppText.weightNotANumber), findsNothing);
+
+      await tapIt(tester, saveButton);
+
+      expect(find.text(AppText.weightNotANumber), findsOneWidget);
+      expect(saver.calls, isEmpty);
+    });
   });
 
   group('saving', () {
@@ -611,6 +661,12 @@ void main() {
       expect(find.textContaining(' s)'), findsOneWidget);
       expect(saver.calls.single['weightMg'], '1500'); // 1.5 g
       expect(await settings.read(SettingKeys.lastMineral), 'gold');
+      // A send was started at once (M6). Here the fake session's token has
+      // run out by this test's clock, so it stops before sending anything.
+      expect(
+        app.container.read(syncServiceProvider).last?.stop,
+        SyncStop.needsPassword,
+      );
     });
 
     testWidgets('Register another: a fresh form, the mineral kept', (

@@ -30,6 +30,11 @@ abstract final class AppRoutes {
   /// rule keeps it for miners only.
   static const String minerRegister = '/miner/register';
 
+  /// "Send my work" (plan M6). Under /miner like the screen above. The sync
+  /// itself serves transporters and buyers too; their own screens come in
+  /// later modules.
+  static const String minerSync = '/miner/sync';
+
   /// The administrator's list of pending account requests. Under /admin, so
   /// the redirect's role rule keeps it for administrators only.
   static const String adminRequests = '/admin/requests';

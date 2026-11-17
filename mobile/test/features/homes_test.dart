@@ -24,7 +24,9 @@ final homes = <(Role, Widget, String, List<String>)>[
     Role.miner,
     const MinerHomeScreen(),
     AppText.minerTitle,
-    [AppText.registerConsignment, AppText.myConsignments, AppText.sendMyWork],
+    // "My consignments" last: it is the tile still "Coming soon" (M7);
+    // "Send my work" opens its screen since M6.
+    [AppText.registerConsignment, AppText.sendMyWork, AppText.myConsignments],
   ),
   (
     Role.transporter,

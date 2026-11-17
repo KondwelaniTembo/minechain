@@ -168,6 +168,57 @@ class LocalStep {
   String toString() => 'LocalStep(type: $type, syncState: ${syncState.name})';
 }
 
+/// A place in the send order (created_at, then step_id). One sync run only
+/// asks for rows after the last one it sent, so no row is sent twice in a
+/// run, even when a tap on Send ignores the backoff of deferred rows.
+class SyncCursor {
+  const SyncCursor({required this.createdAt, required this.stepId});
+
+  /// Just after [step].
+  SyncCursor.after(LocalStep step)
+    : createdAt = step.createdAt,
+      stepId = step.stepId;
+
+  final DateTime createdAt;
+  final String stepId;
+}
+
+/// One account's steps on this phone, counted for the "Send my work" screen.
+class StepCounts {
+  const StepCounts({
+    this.waiting = 0,
+    this.sentToServer = 0,
+    this.underReview = 0,
+    this.rejected = 0,
+    this.stuck = 0,
+  });
+
+  /// `queued` or `deferred`: on this phone only, to be sent.
+  final int waiting;
+
+  /// Stored on the server: `synced` or `flagged`. A flagged step has left
+  /// the phone too; "Sent: 0" for three flagged steps read as "nothing was
+  /// sent" on the A57.
+  final int sentToServer;
+
+  /// Part of [sentToServer]: an officer must review it (`flagged`, or a
+  /// resend answered `duplicate` of a step that had been flagged).
+  final int underReview;
+
+  /// Never accepted as it is; kept as evidence.
+  final int rejected;
+
+  /// Deferred for more than [stuckAfter] (also counted in [waiting]).
+  final int stuck;
+
+  /// Rejected: the miner should ask an administrator. A stuck step has its
+  /// own sentence instead, because it is still waiting, not refused.
+  int get needsAttention => rejected;
+
+  /// After this long deferred, a step needs a person (plan §3, NFR-04).
+  static const Duration stuckAfter = Duration(hours: 72);
+}
+
 /// What the server said about one step (api.md, POST /sync/steps, "The five
 /// outcomes"), ready to be written down. M6 turns each result into one.
 sealed class StepSyncUpdate {

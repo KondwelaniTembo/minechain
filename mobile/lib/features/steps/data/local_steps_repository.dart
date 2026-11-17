@@ -55,12 +55,41 @@ class LocalStepsRepository {
   /// The next steps to send for [actorId], oldest first, at most
   /// [batchSize]: those `queued`, and those `deferred` whose wait is over at
   /// [now]. With [ignoreBackoff] (the user tapped Send), every deferred one.
+  /// With [after], only steps later in the send order than that place.
   Future<List<LocalStep>> dueForSync({
     required String actorId,
     required DateTime now,
     bool ignoreBackoff = false,
-  }) =>
-      _db.run((db) => _dueForSync(db, actorId, storedTime(now), ignoreBackoff));
+    SyncCursor? after,
+  }) {
+    // Plain values only: this closure goes to the database's isolate.
+    final afterTime = after == null ? null : storedTime(after.createdAt);
+    final afterId = after?.stepId;
+    return _db.run(
+      (db) => _dueForSync(
+        db,
+        actorId,
+        storedTime(now),
+        ignoreBackoff,
+        afterTime,
+        afterId,
+      ),
+    );
+  }
+
+  /// How many steps [dueForSync] would offer in all (no batch limit, no
+  /// cursor), for "Sending 3 of 7".
+  Future<int> countDue({
+    required String actorId,
+    required DateTime now,
+    bool ignoreBackoff = false,
+  }) => _db.run((db) => _countDue(db, actorId, storedTime(now), ignoreBackoff));
+
+  /// [actorId]'s steps counted by what the server said, at [now].
+  Future<StepCounts> countsForActor(String actorId, {required DateTime now}) {
+    final stuckSince = storedTime(now.subtract(StepCounts.stuckAfter));
+    return _db.run((db) => _countsForActor(db, actorId, stuckSince));
+  }
 
   /// When [qrCode] was first registered on this phone, by ANY account, or
   /// null if never (the duplicate check, plan §6). A registration the server
@@ -154,31 +183,94 @@ DateTime? _registeredOn(Database db, String qrCode) {
   }
 }
 
+/// The rows a sync may send: queued, or deferred with the wait over (or
+/// ignored). Shared by [_dueForSync] and [_countDue], so the two never
+/// disagree. Its three `?` take: actor, ignoreBackoff (1 or 0), now.
+const String _dueWhere = '''
+  actor_id = ?
+  AND (sync_state = 'queued'
+       OR (sync_state = 'deferred'
+           AND (? = 1 OR next_attempt_at IS NULL OR next_attempt_at <= ?)))
+''';
+
 List<LocalStep> _dueForSync(
   Database db,
   String actorId,
   String now,
   bool ignoreBackoff,
+  String? afterTime,
+  String? afterId,
 ) {
   try {
     return db
         .select(
           '''
           SELECT * FROM local_steps
-          WHERE actor_id = ?
-            AND (sync_state = 'queued'
-                 OR (sync_state = 'deferred'
-                     AND (? = 1 OR next_attempt_at IS NULL
-                          OR next_attempt_at <= ?)))
+          WHERE $_dueWhere
+            AND (? IS NULL OR created_at > ?
+                 OR (created_at = ? AND step_id > ?))
           ORDER BY created_at ASC, step_id ASC
           LIMIT ?
           ''',
-          [actorId, ignoreBackoff ? 1 : 0, now, LocalStepsRepository.batchSize],
+          [
+            actorId,
+            ignoreBackoff ? 1 : 0,
+            now,
+            afterTime,
+            afterTime,
+            afterTime,
+            afterId,
+            LocalStepsRepository.batchSize,
+          ],
         )
         .map(LocalStep.fromRow)
         .toList();
   } on SqliteException {
     throw const LocalStepsFailure('due');
+  }
+}
+
+int _countDue(Database db, String actorId, String now, bool ignoreBackoff) {
+  try {
+    final rows = db.select(
+      'SELECT count(*) AS n FROM local_steps WHERE $_dueWhere',
+      [actorId, ignoreBackoff ? 1 : 0, now],
+    );
+    return rows.single['n'] as int;
+  } on SqliteException {
+    throw const LocalStepsFailure('count-due');
+  }
+}
+
+StepCounts _countsForActor(Database db, String actorId, String stuckSince) {
+  try {
+    // total() rather than sum(): it gives 0, not NULL, when there are no
+    // rows, and a REAL, read back with toInt().
+    final row = db.select(
+      '''
+      SELECT
+        total(sync_state IN ('queued', 'deferred')) AS waiting,
+        total(sync_state IN ('synced', 'flagged')) AS sent_to_server,
+        total(sync_state = 'flagged'
+              OR (sync_state = 'synced' AND review_status = 'flagged'))
+          AS under_review,
+        total(sync_state = 'rejected') AS rejected,
+        total(sync_state = 'deferred' AND first_deferred_at <= ?) AS stuck
+      FROM local_steps
+      WHERE actor_id = ?
+      ''',
+      [stuckSince, actorId],
+    ).single;
+    int n(String column) => (row[column] as num).toInt();
+    return StepCounts(
+      waiting: n('waiting'),
+      sentToServer: n('sent_to_server'),
+      underReview: n('under_review'),
+      rejected: n('rejected'),
+      stuck: n('stuck'),
+    );
+  } on SqliteException {
+    throw const LocalStepsFailure('counts');
   }
 }
 
