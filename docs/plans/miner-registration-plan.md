@@ -404,6 +404,39 @@ permanently. Keep it short and factual, without personal details."
 - Automatic triggers from Q4.
 - `ServerRefused` gains `retryAfter`, read from the header, for 429.
 
+**Approved before building (17 Nov 2026).** These change section 3 and Q4 where they differ:
+
+- **(4) Retries.** Unchanged from section 3: a network error, a timeout or a 500 changes
+  nothing in the row, and does not count in `attempts`. `attempts` and the backoff are for
+  `deferred` rows only. A rejection is never sent again. This keeps a phone that was offline
+  for 72 hours from waking up on hourly retries.
+- **(5) Timeout: 90 s for `POST /sync/steps`**, not the default 30 s. A free Render service
+  takes about 50–60 s to wake (`deployment.md`), so 30 s would fail the first sync after every
+  idle spell. 90 s is the foundation's wake-up health check limit, for the same reason, and a
+  resend after a timeout is safe (it comes back `duplicate`).
+- **(6) A second trigger joins the running run** and gets its result, instead of "already
+  sending". A tap during an automatic run shows that run's outcome.
+- **(7) After a save, sync starts right away**, outside the 2-minute limit on automatic
+  runs, but still respecting each `deferred` row's backoff. Start and resume keep the
+  2-minute limit.
+- Also: the screen shows sending progress, the result, and the time the send took (debug
+  builds only), to check NFR-03's "sync within 10 s". `duplicate` is shown as "Sent", like
+  `created`: it is the normal answer to a resend.
+
+**Changed after the A57 check (17 Nov 2026):**
+
+- **A sign-in also skips the 2-minute limit.** At start with an expired session, the send
+  started on resume stopped for the password, and the send started once the password was
+  entered then fell inside the 2 minutes, so nothing ran. A sign-in still counts as the
+  latest automatic run. Once the session is valid again, an earlier "enter your password" or
+  "signed out" result is no longer shown.
+- **Counts:** "Sent to the server" includes flagged steps, with "of which under review"
+  under it; "Needs attention" is the rejected steps. Three flagged steps had read as
+  "Sent: 0".
+- **"Last send, 22:06 — …"** gives the phone's local time and why it ran: "you tapped Send
+  now", "after you saved" or "started automatically".
+- **One password prompt at a time:** a second caller waits for the open prompt's answer.
+
 **Tests:**
 
 - `SyncService` against `MockClient` and an in-memory database:
@@ -726,6 +759,13 @@ officer or administrator.
    build by 15:30, fall back as described in section 9, rather than ship an unencrypted file.
 3. **Three taps** depends on how they are counted (Q5). Typing the weight is unavoidable.
 4. **The "safe on this phone" sentence** is shown today where it is not true (section 3).
+
+### Future improvements (not in this module)
+
+- **Transaction hash on the phone (needs a new endpoint).** A sync answer carries only the
+  stored step's id and review status. Anchoring happens later in the worker, so the
+  transaction hash and anchor status are not known at sync time, and a miner cannot read
+  `GET /consignments/by-qr`.
 
 ---
 
