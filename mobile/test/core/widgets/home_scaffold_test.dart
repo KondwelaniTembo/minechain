@@ -3,6 +3,7 @@
 // error: an overflow is reported as an exception, which takeException() returns.
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:minechain/core/theme/app_theme.dart';
 import 'package:minechain/core/theme/sizes.dart';
@@ -33,6 +34,7 @@ Future<void> pumpHome(
   WidgetTester tester, {
   required Size size,
   double textScale = 1.0,
+  String title = 'MineChain',
 }) async {
   // The test screen is set in physical pixels; 3 pixels per dp is typical of
   // a modern phone. reset() puts it back after the test.
@@ -47,7 +49,7 @@ Future<void> pumpHome(
     MaterialApp(
       theme: AppTheme.light,
       home: HomeScaffold(
-        title: 'MineChain',
+        title: title,
         actions: actions,
         onAccountPressed: () {},
       ),
@@ -58,8 +60,22 @@ Future<void> pumpHome(
 Finder tileNamed(String label) =>
     find.ancestor(of: find.text(label), matching: find.byType(ActionTile));
 
+Finder get accountButton => find.widgetWithIcon(IconButton, Icons.person);
+
+/// Whether the text found by [finder] is drawn whole: its full one-line width
+/// fits inside the width it was given, so nothing was cut or replaced by "…".
+bool isWhole(WidgetTester tester, Finder finder) {
+  final paragraph = tester.renderObject<RenderParagraph>(finder);
+  final fullWidth = paragraph.getMaxIntrinsicWidth(double.infinity);
+  return !paragraph.didExceedMaxLines &&
+      fullWidth <= paragraph.size.width + 0.01;
+}
+
 void main() {
-  for (final (name, size) in [('portrait', portrait), ('landscape', landscape)]) {
+  for (final (name, size) in [
+    ('portrait', portrait),
+    ('landscape', landscape),
+  ]) {
     for (final textScale in [1.0, 2.0]) {
       testWidgets('$name at text scale $textScale: no overflow, every tile '
           'reachable', (tester) async {
@@ -127,4 +143,72 @@ void main() {
 
     expect(find.byTooltip('My account'), findsOneWidget);
   });
+
+  // The test font draws every letter as a square as wide as the font size, so
+  // words are much wider here than in Roboto on a phone. "MineChain" is often
+  // left out at 360 dp in these tests; they check the rule, and the phone check
+  // shows the real look.
+  group('app bar title', () {
+    // The two longest role words (AppText.transporterTitle, adminTitle).
+    for (final role in ['Transporter', 'Administrator']) {
+      for (final textScale in [1.0, 2.0]) {
+        testWidgets('$role at 360 x 640, text scale $textScale: the role is '
+            'whole, "MineChain" is whole or absent', (tester) async {
+          await pumpHome(
+            tester,
+            size: portrait,
+            textScale: textScale,
+            title: role,
+          );
+          expect(tester.takeException(), isNull);
+
+          expect(find.text(role), findsOneWidget);
+          expect(isWhole(tester, find.text(role)), isTrue);
+
+          final name = find.text('MineChain');
+          if (name.evaluate().isNotEmpty) {
+            expect(isWhole(tester, name), isTrue);
+            expect(
+              tester.getRect(name).right,
+              lessThanOrEqualTo(tester.getRect(find.text(role)).left),
+            );
+          }
+
+          // Whole, and also inside the bar: not under the account button and
+          // not past the screen's edge.
+          final roleRect = tester.getRect(find.text(role));
+          expect(roleRect.left, greaterThanOrEqualTo(0));
+          expect(
+            roleRect.right,
+            lessThanOrEqualTo(tester.getRect(accountButton).left),
+          );
+        });
+      }
+    }
+
+    testWidgets('with room to spare, both "MineChain" and the role are shown '
+        'whole', (tester) async {
+      await pumpHome(
+        tester,
+        size: const Size(900, 640),
+        title: 'Administrator',
+      );
+      expect(tester.takeException(), isNull);
+
+      expect(find.text('MineChain'), findsOneWidget);
+      expect(isWhole(tester, find.text('MineChain')), isTrue);
+      expect(isWhole(tester, find.text('Administrator')), isTrue);
+    });
+  });
+
+  for (final textScale in [1.0, 2.0]) {
+    testWidgets('the account button is at least one tap target in both '
+        'directions, text scale $textScale', (tester) async {
+      await pumpHome(tester, size: portrait, textScale: textScale);
+
+      final size = tester.getSize(accountButton);
+      expect(size.width, greaterThanOrEqualTo(AppSizes.tapTargetMin));
+      expect(size.height, greaterThanOrEqualTo(AppSizes.tapTargetMin));
+    });
+  }
 }

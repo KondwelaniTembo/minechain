@@ -150,57 +150,119 @@ Widget _tileFor(HomeAction action) => ActionTile(
 /// "MineChain" in bold, then the role in a small rounded label.
 ///
 /// One line, not two stacked: an app bar has a fixed height, and two lines
-/// would overflow it at the largest text size. Flexible lets each part shrink
-/// and end in "…" instead of overflowing when the space runs out (the app bar
-/// already sets softWrap off and overflow to ellipsis for its title).
+/// would overflow it at the largest text size.
+///
+/// The role matters more than the name: it tells the user which kind of
+/// account they are in, while "MineChain" is only branding. So, when space is
+/// short (a 5-inch phone with the largest text):
+/// 1. the role is never cut to "Admini…";
+/// 2. "MineChain" is shown only if it fits whole beside the role, and is
+///    otherwise left out, never shown as "Mine…";
+/// 3. if even the role alone is too wide, it is scaled down to fit rather than
+///    cut. The phone's text size is never clamped anywhere else.
 class _AppBarTitle extends StatelessWidget {
   const _AppBarTitle({required this.role});
 
   final String role;
+
+  static const _rolePadding = EdgeInsets.symmetric(
+    horizontal: AppSizes.spaceS + AppSizes.spaceXs,
+    vertical: AppSizes.spaceXs,
+  );
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Flexible(
-          child: Text(
-            AppText.appTitle,
-            style: text.titleLarge?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: scheme.primary,
-            ),
-          ),
-        ),
-        const SizedBox(width: AppSizes.spaceS),
-        Flexible(
-          // The label is a different colour pair from the buttons on purpose:
-          // it is information about the account, not something to tap.
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: scheme.primaryContainer,
-              borderRadius: BorderRadius.circular(AppSizes.tileRadius),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSizes.spaceS + AppSizes.spaceXs,
-                vertical: AppSizes.spaceXs,
-              ),
-              child: Text(
-                role,
-                style: text.labelLarge?.copyWith(
-                  color: scheme.onPrimaryContainer,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
+    final nameStyle = text.titleLarge?.copyWith(
+      fontWeight: FontWeight.w800,
+      color: scheme.primary,
     );
+    final roleStyle = text.labelLarge?.copyWith(
+      color: scheme.onPrimaryContainer,
+      fontWeight: FontWeight.w600,
+    );
+
+    // The label is a different colour pair from the buttons on purpose: it is
+    // information about the account, not something to tap.
+    final roleLabel = DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(AppSizes.tileRadius),
+      ),
+      child: Padding(
+        padding: _rolePadding,
+        child: Text(role, style: roleStyle, maxLines: 1, softWrap: false),
+      ),
+    );
+
+    // LayoutBuilder gives the width the app bar has left for its title (after
+    // the account button), so the choice below follows the real space: the
+    // screen width, the orientation and the phone's text size.
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final roleWidth =
+            _textWidth(context, role, roleStyle) + _rolePadding.horizontal;
+        final nameWidth = _textWidth(context, AppText.appTitle, nameStyle);
+        final showName =
+            nameWidth + AppSizes.spaceS + roleWidth <= constraints.maxWidth;
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (showName) ...[
+              Text(
+                AppText.appTitle,
+                style: nameStyle,
+                maxLines: 1,
+                softWrap: false,
+              ),
+              const SizedBox(width: AppSizes.spaceS),
+            ],
+            // FittedBox lets the label take its full natural width, then
+            // shrinks the drawing only if that width is more than there is.
+            // scaleDown never makes it bigger. Unlike "…", the word stays
+            // whole and readable.
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerStart,
+                child: roleLabel,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// How wide [value] is drawn in [style] here, the same way a Text widget
+  /// would draw it.
+  ///
+  /// Text merges its style with the surrounding default style (the app bar
+  /// sets one) and applies the phone's text size and "bold text" settings, so
+  /// the measurement does the same; otherwise it could say "fits" for a word
+  /// that is then drawn wider.
+  static double _textWidth(
+    BuildContext context,
+    String value,
+    TextStyle? style,
+  ) {
+    var effective = DefaultTextStyle.of(context).style.merge(style);
+    if (MediaQuery.boldTextOf(context)) {
+      effective = effective.merge(const TextStyle(fontWeight: FontWeight.bold));
+    }
+    final painter = TextPainter(
+      text: TextSpan(text: value, style: effective),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      maxLines: 1,
+    )..layout();
+    final width = painter.width;
+    // A TextPainter holds native resources until disposed.
+    painter.dispose();
+    return width;
   }
 }
 
