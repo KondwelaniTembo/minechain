@@ -1,5 +1,6 @@
-// The administrator's home (plan section 4.2). Placeholder tiles for now: each
-// says "Coming soon" until its module is built.
+// The administrator's home (plan section 4.2). "Account requests" opens its
+// screen (plan A1); the other tiles say "Coming soon" until their module is
+// built.
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -27,7 +28,7 @@ class AdminHomeScreen extends StatelessWidget {
         HomeAction(
           icon: Icons.person_add,
           label: AppText.accountRequests,
-          onTap: soon,
+          onTap: () => context.push(AppRoutes.adminRequests),
           primary: true,
         ),
         HomeAction(icon: Icons.group, label: AppText.accounts, onTap: soon),

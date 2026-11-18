@@ -19,6 +19,9 @@ import 'core/text/app_text.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/auth_controller.dart';
 import 'features/auth/presentation/session_expiry_watcher.dart';
+import 'features/device_key/presentation/device_key_controller.dart';
+import 'features/sync/data/sync_service.dart';
+import 'features/sync/presentation/sync_on_resume.dart';
 
 // main() is where every Dart program starts. Android launches the app, the
 // Flutter engine starts, and then it calls this function.
@@ -50,6 +53,18 @@ void main() {
         retry: noRetry,
         overrides: [appConfigProvider.overrideWithValue(config)],
       );
+
+      // The device key controller (M2) must be listening to SignedInEvents
+      // BEFORE the saved session is restored, or it would miss the sign-in
+      // that restore() announces. Reading it creates it; it then lives for
+      // the whole run.
+      container.read(deviceKeyControllerProvider);
+
+      // The sync service (M6) also starts a send after each sign-in, so it
+      // too must be listening before restore(). After the device key
+      // controller, so that a sign-in reaches the key check first and a
+      // send waits for its answer.
+      container.read(syncServiceProvider);
 
       // Read the saved session (F6). Not awaited: the app appears at once on
       // the splash screen, and the router moves on when the read finishes.
@@ -93,7 +108,9 @@ class MineChainApp extends ConsumerWidget {
     // as the app does and sees every return to the foreground, whichever
     // screen is showing (F8).
     return SessionExpiryWatcher(
-      child: MaterialApp.router(
+      // Inside the expiry watcher: on a resume, the token's expiry is
+      // checked first. The sync service checks the expiry time itself too.
+      child: SyncOnResume(child: MaterialApp.router(
         routerConfig: ref.watch(appRouterProvider),
         // Shown in Android's recent-apps list. The name under the launcher
         // icon comes from android:label in AndroidManifest.xml.
@@ -105,7 +122,7 @@ class MineChainApp extends ConsumerWidget {
         theme: AppTheme.light,
         darkTheme: AppTheme.dark,
         themeMode: ThemeMode.system,
-      ),
+      )),
     );
   }
 }

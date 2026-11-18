@@ -32,7 +32,13 @@ final class ServerRefused extends AppFailure {
     required this.code,
     required this.serverMessage,
     this.details = const [],
+    this.retryAfter,
   });
+
+  /// From a `Retry-After` header in whole seconds, sent with 429
+  /// `TOO_MANY_REQUESTS` (api.md, rate limits). Null when absent or not a
+  /// whole number of seconds.
+  final Duration? retryAfter;
 
   /// The HTTP status, for example 401.
   final int status;

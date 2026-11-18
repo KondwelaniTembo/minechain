@@ -8,8 +8,8 @@ was built, and where it differs from this plan, is in `docs/api.md` ("Alerts (FR
 B3.1–B3.4:** B3.1 `6a85bbf`, B3.2 `677764e`, B3.3 `e9d9d40`; B3.4 is the docs commit that adds
 this sentence. Details in `docs/api.md` (`/admin/users/{id}/rename` and `/delete`),
 `docs/database-schema.md` (users, "Deleted accounts") and `docs/decisions.md` ("Accounts
-(21)–(30)" and their limitations). **Before the pull request with B3 is merged, the
-users-deleted migration must be run against the production database (see §5).** **B2
+(21)–(30)" and their limitations). The users-deleted migration was run against the
+production database on 15 Nov 2026, after a backup and before the merge (see §5). **B2
 (consignment view and verification) built 15 Nov 2026 in B2.1–B2.6:** B2.1 `963bdb5`, B2.2
 `4ca6b92`, B2.3 `e6ce0cc`, B2.4 `a063fab`, B2.5 `5c98e06`, the fix B2.5a `0ea38c2`; B2.6 is
 the docs commit that adds this sentence. Details in `docs/api.md`
@@ -343,10 +343,10 @@ commit. Differences from the rows below:
 - **B3.3:** the real-stack test makes the miner by registration and approval, since
   `POST /admin/users` creates only officers and administrators.
 
-> **Production migration: still to do.** Run `1794528000000_users-deleted` against the
-> production database from the laptop, with `verify-full` (`docs/deployment.md`), **before**
-> the pull request containing B3 is merged. Merging deploys automatically, and Render runs
-> no migrations.
+> **Production migration: done 15 Nov 2026, about 22:30.** `1794528000000_users-deleted` was
+> run against the production database from the laptop, with `verify-full`, after a backup and
+> **before** the pull request containing B3 was merged (`docs/deployment.md`, "Migrations
+> after the first deploy"). Merging deploys automatically, and Render runs no migrations.
 
 | Sub-step | Contents | Size |
 |---|---|---|

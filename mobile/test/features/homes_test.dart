@@ -24,6 +24,8 @@ final homes = <(Role, Widget, String, List<String>)>[
     Role.miner,
     const MinerHomeScreen(),
     AppText.minerTitle,
+    // In screen order. Every miner tile opens its screen since M7, so the
+    // miner has no "Coming soon" tile (see below).
     [AppText.registerConsignment, AppText.myConsignments, AppText.sendMyWork],
   ),
   (
@@ -118,12 +120,23 @@ void main() {
         }
       });
 
-      testWidgets('a tile says "Coming soon"', (tester) async {
-        await pumpHome(tester, screen, signedInAs(role));
-        await tester.tap(tile(labels.first));
-        await tester.pump();
-        expect(find.text(AppText.comingSoon), findsOneWidget);
-      });
+      // The last tile, because a home's main tile opens its real screen
+      // once its module is built (the admin's "Account requests", plan A1),
+      // and that needs the router, which this test leaves out.
+      testWidgets(
+        'a tile says "Coming soon"',
+        (tester) async {
+          await pumpHome(tester, screen, signedInAs(role));
+          await tester.ensureVisible(tile(labels.last));
+          await tester.pump();
+          await tester.tap(tile(labels.last));
+          await tester.pump();
+          expect(find.text(AppText.comingSoon), findsOneWidget);
+        },
+        // The miner's tiles are all built (M7); the miner's tests in
+        // my_consignments_screen_test.dart open "My consignments".
+        skip: role == Role.miner,
+      );
 
       testWidgets('signed in: no expired-password notice', (tester) async {
         await pumpHome(tester, screen, signedInAs(role));

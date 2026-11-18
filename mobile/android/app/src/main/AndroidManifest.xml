@@ -6,6 +6,20 @@
          this line a release build would have no network at all. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- M5, registering a consignment (plan §5 and §6). Each is asked for at the
+         moment it is first needed, never at start-up, and only in the foreground.
+         CAMERA: scanning the custody record's QR code. mobile_scanner's own
+         manifest declares it too; it is written here so the app's permissions
+         can be read in one place.
+         ACCESS_FINE_LOCATION and ACCESS_COARSE_LOCATION: one GPS fix at
+         registration. Both are needed: since Android 12 the user can grant only
+         the approximate one, and geolocator asks for the two together.
+         Deliberately NOT here: ACCESS_BACKGROUND_LOCATION. The app never reads
+         the location when it is not on screen. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+
     <!-- usesCleartextTraffic="false": no plain http://, only TLS. The app's own
          HTTP client enforces this too (pinned roots, TLS 1.3); this is the platform's
          second line.

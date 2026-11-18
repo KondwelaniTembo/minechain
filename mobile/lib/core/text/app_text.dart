@@ -8,7 +8,9 @@
 // Rule: everyday words, short, no technical terms (plan section 7). For
 // example "Send my work", not "Sync".
 
-/// The app's text. Constants only.
+/// The app's text. Constants, plus a few small functions for sentences that
+/// carry a value (a name, a number, a date), so the whole sentence still
+/// lives here rather than being glued together in a screen.
 abstract final class AppText {
   // ---- App ----
 
@@ -171,6 +173,349 @@ abstract final class AppText {
   static const String gpsZones = 'GPS zones';
   static const String anchoring = 'Anchoring';
 
+  // ---- Register a consignment (features/registration/presentation/
+  //      register_consignment_screen.dart, plan M5) ----
+
+  static const String openingSavedWork = 'Opening your saved work…';
+  static const String savedWorkProblem =
+      'Your saved work cannot be opened on this phone. Do not uninstall the '
+      'app: ask an administrator for help.';
+  static const String checkingDeviceKey = 'Checking this phone\'s device key…';
+
+  static const String scanStep = '1. Scan the custody record';
+  static const String locationStep = '2. Location';
+  static const String mineralStep = '3. Mineral';
+  static const String weightStep = '4. Weight';
+
+  static const String scanHint =
+      'Hold the QR code on the custody record inside the camera view.';
+  static String scannedRecord(String code) => 'Custody record $code ✓';
+  static const String scanAnother = 'Scan another record';
+  static const String notOurRecord =
+      'This QR code is not a MineChain custody record.';
+
+  /// Shown in place of the camera until the location question is answered:
+  /// Android shows one permission dialog at a time.
+  static const String cameraWaiting = 'The camera starts in a moment.';
+  static String alreadyRegistered(DateTime on) =>
+      'This custody record was already registered on this phone on '
+      '${on.day} ${_months[on.month - 1]}.';
+
+  static const String cameraNeeded =
+      'The camera is needed to scan the custody record. Allow it to '
+      'continue.';
+  static const String allowCamera = 'Allow camera';
+  static const String openSettings = 'Open settings';
+  static const String noCamera = 'This phone has no camera the app can use.';
+  static const String cameraFailed = 'The camera could not start.';
+
+  static const String startingLocation = 'Starting the location…';
+  static const String locationOff =
+      'Turn on Location to register a consignment.';
+  static const String turnOnLocation = 'Turn on Location';
+  static const String locationNeeded =
+      'The app needs your location to record where the minerals were found. '
+      'It is only read while this screen is open.';
+  static const String allowLocation = 'Allow location';
+  static const String locationRefused =
+      'Location is not allowed for MineChain. Open the settings and allow '
+      'Location for this app.';
+  static const String locationApproximate =
+      'Only your approximate location is allowed. Open the settings and turn '
+      'on "Use precise location" for MineChain.';
+  static String findingLocation(double? accuracyM) => accuracyM == null
+      ? 'Finding your location…'
+      : 'Finding your location… ${accuracyM.round()} m';
+  static const String stillLooking =
+      'Still looking. Stand in the open, away from buildings and trees.';
+  static const String fakeLocation =
+      'This phone is using a fake location. Turn off any fake-GPS app to '
+      'continue.';
+  static const String locationFailed = 'The location could not be read.';
+  static String locationFound(double accuracyM) =>
+      'Location found ✓ (within ${accuracyM.round()} m)';
+
+  static const String gold = 'Gold';
+  static const String copper = 'Copper';
+  static const String cobalt = 'Cobalt';
+  static const String manganese = 'Manganese';
+  static const String emerald = 'Emerald';
+  static const String amethyst = 'Amethyst';
+
+  static const String weightInGrams = 'Weight in grams';
+  static const String weightInKilograms = 'Weight in kilograms';
+  static const String grams = 'g';
+  static const String kilograms = 'kg';
+  static const String chooseMineralFirst = 'Choose the mineral first.';
+  static const String weightNegative = 'The weight cannot be below zero.';
+  static const String weightNotANumber =
+      'Enter the weight as a number, like 12.5.';
+  static String weightTooManyDecimals(int decimals) =>
+      'Use at most $decimals digits after the point.';
+  static const String weightZero = 'The weight must be more than zero.';
+  static const String weightTooLarge =
+      'That weight is too large. Check the number.';
+
+  static const String save = 'Save';
+  static const String saving = 'Saving…';
+  static const String savedOnPhone =
+      'Saved on this phone. It will be sent when you are online.';
+  static const String registerAnother = 'Register another';
+  static const String backToHome = 'Back to home';
+  static const String saveKeyNotUsable =
+      'This phone cannot sign records for you right now. Open My account to '
+      'see why.';
+  static const String saveInvalid =
+      'Something in this record is not valid. Scan the custody record again.';
+  static const String saveSigningFailed =
+      'The phone could not sign the record. Nothing was saved. Try again.';
+  static const String saveFailed =
+      'Something went wrong. Nothing was saved. Try again.';
+
+  // ---- Send my work (features/sync/presentation/send_work_screen.dart,
+  //      plan M6 and §3) ----
+
+  static const String sendNow = 'Send now';
+  static const String sendingNow = 'Sending…';
+
+  /// "3 records are safe on this phone and waiting to be sent." Shown only
+  /// from the database's own count (plan §3, "Your work is safe").
+  static String waitingOnPhone(int n) => n == 1
+      ? '1 record is safe on this phone and waiting to be sent.'
+      : '$n records are safe on this phone and waiting to be sent.';
+  static const String nothingWaiting = 'Nothing is waiting to be sent.';
+
+  /// Every record the server has, flagged ones included: a flagged record
+  /// has left the phone too.
+  static String countSentToServer(int n) => 'Sent to the server: $n';
+
+  /// Shown indented under [countSentToServer]: part of it, not extra.
+  static String countOfWhichUnderReview(int n) => 'of which under review: $n';
+
+  /// Records the server refused; kept on the phone as evidence.
+  static String countNeedsAttention(int n) => 'Needs attention: $n';
+  static const String stuckDeferred =
+      'Some records were not accepted yet after 3 days. Ask your '
+      'administrator.';
+
+  static String sendingProgress(int done, int total) =>
+      'Sending your work… $done of $total';
+  static const String sendingSlowServer =
+      'This can take up to a minute if the server is waking up.';
+
+  // The last run's result.
+
+  /// "Last send, 22:06 — you tapped Send now". [localTime] is already in
+  /// the phone's own time zone; [why] is one of the three below.
+  static String lastSendAt(DateTime localTime, String why) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return 'Last send, ${two(localTime.hour)}:${two(localTime.minute)} — $why';
+  }
+
+  static const String sendYouTapped = 'you tapped Send now';
+  static const String sendAfterSave = 'after you saved';
+  static const String sendAutomatic = 'started automatically';
+
+  static const String nothingToSend = 'There was nothing to send.';
+
+  /// "3 sent to the server ✓", or "3 sent to the server — 2 under review".
+  static String resultSentToServer(int n, {required int underReview}) =>
+      underReview == 0
+      ? '$n sent to the server ✓'
+      : '$n sent to the server — $underReview under review';
+  static String resultRejected(int n) => '$n not accepted';
+  static String resultWaiting(int n) => '$n still waiting to be sent';
+
+  /// Debug builds only: how long the send took, for NFR-03's 10 s.
+  static String sendTook(Duration elapsed) =>
+      'The send took ${(elapsed.inMilliseconds / 1000).toStringAsFixed(1)} s.';
+
+  // One record's state. "Send my work" puts the QR code in front of these;
+  // "My consignments" shows them under the record (decision Mobile (34)), so
+  // both screens say the same thing in the same words.
+  static const String _underReview = 'under review';
+  static String _notAccepted(String code) =>
+      'this record could not be accepted ($code). Show this to your '
+      'administrator.';
+  static const String _notAcceptedUpdateApp =
+      'this record could not be accepted. Please update the app.';
+
+  /// One flagged step: the code and the server's message as given.
+  static String underReviewLine(String qrCode, String message) =>
+      '$qrCode: $_underReview. $message';
+
+  /// One rejected step (plan §3: the code, and "Show this to your
+  /// administrator").
+  static String rejectedLine(String qrCode, String code) =>
+      '$qrCode: ${_notAccepted(code)}';
+  static String updateAppLine(String qrCode) =>
+      '$qrCode: $_notAcceptedUpdateApp';
+
+  // ---- My consignments (features/consignments/, plan M7) ----
+
+  /// The singular of [waitingOnPhone].
+  static const String stepWaiting =
+      'Safe on this phone and waiting to be sent.';
+
+  /// The singular of [stuckDeferred] (plan §3).
+  static const String stepStuck =
+      'Not accepted yet after 3 days. Ask your administrator.';
+
+  /// As [resultSentToServer].
+  static const String stepSent = 'Sent to the server ✓';
+  static const String stepUnderReview = 'Sent to the server — $_underReview.';
+
+  /// As [countNeedsAttention] and [rejectedLine].
+  static String stepRejected(String code) =>
+      'Needs attention: ${_notAccepted(code)}';
+  static const String stepUpdateApp = 'Needs attention: $_notAcceptedUpdateApp';
+
+  /// "Gold, 1.5 g".
+  static String consignmentWhat(String mineral, String weight, String unit) =>
+      '$mineral, $weight $unit';
+  static const String milligrams = 'mg';
+
+  /// "Saved 18 Nov, 02:29", in the phone's own time.
+  static String savedAt(DateTime localTime) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return 'Saved ${localTime.day} ${_months[localTime.month - 1]}, '
+        '${two(localTime.hour)}:${two(localTime.minute)}';
+  }
+
+  static const String noConsignmentsYet =
+      'You have not registered any consignments yet.';
+
+  /// The list could not be read for a moment (Mobile (26)).
+  static const String consignmentsPhoneBusy =
+      'The phone was busy and could not show your consignments. Your work '
+      'is safe on this phone.';
+
+  // Why a send stopped. Every one says the work is still on the phone,
+  // because it is: a stop never changes a saved record.
+  static const String notSentOffline =
+      'Not sent: no internet connection. Your work is safe on this phone.';
+  static const String notSentTimedOut =
+      'Not sent: the server did not answer in time. Your work is safe on '
+      'this phone. Try again in a minute.';
+  static const String notSentServer =
+      'Not sent: the server had a problem. Your work is safe on this phone. '
+      'Try again later.';
+  static const String notSentAppProblem =
+      'Something is wrong with the app. Your work is safe on this phone.';
+
+  /// A moment's problem on the phone itself (the saved work was in use),
+  /// never "cannot be opened": the work is fine and is tried again.
+  static const String notSentPhoneBusy =
+      'Not sent yet: the phone was busy. Your work is safe on this phone. '
+      'It will be sent shortly.';
+
+  /// A save that met the database in use for a moment (Mobile (26)).
+  /// Nothing was stored, and nothing saved before is affected.
+  static const String saveBusy =
+      'Not saved yet: the phone was busy. Your other saved work is safe. '
+      'Try Save again.';
+
+  /// The same, once the automatic retry has also been used.
+  static const String notSentPhoneBusyTryAgain =
+      'Not sent yet: the phone was busy. Your work is safe on this phone. '
+      'Tap Send now to try again.';
+
+  /// The counts on "Send my work" could not be read for a moment.
+  static const String countsPhoneBusy =
+      'The phone was busy and could not count your saved work. Your work is '
+      'safe on this phone.';
+  static const String notSentNeedsPassword =
+      'Your session has expired. Enter your password to send your work.';
+  static const String notSentSignedOut =
+      'You are signed out. Log in again to send your work. Your work is '
+      'safe on this phone.';
+  static const String notSentKeyProblem =
+      'This phone cannot send records for you right now. Open My account '
+      'to see why. Your work is safe on this phone.';
+  static const String unmatchedAnswers =
+      'Some answers from the server did not match the records sent. Those '
+      'records stay on this phone and will be sent again.';
+
+  // ---- Device key (features/device_key/, plan M2) ----
+
+  /// The account screen's row label.
+  static const String deviceKey = 'Device key';
+  static const String deviceKeyChecking = 'Checking…';
+
+  /// "Registered ✓ 4d61912d": the tick and the word, never colour alone,
+  /// and the start of the fingerprint, to compare with an administrator's
+  /// screen.
+  static String deviceKeyRegistered(String shortFingerprint) =>
+      'Registered ✓ $shortFingerprint';
+  static const String deviceKeyNotRegistered =
+      'Not registered yet (will be sent when online)';
+
+  /// The plan's §4 sentence for a phone whose key is not the registered one.
+  static const String deviceKeyOtherDevice =
+      'This phone is not your registered phone. Ask an administrator to '
+      'reset your device key.';
+  static const String deviceKeyProblem =
+      'This phone could not set up its device key. Close the app and open '
+      'it again. If it keeps happening, ask an administrator.';
+
+  // ---- Account requests (features/admin/presentation/
+  //      account_requests_screen.dart) ----
+
+  static const String refreshList = 'Refresh the list';
+  static const String loadingRequests = 'Loading account requests…';
+  static const String noRequestsWaiting = 'No account requests waiting.';
+  static const String noLicenceNumber = 'No licence number';
+  static const String showMore = 'Show more';
+  static const String approve = 'Approve';
+  static const String reject = 'Reject';
+
+  /// Above the list. "1 request waiting", "3 requests waiting", or, when
+  /// only part of the list is loaded, "Showing 20 of 45 requests".
+  static String requestsCount({required int shown, required int total}) {
+    if (shown < total) return 'Showing $shown of $total requests.';
+    return total == 1 ? '1 request waiting.' : '$total requests waiting.';
+  }
+
+  /// When the account was requested, for example "Requested 5 Nov 2026".
+  static String requestedOn(DateTime date) =>
+      'Requested ${date.day} ${_months[date.month - 1]} ${date.year}';
+
+  static const List<String> _months = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', //
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  /// Shown instead of the list while the token has expired (decision Q2).
+  static const String requestsNeedPassword =
+      'Your session has expired. Enter your password to see account requests.';
+
+  // Approve.
+  static const String approveQuestion = 'Approve this request?';
+  static String approveExplanation(String name, String role) =>
+      '$name ($role) will be able to log in with the password they chose '
+      'when they asked for the account.';
+  static String approved(String name) => '$name can now log in.';
+
+  // Reject.
+  static const String rejectQuestion = 'Reject this request?';
+  static String rejectExplanation(String name) =>
+      '$name will not be able to log in. This cannot be undone: they would '
+      'have to ask again with a different username.';
+  static const String rejectReason = 'Reason';
+  static const String rejectReasonHint =
+      'For example: Licence number could not be verified';
+  static const String rejectReasonWarning =
+      'This reason is kept permanently and can never be changed. Keep it '
+      'short and factual, and leave out personal details. Only '
+      'administrators see it.';
+  static const String rejectReasonTooShort = 'Write at least 3 characters.';
+  static String rejected(String name) => 'The request from $name was rejected.';
+
+  /// 404 or 409 on approve or reject: another administrator got there first.
+  static const String requestAlreadyHandled =
+      'Someone else has already dealt with this request. The list has been '
+      'updated.';
+
   // ---- Server status banner (core/widgets/server_status_banner.dart) ----
 
   static const String serverWaking =
@@ -209,8 +554,12 @@ abstract final class AppText {
 
   // ---- Problems reaching the server ----
 
+  /// Shown for any request that could not reach the server, the login
+  /// included. It no longer says "Your work is safe on this phone" (plan
+  /// §3): that is only true once a step has really been saved, and the sync
+  /// screen (M6) says it there, with the count.
   static const String noConnection =
-      'No internet connection. Your work is safe on this phone.';
+      'No internet connection. Try again when you have a signal.';
   static const String timedOut =
       'The server took too long to answer. Please try again.';
   static const String insecureConnection =

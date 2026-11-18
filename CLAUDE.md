@@ -13,7 +13,7 @@ prototype shown in a simulated supply chain, not a production system.
 - **Roles:** miner, transporter, buyer, regulatory officer, system administrator.
 - **Core flow:** a consignment is registered at extraction, handed off to a transporter and
   purchased by a licensed buyer. Each step is signed and anchored on-chain.
-- **Deadline:** Sunday 15 November 2026.
+- **Deadline:** Sunday 22 November 2026, 12:00. Work stops at 10:00 that day.
 
 ### Four-layer architecture
 
@@ -36,13 +36,27 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 15 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
+Updated 18 Nov 2026. Read this first in a new session, then `docs/progress.md` (the day
+plan and the current feature's subtasks), then `docs/decisions.md`.
+
+- **Mobile app, miner module built** (`docs/plans/miner-registration-plan.md`) on
+  `feature/miner-registration`. Mobile foundation (login, homes, pinned TLS 1.3, secure
+  storage); the Keystore signing key and its registration (M1–M2); the administrator's
+  account requests screen (A1); the encrypted local database on sqlite3 with sqlite3mc (M3);
+  signed registration payloads (M4); the registration screen with QR, GPS and the custody
+  record ID check (M5); sync and "Send my work" (M6); "My consignments" (M7). Checked on the
+  Samsung A57 and the API 26 emulator, including a second miner's duplicate flagged
+  `DUPLICATE_CONSIGNMENT`. Decisions: Mobile (1)–(34).
+  - Mobile working rules: one permission request at a time; a busy database is never
+    "cannot be opened" and calls run one at a time (Mobile (26)); state words are shared by
+    "Send my work" and "My consignments"; widget tests keep missed taps fatal, avoid
+    `pumpAndSettle` while a progress bar runs, and reach lazy list rows with `scrollTo`.
 
 - **App endpoints plan built** (`docs/plans/app-endpoints-plan.md`) on
   `feature/backend-app-endpoints`: B1 officer alerts, B3 account rename and soft delete, B2
   consignment view and verification (`GET /consignments/by-qr/{qrCode}`, B2.1–B2.6, last
-  code commit `0ea38c2`). Before the pull request with B3 is merged, the users-deleted
-  migration must be run against the production database (plan §5).
+  code commit `0ea38c2`), merged as PR #8. The users-deleted migration was run on
+  production on 15 Nov, after a backup and before the merge (`docs/deployment.md`, `efd8a5f`).
 
 - **Backend complete, merged and deployed.** `feature/backend-logic` is merged into `main`
   (PR #5). Latest commit `044af61` pins Node 22.14.0 for Render.
@@ -52,8 +66,8 @@ Updated 15 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
   reasons are in `docs/decisions.md`, "Deployment (1)–(12)".
 - **Test totals (confirmed by the developer, 15 Nov, after B2.5a):** `npm test` 2300,
   `npm run test:db` 914. Contract 37 (last run 12 Nov; the contract has not changed).
-- **Dev database** (`minechain_dev`): check its migration level before Monday; production
-  needs `1794528000000_users-deleted` before the merge. `npm run test:db` migrates
+- **Databases:** production and `minechain_dev` both have all 11 migrations, including
+  `1794528000000_users-deleted` (15 Nov, `docs/deployment.md`). `npm run test:db` migrates
   `minechain_test` itself (`tests/db/globalSetup.js`).
 
 **Done on `feature/backend-logic`, now merged** (docs updated for all of it):
@@ -197,12 +211,16 @@ their known limitations):
 
 **Next, in order:**
 
-1. Flutter Android app in `mobile/`, on a new app branch. PR #7 (`feature/mobile-foundation`)
-   merged docs only; `mobile/` is still untracked and will be committed on that new branch.
+1. ~~Check M7 on the A57, then the pull request for `feature/miner-registration`~~ (merged as
+   PR #10).
+2. The remaining role modules in the app: transporter handoff, buyer purchase, the officer's
+   alerts list and consignment check (Scope (2), (9)), and the admin screens and reports
+   (Scope (3)). The order by day is in `docs/progress.md`.
 
 **Working rules that held all weekend:**
 
-- Manual mode. Never run git. Never run tests unless asked.
+- Autopilot: see "Working agreement (autopilot)" below for what Claude Code runs itself,
+  what it never does, and what it asks about first.
 - One sub-step at a time, and stop after each. "Plan only" first on new or risky work.
 - Refusal tests take a function that starts the action, not a promise already started.
 - Values from signed payloads stay as text, never JavaScript floats.
@@ -213,6 +231,87 @@ their known limitations):
 - On PowerShell, run scripts that take flags with `node scripts/...`, not `npm run ... --`.
 
 Known limits are listed in `docs/decisions.md`; they are not repeated here.
+
+## Working agreement (autopilot)
+
+In force from 18 Nov 2026 until submission. `.claude/settings.json` enforces the command
+lists below as permission rules. Those rules match command text and are a guard rail, not a
+security boundary, so these written rules still apply in full.
+
+**Roles.** Claude Code plans, writes code, formats, analyses, runs tests, fixes its own
+failures, updates docs, keeps `docs/progress.md`, and drafts commit messages and PR
+descriptions. The developer approves plans, does the phone and emulator checks, commits
+through VS Code Source Control, pushes, and opens and merges PRs on GitHub.
+
+**Allowed without asking:** `flutter analyze`, `flutter test` (unit and widget),
+`dart format`, `flutter pub get`, backend `npm test` and `npm run test:db`, and read-only git
+(`status`, `diff`, `log`, `show`, `branch`, `fetch`).
+
+**Never:**
+
+- `git commit`, `push`, `merge`, `rebase`, `reset`, checking out files, creating or deleting
+  branches; `gh pr create` or `gh pr merge`.
+- `flutter run`, or any integration test on a device. Ask instead; integration tests always
+  need `--no-uninstall`.
+- Reading or printing `mobile/env/api.json`, any `.env`, keystores or keys.
+- Calling the production API or creating accounts.
+- Deleting or skipping tests, adding `warnIfMissed: false`, or loosening an assertion to make
+  a test pass.
+
+**Ask first:**
+
+- Any new or upgraded package: check it is current and maintained, and give the exact version.
+- Anything under `backend/`, `contracts/`, database migrations or Render settings (merging
+  these deploys to production).
+- Any design decision not in the approved plan.
+- Anything touching signing, keys, the encrypted database or auth.
+
+**Levels of work.** Project → Day → Feature (a module, for example "Verification") → Subtask
+(T1, T2 …, one commit each, about 30–60 minutes) → Steps (T3.a, T3.b … inside a subtask, no
+separate commit).
+
+`docs/progress.md` holds (a) the whole-project checklist, all features to submission grouped
+by day; (b) today's features in order; (c) the current feature's subtasks with ✅/⬜. It is
+updated after every subtask. `docs/testing-log.md` gets the real test numbers after every
+subtask.
+
+**Flow per feature.**
+
+1. Write or update `docs/plans/<feature>-plan.md`: numbered subtasks T1…Tn (steps where
+   useful), inputs and outputs, how it connects to other parts, open questions. Show the
+   subtask list as a checklist, then STOP for approval.
+2. For each subtask: implement → `dart format` → `flutter analyze --no-pub` → focused tests →
+   full `flutter test` → fix failures (stop and report after two failed fix attempts on the
+   same problem) → secret checks on the working tree (git diff and untracked files: no
+   `api.json`, `.env`, keystores, private keys or the Render host name) → append the test
+   numbers to `docs/testing-log.md` → update `docs/progress.md` → STOP with the subtask
+   report. Wait for "next" before the next subtask.
+
+**Subtask report**, always in this order and short:
+
+1. What was done (3 sentences at most).
+2. How it fits: which actors, screens, data and server calls are involved, in plain words.
+3. Tests: commands run and exact results.
+4. Hygiene: the secret-check result and the files changed.
+5. Phone check: "needed" or "not needed". If needed: the exact `flutter run` command, the
+   device (the A57 or `emulator-5554`), the steps, what to look for, and which screenshots to
+   keep for the thesis, with suggested file names.
+6. Commit message (Conventional Commits).
+7. Learning notes: 2–4 terms explained simply.
+8. Decisions and limitations recorded in `docs/decisions.md` (or "none").
+9. Feature progress: the current feature's subtask checklist, for example
+   "Verification 3/7: ✅ T1 … ⬜ T7".
+10. After the feature's last subtask, also "Day progress" (today's features with ✅/⬜) and
+    the drafted PR title and description (what, how tested, known limitations).
+11. For the chat: a 4–6 line plain-text summary for the tutor (feature, subtask, what
+    changed, test numbers, anything that needs a human decision).
+12. Context: say if a new session would be wise.
+
+**End of session** ("end of session" or "last task today"): update this file's status and
+next steps, and `docs/progress.md`; then show the whole-project checklist (all days, ✅/⬜,
+what moved), what carries over to tomorrow, and an 8–12 line "For the chat" handover. Before
+suggesting a new session at any time, update this file's status first so the next session can
+continue from it alone.
 
 ## Repo layout
 
@@ -249,11 +348,12 @@ Priorities: **M** Must, **S** Should, **C** Could.
 | FR-11 | Admin manages licensed GPS extraction zones | S |
 | FR-12 | Users request accounts, admin approves | S |
 | FR-13 | Officers download audit trails as spreadsheets | S |
-| FR-14 | Analytics dashboard | C (cut) |
+| FR-14 | Analytics dashboard | C (kept) |
 | FR-15 | Multi-language interface | C (cut) |
 | FR-16 | Signed PDF provenance certificate | S |
 
-FR-14 and FR-15 are cut unless time remains. Do not start them without being asked.
+FR-15 is cut; do not start it without being asked. FR-14 is kept (Scope (4), 17 Nov) and is
+the first feature to cut if time runs short. FR-16 is decided on Saturday 21 Nov.
 
 ### Non-functional
 
