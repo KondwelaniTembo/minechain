@@ -483,6 +483,19 @@ This step is the end-to-end proof that a real Keystore signature verifies on the
 
 **On the A57:** the list matches what was synced, including one flagged step.
 
+**Approved before building (18 Nov 2026)**, recorded as decision Mobile (34):
+
+- The state words are those of "Send my work", built from the same text, not the older
+  words in section 3's table ("Sent", "Waiting to be sent").
+- Each record shows the QR code, the mineral and weight in its unit, and the saved time. No
+  coordinates, ids, payload, signature or fingerprint; the list's own query does not read
+  them.
+- The list is read again after every send and on the way back from registering.
+- A `duplicate` answer saying `flagged` is listed as under review with no message: the
+  answer carries none, and the code a resent row can hold is an earlier deferral's, so it is
+  cleared, not kept. This is a known limitation, with a backend future improvement.
+- Docs: decisions Mobile (27)–(34). No `api.md` note was needed.
+
 ---
 
 ## 2. Local schema (version 1)

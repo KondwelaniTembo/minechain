@@ -36,7 +36,20 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 15 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
+Updated 18 Nov 2026. Read this first in a new session, then `docs/decisions.md`.
+
+- **Mobile app, miner module built** (`docs/plans/miner-registration-plan.md`) on
+  `feature/miner-registration`. Mobile foundation (login, homes, pinned TLS 1.3, secure
+  storage); the Keystore signing key and its registration (M1–M2); the administrator's
+  account requests screen (A1); the encrypted local database on sqlite3 with sqlite3mc (M3);
+  signed registration payloads (M4); the registration screen with QR, GPS and the custody
+  record ID check (M5); sync and "Send my work" (M6); "My consignments" (M7). Checked on the
+  Samsung A57 and the API 26 emulator, including a second miner's duplicate flagged
+  `DUPLICATE_CONSIGNMENT`. Decisions: Mobile (1)–(34).
+  - Mobile working rules: one permission request at a time; a busy database is never
+    "cannot be opened" and calls run one at a time (Mobile (26)); state words are shared by
+    "Send my work" and "My consignments"; widget tests keep missed taps fatal, avoid
+    `pumpAndSettle` while a progress bar runs, and reach lazy list rows with `scrollTo`.
 
 - **App endpoints plan built** (`docs/plans/app-endpoints-plan.md`) on
   `feature/backend-app-endpoints`: B1 officer alerts, B3 account rename and soft delete, B2
@@ -197,8 +210,11 @@ their known limitations):
 
 **Next, in order:**
 
-1. Flutter Android app in `mobile/`, on a new app branch. PR #7 (`feature/mobile-foundation`)
-   merged docs only; `mobile/` is still untracked and will be committed on that new branch.
+1. Check M7 on the A57 (the list matches what was synced, including one flagged step), then
+   the pull request for `feature/miner-registration`.
+2. The remaining role modules in the app: transporter handoff, buyer purchase, the officer's
+   alerts list and consignment check (Scope (2), (9)), and the admin screens and reports
+   (Scope (3)).
 
 **Working rules that held all weekend:**
 
