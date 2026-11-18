@@ -1,6 +1,6 @@
 // Checks the WCAG AA contrast (at least 4.5:1) of the colour pairs the app
-// draws text with, in both themes, using the colours Flutter really generates
-// from the seed.
+// draws text with, in both themes, using the colours the theme really builds
+// (some come from the seed, the copper and patina ones are set by hand).
 
 import 'dart:math' as math;
 
@@ -39,6 +39,41 @@ void main() {
           contrast(s.onSecondaryContainer, s.secondaryContainer),
           greaterThanOrEqualTo(aa),
         );
+      });
+
+      test('the chosen role on the register screen', () {
+        expect(
+          contrast(s.onPrimaryContainer, s.primaryContainer),
+          greaterThanOrEqualTo(aa),
+        );
+      });
+
+      // Notices ("server waking", "enter your password") are patina green.
+      test('notices', () {
+        expect(
+          contrast(s.onTertiaryContainer, s.tertiaryContainer),
+          greaterThanOrEqualTo(aa),
+        );
+        expect(contrast(s.onTertiary, s.tertiary), greaterThanOrEqualTo(aa));
+      });
+
+      // Server problems are drawn on the error container.
+      test('error banner', () {
+        expect(
+          contrast(s.onErrorContainer, s.errorContainer),
+          greaterThanOrEqualTo(aa),
+        );
+      });
+
+      // Error sentences under a field are drawn in the error colour straight
+      // on the screen background, so that pair matters too.
+      test('error text on the screen background', () {
+        expect(contrast(s.error, s.surface), greaterThanOrEqualTo(aa));
+      });
+
+      // Copper links, icons and borders sit on the screen background.
+      test('primary colour on the screen background', () {
+        expect(contrast(s.primary, s.surface), greaterThanOrEqualTo(aa));
       });
     });
   }

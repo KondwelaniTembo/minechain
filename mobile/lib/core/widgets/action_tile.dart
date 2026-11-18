@@ -7,6 +7,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../theme/app_theme.dart';
 import '../theme/sizes.dart';
 
 /// A large tappable tile: icon on top, label underneath.
@@ -61,6 +62,11 @@ class ActionTile extends StatelessWidget {
       // surface the InkWell's ripple is drawn on.
       child: Material(
         color: background,
+        // The soft shadow is what lifts a tile off the page: in light mode a
+        // sand tile and the page are only about 1.2:1 apart in colour. The
+        // main tile sits higher than the others, so it is the first thing seen.
+        elevation: primary ? 6 : 3,
+        shadowColor: AppTheme.shadow,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSizes.tileRadius),
         ),
@@ -91,7 +97,10 @@ class ActionTile extends StatelessWidget {
                     size: primary
                         ? AppSizes.primaryTileIcon
                         : AppSizes.tileIcon,
-                    color: foreground,
+                    // Copper icon on the sand tiles: the icon is the first
+                    // thing the eye finds, and the label stays dark for
+                    // reading. The main tile keeps one colour for both.
+                    color: primary ? foreground : scheme.primary,
                   ),
                   const SizedBox(height: AppSizes.spaceS),
                   // No maxLines and no overflow cut-off: with large text the

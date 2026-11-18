@@ -6,18 +6,27 @@
 // on top of them, ...) is given a fixed lightness, so text stays readable
 // whatever the seed's hue.
 //
-// The seed is malachite green, a copper mineral mined in Zambia. It suits the
-// project, is calm rather than alarming, and is clearly different from the red
-// Material uses for errors. Status is never shown by colour alone anyway (a tick
-// or cross and a word, plan section 7), so green is not mistaken for "OK".
+// The seed is burnt copper, the mineral this project is about. Bright "classic"
+// copper (#B87333) is only 3.8:1 against white text, which is below the 4.5:1
+// that WCAG AA asks for and too weak for use in bright sun, so the seed is a
+// deeper copper that reaches 6.4:1. Copper turns green as it weathers, so the
+// green of the old theme (malachite, patina) is kept as the "tertiary" colour,
+// used for notices and for things that are verified or done.
 //
-// Contrast (WCAG AA asks for at least 4.5:1 for normal text). The colour
-// library behind ColorScheme.fromSeed (material_color_utilities 0.13.0) gives
-// each role a fixed lightness ("tone", 0 = black, 100 = white):
-//   light: text 10 on surface 98, button text 100 on primary 40
-//   dark:  text 90 on surface 6,  button text 20 on primary 80
-// Those tones work out at about 16:1 and 6.5:1 (light), 14:1 and 7.7:1 (dark).
-// test/core/theme/app_theme_test.dart checks the real generated colours.
+// Why a few colours are set by hand (copyWith below): the seed alone gives the
+// right hue, but not the warm surfaces or the patina green we want. Each pair
+// below was checked by hand for contrast, and test/core/theme/app_theme_test.dart
+// checks them again from the real theme, so a later change cannot quietly break
+// readability.
+//
+// Copper and Material's error red have about the same brightness (a contrast
+// of 1.01:1), so only their hue tells them apart. That is acceptable because
+// status is never shown by colour alone: a tick or cross and a word as well
+// (plan section 7).
+//
+// Depth: filled tiles and light surfaces are only about 1.2:1 apart in light
+// mode, so a colour change alone does not separate them. Tiles, cards and
+// banners get a soft shadow (elevation) as well.
 
 import 'package:flutter/material.dart';
 
@@ -26,8 +35,12 @@ import 'sizes.dart';
 /// The two themes. main.dart passes both to MaterialApp, with
 /// `themeMode: ThemeMode.system`, so the app follows the phone's setting.
 abstract final class AppTheme {
-  /// Malachite green.
-  static const Color seed = Color(0xFF0B6E4F);
+  /// Burnt copper.
+  static const Color seed = Color(0xFF8F4E1E);
+
+  /// The soft, warm brown the shadows are drawn in. Pure black shadows look
+  /// dirty on a warm surface.
+  static const Color shadow = Color(0xFF3A1A04);
 
   // `static final` builds each theme once, the first time it is used, instead
   // of on every rebuild of the app.
@@ -35,10 +48,42 @@ abstract final class AppTheme {
   static final ThemeData dark = _build(Brightness.dark);
 
   static ThemeData _build(Brightness brightness) {
-    final scheme = ColorScheme.fromSeed(
+    final generated = ColorScheme.fromSeed(
       seedColor: seed,
       brightness: brightness,
     );
+
+    // Hand-set roles, each pair checked for at least 4.5:1 (see the header).
+    final scheme = switch (brightness) {
+      Brightness.light => generated.copyWith(
+        primary: const Color(0xFF8F4E1E),
+        onPrimary: const Color(0xFFFFFFFF),
+        primaryContainer: const Color(0xFFFFDCC6),
+        onPrimaryContainer: const Color(0xFF3A1A04),
+        secondaryContainer: const Color(0xFFF3E0D2),
+        onSecondaryContainer: const Color(0xFF2E1A0D),
+        tertiary: const Color(0xFF1D6A55),
+        onTertiary: const Color(0xFFFFFFFF),
+        tertiaryContainer: const Color(0xFFC4EBDC),
+        onTertiaryContainer: const Color(0xFF00201A),
+        surface: const Color(0xFFFFF8F4),
+        onSurface: const Color(0xFF201A17),
+      ),
+      Brightness.dark => generated.copyWith(
+        primary: const Color(0xFFF2B48A),
+        onPrimary: const Color(0xFF4A2200),
+        primaryContainer: const Color(0xFF6B3710),
+        onPrimaryContainer: const Color(0xFFFFDCC6),
+        secondaryContainer: const Color(0xFF4B392D),
+        onSecondaryContainer: const Color(0xFFF3E0D2),
+        tertiary: const Color(0xFF8FD3BC),
+        onTertiary: const Color(0xFF00382D),
+        tertiaryContainer: const Color(0xFF0A5140),
+        onTertiaryContainer: const Color(0xFFC4EBDC),
+        surface: const Color(0xFF19120D),
+        onSurface: const Color(0xFFEDE0D8),
+      ),
+    };
 
     // Every kind of button is at least one tap target tall and wide.
     const minimum = Size(AppSizes.tapTargetMin, AppSizes.tapTargetMin);
@@ -47,6 +92,29 @@ abstract final class AppTheme {
       // Material 3 is Flutter's default; written out so the choice is visible.
       useMaterial3: true,
       colorScheme: scheme,
+      // The top bar sits flat on the screen's colour and only gets a shadow
+      // once content scrolls under it, so it separates from the page without
+      // being a heavy block of colour.
+      appBarTheme: AppBarTheme(
+        backgroundColor: scheme.surface,
+        foregroundColor: scheme.onSurface,
+        elevation: 0,
+        scrolledUnderElevation: 3,
+        shadowColor: shadow,
+        surfaceTintColor: Colors.transparent,
+        centerTitle: false,
+      ),
+      // Cards (the account details) lift off the page with a soft shadow.
+      // surfaceTintColor is turned off: Material 3 would otherwise wash the
+      // card with the primary colour as its elevation grows.
+      cardTheme: CardThemeData(
+        elevation: 2,
+        shadowColor: shadow,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppSizes.tileRadius),
+        ),
+      ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(minimumSize: minimum),
       ),

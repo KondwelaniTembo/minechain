@@ -19,7 +19,12 @@ class SplashScreen extends StatelessWidget {
             children: [
               Text(
                 AppText.appTitle,
-                style: Theme.of(context).textTheme.headlineMedium,
+                // The same look as the name on the login screen, so the
+                // hand-over from splash to login does not change it.
+                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                  fontWeight: FontWeight.w800,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               ),
               const SizedBox(height: AppSizes.spaceL),
               const CircularProgressIndicator(),

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/text/app_text.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/sizes.dart';
 import '../../../core/widgets/server_status_banner.dart';
 import '../domain/auth_state.dart';
@@ -41,14 +42,18 @@ class NeedsPasswordNotice extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSizes.spaceM),
       child: Material(
-        color: scheme.secondaryContainer,
+        // Patina green like the server notices, not the sand of the tiles:
+        // this is something to read, not a tile to tap.
+        color: scheme.tertiaryContainer,
+        elevation: 2,
+        shadowColor: AppTheme.shadow,
         borderRadius: BorderRadius.circular(AppSizes.tileRadius),
         child: Padding(
           padding: const EdgeInsets.all(AppSizes.spaceM),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.key, color: scheme.onSecondaryContainer),
+              Icon(Icons.key, color: scheme.onTertiaryContainer),
               const SizedBox(width: AppSizes.spaceM),
               Expanded(
                 child: Column(
@@ -56,7 +61,7 @@ class NeedsPasswordNotice extends ConsumerWidget {
                   children: [
                     Text(
                       AppText.needsPasswordNotice,
-                      style: TextStyle(color: scheme.onSecondaryContainer),
+                      style: TextStyle(color: scheme.onTertiaryContainer),
                     ),
                     const SizedBox(height: AppSizes.spaceXs),
                     // A text button: lighter than the home's tiles, so it

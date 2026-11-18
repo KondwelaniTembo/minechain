@@ -12,6 +12,7 @@ import 'package:go_router/go_router.dart';
 import '../../../core/router/redirect.dart' show homeOf;
 import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/sizes.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/domain/user.dart';
@@ -66,7 +67,10 @@ class AccountScreen extends ConsumerWidget {
                         ],
                         _AccountDetails(user),
                         const SizedBox(height: AppSizes.spaceL),
-                        FilledButton.icon(
+                        // Tonal, not the strong copper button: logging out is
+                        // something to find, not the screen's main action, and
+                        // the dialog asks again before anything happens.
+                        FilledButton.tonalIcon(
                           onPressed: () => _confirmLogOut(context, ref),
                           icon: const Icon(Icons.logout),
                           label: const Text(AppText.logOut),
@@ -143,7 +147,9 @@ class _NeedsPasswordCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     return Material(
-      color: scheme.secondaryContainer,
+      color: scheme.tertiaryContainer,
+      elevation: 2,
+      shadowColor: AppTheme.shadow,
       borderRadius: BorderRadius.circular(AppSizes.tileRadius),
       child: Padding(
         padding: const EdgeInsets.all(AppSizes.spaceM),
@@ -153,12 +159,12 @@ class _NeedsPasswordCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.key, color: scheme.onSecondaryContainer),
+                Icon(Icons.key, color: scheme.onTertiaryContainer),
                 const SizedBox(width: AppSizes.spaceM),
                 Expanded(
                   child: Text(
                     AppText.accountNeedsPassword,
-                    style: TextStyle(color: scheme.onSecondaryContainer),
+                    style: TextStyle(color: scheme.onTertiaryContainer),
                   ),
                 ),
               ],
@@ -166,7 +172,9 @@ class _NeedsPasswordCard extends StatelessWidget {
             const SizedBox(height: AppSizes.spaceM),
             // The answer is not needed: on success the state becomes SignedIn
             // and this card disappears on its own.
-            FilledButton.tonal(
+            // The strong copper button, not tonal: on the green notice it is
+            // the one thing to do, and a sand button would hardly show on it.
+            FilledButton(
               onPressed: () => showPasswordPrompt(context),
               child: const Text(AppText.enterYourPassword),
             ),

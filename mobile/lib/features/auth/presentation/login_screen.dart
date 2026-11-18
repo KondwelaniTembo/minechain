@@ -166,7 +166,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     Text(
                       AppText.appTitle,
                       textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineMedium,
+                      // The name is the only branding the screen has, so it is
+                      // large, heavy and copper.
+                      style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                     ),
                     const SizedBox(height: AppSizes.spaceL),
                     const ServerStatusBanner(),
@@ -250,10 +255,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     // back arrow and Android's back button return here.
                     // Disabled while a login runs, so the screen does not
                     // change under it.
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(0, AppSizes.tapTargetMin),
-                      ),
+                    // Outlined: for someone without an account this is the way
+                    // in, so it must not look like fine print. The activation
+                    // code link stays plain text, because it is for the few
+                    // officers and administrators who were given a code.
+                    OutlinedButton(
                       onPressed: _sending
                           ? null
                           : () => context.push(AppRoutes.register),

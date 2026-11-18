@@ -9,6 +9,7 @@ import '../errors/app_failure.dart';
 import '../errors/failure_text.dart';
 import '../network/server_status.dart';
 import '../text/app_text.dart';
+import '../theme/app_theme.dart';
 import '../theme/sizes.dart';
 
 /// Shows the current [ServerStatus] in plain words, with an icon.
@@ -32,16 +33,18 @@ class ServerStatusBanner extends ConsumerWidget {
       ServerWaking() => _Banner(
         icon: Icons.hourglass_top,
         text: AppText.serverWaking,
-        background: scheme.secondaryContainer,
-        foreground: scheme.onSecondaryContainer,
+        // Patina green, not the sand of the home tiles: a notice must not
+        // look like something to tap.
+        background: scheme.tertiaryContainer,
+        foreground: scheme.onTertiaryContainer,
         // A moving indicator shows the app is not frozen during the wait.
         showProgress: true,
       ),
       ServerNotReady() => _Banner(
         icon: Icons.cloud_off,
         text: AppText.serverNotReady,
-        background: scheme.secondaryContainer,
-        foreground: scheme.onSecondaryContainer,
+        background: scheme.tertiaryContainer,
+        foreground: scheme.onTertiaryContainer,
         onTryAgain: tryAgain,
       ),
       ServerFailed(:final failure) => _Banner(
@@ -88,6 +91,10 @@ class _Banner extends StatelessWidget {
       liveRegion: true,
       child: Material(
         color: background,
+        // A light shadow, lower than the home's tiles: a banner sits above the
+        // page, but must not compete with the actions.
+        elevation: 2,
+        shadowColor: AppTheme.shadow,
         borderRadius: BorderRadius.circular(AppSizes.tileRadius),
         child: Padding(
           padding: const EdgeInsets.all(AppSizes.spaceM),
@@ -100,7 +107,9 @@ class _Banner extends StatelessWidget {
                 children: [
                   // The icon and the words carry the meaning; the colour only
                   // helps (plan section 7).
-                  Icon(icon, color: foreground, size: AppSizes.tileIcon),
+                  // A status strip's icon is smaller than a tile's: at the
+                  // tile size it outweighed the sentence beside it.
+                  Icon(icon, color: foreground, size: AppSizes.statusIcon),
                   const SizedBox(width: AppSizes.spaceM),
                   // Expanded gives the text the rest of the row's width, so
                   // a long sentence or large text wraps instead of

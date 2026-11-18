@@ -25,6 +25,10 @@ abstract final class AppSizes {
 
   static const double tileIcon = 40;
   static const double primaryTileIcon = 56;
+
+  /// The icon in a status banner or notice: smaller than a tile's, so the
+  /// sentence beside it is what is read first.
+  static const double statusIcon = 28;
   static const double appBarIcon = 32;
 
   // ---- Spacing ----

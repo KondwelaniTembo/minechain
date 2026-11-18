@@ -59,11 +59,15 @@ class HomeScaffold extends StatelessWidget {
     // body for the rest.
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
+        // The app's name first, then the role as a small label, so the user
+        // always sees which app this is and which account type they are in.
+        title: _AppBarTitle(role: title),
         // `actions` here are AppBar's buttons on the right (not our tiles).
         actions: [
-          IconButton(
-            icon: const Icon(Icons.account_circle),
+          // filledTonal draws a round, filled button: the account button
+          // reads as a button, not as a stray icon in the corner.
+          IconButton.filledTonal(
+            icon: const Icon(Icons.person),
             iconSize: AppSizes.appBarIcon,
             // The tooltip shows on a long press, and is also what TalkBack
             // reads, so an icon-only button still has a name.
@@ -142,6 +146,63 @@ Widget _tileFor(HomeAction action) => ActionTile(
   onTap: action.onTap,
   primary: action.primary,
 );
+
+/// "MineChain" in bold, then the role in a small rounded label.
+///
+/// One line, not two stacked: an app bar has a fixed height, and two lines
+/// would overflow it at the largest text size. Flexible lets each part shrink
+/// and end in "…" instead of overflowing when the space runs out (the app bar
+/// already sets softWrap off and overflow to ellipsis for its title).
+class _AppBarTitle extends StatelessWidget {
+  const _AppBarTitle({required this.role});
+
+  final String role;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(
+          child: Text(
+            AppText.appTitle,
+            style: text.titleLarge?.copyWith(
+              fontWeight: FontWeight.w800,
+              color: scheme.primary,
+            ),
+          ),
+        ),
+        const SizedBox(width: AppSizes.spaceS),
+        Flexible(
+          // The label is a different colour pair from the buttons on purpose:
+          // it is information about the account, not something to tap.
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: scheme.primaryContainer,
+              borderRadius: BorderRadius.circular(AppSizes.tileRadius),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSizes.spaceS + AppSizes.spaceXs,
+                vertical: AppSizes.spaceXs,
+              ),
+              child: Text(
+                role,
+                style: text.labelLarge?.copyWith(
+                  color: scheme.onPrimaryContainer,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 /// One row of equal-width tiles, all as tall as the tallest one.
 class _TileRow extends StatelessWidget {
