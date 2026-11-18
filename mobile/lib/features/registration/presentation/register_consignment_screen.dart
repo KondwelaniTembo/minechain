@@ -279,6 +279,7 @@ String _saveProblemText(SaveResult result) => switch (result) {
   SaveSigningFailed() => AppText.saveSigningFailed,
   SaveDuplicateStepId() => AppText.saveFailed,
   SaveStorageFailed() => AppText.savedWorkProblem,
+  SaveBusy() => AppText.saveBusy, // calm: Save again works (Mobile (26))
 };
 
 class _Section extends StatelessWidget {
@@ -374,7 +375,9 @@ class _ScanPart extends ConsumerWidget {
                         _ScannerProblem(problem: problem, retry: retry),
                   )
                 : ColoredBox(
-                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
                     child: const Center(
                       child: Padding(
                         padding: EdgeInsets.all(AppSizes.spaceM),

@@ -78,6 +78,13 @@ final class SaveStorageFailed extends SaveResult {
   final DatabaseFailure? failure;
 }
 
+/// The database file was in use for a moment (decision Mobile (26)).
+/// Nothing stored, nothing wrong with the saved work: Save again works.
+/// Never shown as "cannot be opened".
+final class SaveBusy extends SaveResult {
+  const SaveBusy();
+}
+
 // ---- The use case ------------------------------------------------------------
 
 class RegisterConsignment {
@@ -127,6 +134,7 @@ class RegisterConsignment {
     try {
       steps = await _steps();
     } on DatabaseFailure catch (failure) {
+      if (isBusyMoment(failure)) return const SaveBusy();
       return SaveStorageFailed(failure);
     }
 
@@ -197,8 +205,17 @@ class RegisterConsignment {
       );
     } on LocalStepConflict {
       return const SaveDuplicateStepId();
-    } on LocalStepsFailure {
+    } on LocalStepsFailure catch (failure) {
+      // The signature just made is dropped with the row; Save again signs a
+      // fresh step with a new id, so nothing is ever sent twice.
+      if (failure.busy) return const SaveBusy();
       return const SaveStorageFailed();
+    } on DatabaseFailure catch (failure) {
+      // Every call opens the file again (local_database.dart), so opening
+      // can fail here too; before, this escaped save() and left the screen
+      // saving for ever.
+      if (isBusyMoment(failure)) return const SaveBusy();
+      return SaveStorageFailed(failure);
     }
 
     // 6. Committed.

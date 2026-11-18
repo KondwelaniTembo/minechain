@@ -74,3 +74,22 @@ final class DatabaseOpenFailed extends DatabaseFailure {
   @override
   String toString() => 'DatabaseOpenFailed(stage: $stage)';
 }
+
+/// The file was in use by another connection for longer than the busy
+/// timeout (SQLITE_BUSY or SQLITE_LOCKED) while opening. NOT a problem with
+/// the key or the file: the same open a moment later works. [stage] says
+/// where, for the developer.
+final class DatabaseBusy extends DatabaseFailure {
+  const DatabaseBusy(this.stage);
+  final String stage;
+
+  @override
+  String toString() => 'DatabaseBusy(stage: $stage)';
+}
+
+/// True only when [error] means the saved work really cannot be opened or
+/// read with this phone's key: the cases where "ask an administrator" is
+/// the right advice. A busy file, a failed query, or any other error is not
+/// one of them.
+bool savedWorkUnreadable(Object error) =>
+    error is DatabaseFailure && error is! DatabaseBusy;

@@ -45,7 +45,9 @@ StepSyncUpdate? updateFromResult(
   final stepId = result['stepId'];
   final sameStep = stepId == sent.stepId;
   final code = text('code');
-  final message = result['message'] is String ? result['message'] as String : '';
+  final message = result['message'] is String
+      ? result['message'] as String
+      : '';
   final transactionId = text('transactionId');
   final reviewStatus = text('reviewStatus');
 

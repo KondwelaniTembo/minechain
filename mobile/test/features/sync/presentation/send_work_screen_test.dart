@@ -10,6 +10,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:minechain/core/clock.dart';
+import 'package:minechain/core/database/database_failure.dart';
 import 'package:minechain/core/database/local_database.dart';
 import 'package:minechain/core/router/app_router.dart';
 import 'package:minechain/core/router/routes.dart';
@@ -29,6 +30,7 @@ import '../../../fakes/auth_fixtures.dart';
 import '../../../fakes/fake_controllers.dart';
 import '../../../fakes/fake_registration.dart';
 import '../../../fakes/fake_sync_server.dart';
+import '../../../fakes/flaky_database.dart';
 
 const fingerprint =
     '4d61912d42cfc3d967e27e9179e01054cf7ef9d333a87b414a5ac153f4c93d53';
@@ -51,6 +53,7 @@ Future<void> open(
   AuthState? signedIn,
   Size size = const Size(360, 640),
   double textScale = 1.0,
+  Duration busyRetryDelay = const Duration(seconds: 3),
 }) async {
   app = await AppHarness.pump(
     tester,
@@ -64,6 +67,7 @@ Future<void> open(
         () => StaticDeviceKeyController(const DeviceKeyReady(fingerprint)),
       ),
       clockProvider.overrideWithValue(() => now),
+      syncBusyRetryDelayProvider.overrideWithValue(busyRetryDelay),
     ],
   );
   final tile = find.text(AppText.sendMyWork);
@@ -106,9 +110,7 @@ void main() {
   });
   tearDown(() => database.close());
 
-  testWidgets('the home tile opens it, with the waiting count', (
-    tester,
-  ) async {
+  testWidgets('the home tile opens it, with the waiting count', (tester) async {
     await queue(2);
     await open(tester);
 
@@ -282,6 +284,50 @@ void main() {
 
     expect(find.text(AppText.notSentOffline), findsOneWidget);
     expect(find.text(AppText.waitingOnPhone(2)), findsOneWidget);
+  });
+
+  testWidgets('the phone busy for a moment: a calm line, never "cannot be '
+      'opened", then the retry sends it', (tester) async {
+    await queue(1);
+    final flaky = FlakyLocalDatabase(database);
+    steps = LocalStepsRepository(flaky);
+    await open(tester);
+
+    // The send's first database call meets a lock (the emulator's case).
+    flaky.failNext(const DatabaseBusy('key-check'));
+    await send(tester);
+
+    expect(find.text(AppText.notSentPhoneBusy), findsOneWidget);
+    expect(find.text(AppText.savedWorkProblem), findsNothing);
+    expect(find.text(AppText.waitingOnPhone(1)), findsOneWidget);
+    expect(server.batches, isEmpty);
+
+    // The one retry, after its short wait.
+    await tester.pump(const Duration(seconds: 3));
+    await frames(tester);
+
+    expect(server.batches, hasLength(1));
+    expect(
+      find.text(AppText.resultSentToServer(1, underReview: 0)),
+      findsOneWidget,
+    );
+    expect(find.text(AppText.notSentPhoneBusy), findsNothing);
+    expect(find.text(AppText.nothingWaiting), findsOneWidget);
+  });
+
+  testWidgets('a real open failure still says "cannot be opened"', (
+    tester,
+  ) async {
+    await queue(1);
+    final flaky = FlakyLocalDatabase(database);
+    steps = LocalStepsRepository(flaky);
+    await open(tester);
+
+    flaky.failNext(const DatabaseWrongKey());
+    await send(tester);
+
+    expect(find.text(AppText.savedWorkProblem), findsOneWidget);
+    expect(find.text(AppText.notSentPhoneBusy), findsNothing);
   });
 
   testWidgets('the server too slow: not sent, try again', (tester) async {

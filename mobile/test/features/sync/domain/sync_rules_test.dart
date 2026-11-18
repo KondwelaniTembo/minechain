@@ -81,14 +81,16 @@ void main() {
   });
 
   test('flagged: the code and the message as given', () {
-    final update = read({
-      'outcome': 'flagged',
-      'code': 'DUPLICATE_CONSIGNMENT',
-      'message': 'This custody record was already registered.',
-      'transactionId': 'tx-2',
-      'reviewStatus': 'flagged',
-      'alerts': ['duplicate_consignment'],
-    })! as StepFlagged;
+    final update =
+        read({
+              'outcome': 'flagged',
+              'code': 'DUPLICATE_CONSIGNMENT',
+              'message': 'This custody record was already registered.',
+              'transactionId': 'tx-2',
+              'reviewStatus': 'flagged',
+              'alerts': ['duplicate_consignment'],
+            })!
+            as StepFlagged;
     expect(update.code, 'DUPLICATE_CONSIGNMENT');
     expect(update.message, 'This custody record was already registered.');
   });
@@ -110,11 +112,13 @@ void main() {
   });
 
   test('deferred: due again after the backoff for its attempt', () {
-    final update = read({
-      'outcome': 'deferred',
-      'code': 'CONSIGNMENT_NOT_FOUND',
-      'message': 'Not yet.',
-    }, attempts: 2)! as StepDeferred;
+    final update =
+        read({
+              'outcome': 'deferred',
+              'code': 'CONSIGNMENT_NOT_FOUND',
+              'message': 'Not yet.',
+            }, attempts: 2)!
+            as StepDeferred;
     // The third deferral: 4 minutes.
     expect(update.nextAttemptAt, now.add(const Duration(minutes: 4)));
     expect(isNoDeviceKey(update), isFalse);
@@ -131,44 +135,58 @@ void main() {
 
   group('not usable: the row stays as it was', () {
     for (final (name, result) in <(String, Map<String, Object?>)>[
-      ('another step id', {
-        'index': 0,
-        'stepId': '6f1d2c3a-0000-4000-8000-000000000002',
-        'outcome': 'created',
-        'transactionId': 'tx-1',
-        'reviewStatus': 'passed',
-      }),
-      ('another index', {
-        'index': 1,
-        'stepId': stepId,
-        'outcome': 'created',
-        'transactionId': 'tx-1',
-        'reviewStatus': 'passed',
-      }),
-      ('an unknown outcome', {
-        'index': 0,
-        'stepId': stepId,
-        'outcome': 'accepted',
-      }),
-      ('created without a transaction id', {
-        'index': 0,
-        'stepId': stepId,
-        'outcome': 'created',
-        'reviewStatus': 'passed',
-      }),
-      ('flagged without a code', {
-        'index': 0,
-        'stepId': stepId,
-        'outcome': 'flagged',
-        'transactionId': 'tx-1',
-        'reviewStatus': 'flagged',
-      }),
-      ('deferred with stepId null', {
-        'index': 0,
-        'stepId': null,
-        'outcome': 'deferred',
-        'code': 'STAGE_NOT_READY',
-      }),
+      (
+        'another step id',
+        {
+          'index': 0,
+          'stepId': '6f1d2c3a-0000-4000-8000-000000000002',
+          'outcome': 'created',
+          'transactionId': 'tx-1',
+          'reviewStatus': 'passed',
+        },
+      ),
+      (
+        'another index',
+        {
+          'index': 1,
+          'stepId': stepId,
+          'outcome': 'created',
+          'transactionId': 'tx-1',
+          'reviewStatus': 'passed',
+        },
+      ),
+      (
+        'an unknown outcome',
+        {'index': 0, 'stepId': stepId, 'outcome': 'accepted'},
+      ),
+      (
+        'created without a transaction id',
+        {
+          'index': 0,
+          'stepId': stepId,
+          'outcome': 'created',
+          'reviewStatus': 'passed',
+        },
+      ),
+      (
+        'flagged without a code',
+        {
+          'index': 0,
+          'stepId': stepId,
+          'outcome': 'flagged',
+          'transactionId': 'tx-1',
+          'reviewStatus': 'flagged',
+        },
+      ),
+      (
+        'deferred with stepId null',
+        {
+          'index': 0,
+          'stepId': null,
+          'outcome': 'deferred',
+          'code': 'STAGE_NOT_READY',
+        },
+      ),
     ]) {
       test(name, () {
         expect(

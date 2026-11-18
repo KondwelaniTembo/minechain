@@ -6,7 +6,9 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart';
 import 'package:minechain/core/clock.dart';
+import 'package:minechain/core/database/database_failure.dart';
 import 'package:minechain/core/database/local_database.dart';
 import 'package:minechain/core/network/network_providers.dart';
 import 'package:minechain/core/riverpod/no_retry.dart';
@@ -24,6 +26,7 @@ import '../../../fakes/auth_fixtures.dart';
 import '../../../fakes/fake_controllers.dart';
 import '../../../fakes/fake_registration.dart';
 import '../../../fakes/fake_sync_server.dart';
+import '../../../fakes/flaky_database.dart';
 
 const fingerprint =
     '4d61912d42cfc3d967e27e9179e01054cf7ef9d333a87b414a5ac153f4c93d53';
@@ -43,6 +46,7 @@ void start({
   DeviceKeyState key = const DeviceKeyReady(fingerprint),
   DeviceKeyState? keyAfterCheck,
   bool databaseFails = false,
+  Duration busyRetryDelay = Duration.zero,
 }) {
   auth = FakeAuthController(signedIn ?? signedInAs(Role.miner));
   deviceKey = StaticDeviceKeyController(key, afterCheck: keyAfterCheck);
@@ -53,21 +57,50 @@ void start({
       ...server.overrides(),
       deviceKeyControllerProvider.overrideWith(() => deviceKey),
       localStepsRepositoryProvider.overrideWith(
-        (ref) async =>
-            databaseFails ? throw const LocalStepsFailure('open') : steps,
+        // A real open failure: the key does not open the file.
+        (ref) async => databaseFails ? throw const DatabaseWrongKey() : steps,
       ),
       clockProvider.overrideWithValue(() => now),
+      // The one retry after a busy moment: at once, unless a test says.
+      syncBusyRetryDelayProvider.overrideWithValue(busyRetryDelay),
     ],
   );
   container.read(syncServiceProvider);
 }
 
+/// From here on the service's repository goes through a database that can
+/// be told to fail. Call after queueing, so the queueing is not counted.
+FlakyLocalDatabase useFlakyDatabase() {
+  final flaky = FlakyLocalDatabase(database);
+  steps = LocalStepsRepository(flaky);
+  return flaky;
+}
+
+/// The report of the next run to finish after [previous] (the retry).
+Future<SyncReport> reportAfter(SyncReport previous) async {
+  for (var i = 0; i < 200; i++) {
+    final status = container.read(syncServiceProvider);
+    final last = status.last;
+    if (!status.running && last != null && !identical(last, previous)) {
+      return last;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 5));
+  }
+  fail('no further run finished');
+}
+
+/// Lets any timer at zero, and the run it starts, go.
+Future<void> settle() => Future<void>.delayed(const Duration(milliseconds: 50));
+
 SyncService get service => container.read(syncServiceProvider.notifier);
 
 Future<SyncReport> tap() async => (await service.syncNow(SyncTrigger.tap))!;
 
+// Straight from the in-memory database, never through a flaky one, so
+// looking at the rows is not counted as a call of the service.
 Future<List<LocalStep>> rows([String actor = minerId]) async =>
-    (await steps.listForActor(actor)).reversed.toList(); // oldest first
+    (await LocalStepsRepository(database).listForActor(actor)).reversed
+        .toList(); // oldest first
 
 Future<void> queue(int count, {int from = 1, String actor = minerId}) =>
     queueSteps(
@@ -88,30 +121,33 @@ void main() {
   tearDown(() => database.close());
 
   group('accepted', () {
-    test('created: synced, the stored payload and signature sent exactly', () async {
-      await queue(2);
-      start();
-      final saved = await rows();
+    test(
+      'created: synced, the stored payload and signature sent exactly',
+      () async {
+        await queue(2);
+        start();
+        final saved = await rows();
 
-      final report = await tap();
+        final report = await tap();
 
-      expect(report.sent, 2);
-      expect(report.stop, isNull);
-      // Exactly the saved strings, oldest first, and nothing else.
-      expect(server.batches.single, [
-        for (final step in saved)
-          {'payload': step.payload, 'signature': step.signature},
-      ]);
-      expect(server.authorizations.single, 'Bearer $fakeToken');
-      expect(server.timeLimits.single, syncTimeout);
-      expect(syncTimeout, const Duration(seconds: 90));
+        expect(report.sent, 2);
+        expect(report.stop, isNull);
+        // Exactly the saved strings, oldest first, and nothing else.
+        expect(server.batches.single, [
+          for (final step in saved)
+            {'payload': step.payload, 'signature': step.signature},
+        ]);
+        expect(server.authorizations.single, 'Bearer $fakeToken');
+        expect(server.timeLimits.single, syncTimeout);
+        expect(syncTimeout, const Duration(seconds: 90));
 
-      final after = await rows();
-      expect(after.map((s) => s.syncState), everyElement(SyncState.synced));
-      expect(after.map((s) => s.serverTransactionId), ['tx-1', 'tx-2']);
-      expect(after.first.reviewStatus, 'passed');
-      expect(after.first.attempts, 0);
-    });
+        final after = await rows();
+        expect(after.map((s) => s.syncState), everyElement(SyncState.synced));
+        expect(after.map((s) => s.serverTransactionId), ['tx-1', 'tx-2']);
+        expect(after.first.reviewStatus, 'passed');
+        expect(after.first.attempts, 0);
+      },
+    );
 
     test('duplicate (already stored): synced, counted as sent', () async {
       await queue(1);
@@ -222,18 +258,21 @@ void main() {
   });
 
   group('whole-request failures change nothing', () {
-    test('offline: "not sent", rows still queued, no attempt counted', () async {
-      await queue(2);
-      server.next.add(offline);
-      start();
+    test(
+      'offline: "not sent", rows still queued, no attempt counted',
+      () async {
+        await queue(2);
+        server.next.add(offline);
+        start();
 
-      final report = await tap();
+        final report = await tap();
 
-      expect(report.stop, SyncStop.offline);
-      final after = await rows();
-      expect(after.map((s) => s.syncState), everyElement(SyncState.queued));
-      expect(after.map((s) => s.attempts), everyElement(0));
-    });
+        expect(report.stop, SyncStop.offline);
+        final after = await rows();
+        expect(after.map((s) => s.syncState), everyElement(SyncState.queued));
+        expect(after.map((s) => s.attempts), everyElement(0));
+      },
+    );
 
     test('timeout: the 90 s limit passes', () async {
       await queue(1);
@@ -258,7 +297,10 @@ void main() {
       start();
 
       expect((await tap()).stop, SyncStop.serverProblem);
-      expect((await rows()).map((s) => s.syncState), everyElement(SyncState.queued));
+      expect(
+        (await rows()).map((s) => s.syncState),
+        everyElement(SyncState.queued),
+      );
 
       final again = await tap();
       expect(again.sent, 2);
@@ -288,7 +330,10 @@ void main() {
 
       final report = await tap();
       expect(report.stop, SyncStop.tooManyRequests);
-      expect(report.message, 'Too many sync requests. Please wait a few minutes.');
+      expect(
+        report.message,
+        'Too many sync requests. Please wait a few minutes.',
+      );
 
       now = now.add(const Duration(minutes: 4));
       expect(await service.syncNow(SyncTrigger.afterSave), isNull);
@@ -374,59 +419,68 @@ void main() {
       expect(await service.syncNow(SyncTrigger.resume), isNotNull);
     });
 
-    test('a sign-in runs within the 2 minutes, and counts as the latest', () async {
-      start();
-      expect(await service.syncNow(SyncTrigger.resume), isNotNull);
-      now = now.add(const Duration(minutes: 1));
-      expect(await service.syncNow(SyncTrigger.signIn), isNotNull);
-      // A resume just after the sign-in does not send again.
-      now = now.add(const Duration(minutes: 1, seconds: 30));
-      expect(await service.syncNow(SyncTrigger.resume), isNull);
-    });
+    test(
+      'a sign-in runs within the 2 minutes, and counts as the latest',
+      () async {
+        start();
+        expect(await service.syncNow(SyncTrigger.resume), isNotNull);
+        now = now.add(const Duration(minutes: 1));
+        expect(await service.syncNow(SyncTrigger.signIn), isNotNull);
+        // A resume just after the sign-in does not send again.
+        now = now.add(const Duration(minutes: 1, seconds: 30));
+        expect(await service.syncNow(SyncTrigger.resume), isNull);
+      },
+    );
   });
 
   group('the password entered again (found on the A57)', () {
-    test('the fresh sign-in sends, even within 2 minutes of the start', () async {
-      await queue(1);
-      start(signedIn: SignedInNeedsPassword(userOf(Role.miner)));
+    test(
+      'the fresh sign-in sends, even within 2 minutes of the start',
+      () async {
+        await queue(1);
+        start(signedIn: SignedInNeedsPassword(userOf(Role.miner)));
 
-      // At start, before the password: an automatic send stops.
-      final atStart = await service.syncNow(SyncTrigger.resume);
-      expect(atStart!.stop, SyncStop.needsPassword);
-      expect(container.read(syncServiceProvider).last, same(atStart));
+        // At start, before the password: an automatic send stops.
+        final atStart = await service.syncNow(SyncTrigger.resume);
+        expect(atStart!.stop, SyncStop.needsPassword);
+        expect(container.read(syncServiceProvider).last, same(atStart));
 
-      // The password is accepted a minute later. The real controller then
-      // becomes SignedIn and announces the sign-in, as below.
-      now = now.add(const Duration(minutes: 1));
-      auth.setState(signedInAs(Role.miner));
-      await pumpEventQueue();
-      // The stale "enter your password" is gone, before any new send.
-      expect(container.read(syncServiceProvider).last, isNull);
+        // The password is accepted a minute later. The real controller then
+        // becomes SignedIn and announces the sign-in, as below.
+        now = now.add(const Duration(minutes: 1));
+        auth.setState(signedInAs(Role.miner));
+        await pumpEventQueue();
+        // The stale "enter your password" is gone, before any new send.
+        expect(container.read(syncServiceProvider).last, isNull);
 
-      container.read(signedInEventsProvider).report(userOf(Role.miner));
-      await pumpEventQueue();
+        container.read(signedInEventsProvider).report(userOf(Role.miner));
+        await pumpEventQueue();
 
-      final last = container.read(syncServiceProvider).last!;
-      expect(last.trigger, SyncTrigger.signIn);
-      expect(last.stop, isNull);
-      expect(last.sent, 1);
-      expect(server.batches, hasLength(1));
-    });
+        final last = container.read(syncServiceProvider).last!;
+        expect(last.trigger, SyncTrigger.signIn);
+        expect(last.stop, isNull);
+        expect(last.sent, 1);
+        expect(server.batches, hasLength(1));
+      },
+    );
 
-    test('a stop for another reason is kept when the session returns', () async {
-      await queue(1);
-      server.next.add(offline);
-      start();
-      final report = await tap();
-      expect(report.stop, SyncStop.offline);
+    test(
+      'a stop for another reason is kept when the session returns',
+      () async {
+        await queue(1);
+        server.next.add(offline);
+        start();
+        final report = await tap();
+        expect(report.stop, SyncStop.offline);
 
-      auth.setState(SignedInNeedsPassword(userOf(Role.miner)));
-      await pumpEventQueue();
-      auth.setState(signedInAs(Role.miner));
-      await pumpEventQueue();
+        auth.setState(SignedInNeedsPassword(userOf(Role.miner)));
+        await pumpEventQueue();
+        auth.setState(signedInAs(Role.miner));
+        await pumpEventQueue();
 
-      expect(container.read(syncServiceProvider).last, same(report));
-    });
+        expect(container.read(syncServiceProvider).last, same(report));
+      },
+    );
   });
 
   group('when and why', () {
@@ -469,10 +523,7 @@ void main() {
       await tap();
 
       expect(server.batches.single, hasLength(1));
-      expect(
-        (await rows(otherMinerId)).single.syncState,
-        SyncState.queued,
-      );
+      expect((await rows(otherMinerId)).single.syncState, SyncState.queued);
     });
 
     test('a result for another step: that row stays queued', () async {
@@ -539,6 +590,137 @@ void main() {
       expect(report.stop, SyncStop.savedWorkProblem);
       // Only the service's own words; never SQLite's.
       expect(report.message, isNull);
+      expect(report.retrySoon, isFalse);
+    });
+  });
+
+  // The API 26 emulator: the send right after a save met another call's
+  // lock and said "cannot be opened". Only a real open failure may say that.
+  group('a moment\'s problem on the phone', () {
+    for (final (name, error) in <(String, Object)>[
+      ('the file busy while opening', const DatabaseBusy('key-check')),
+      (
+        'a query refused as busy',
+        const LocalStepsFailure('count-due', busy: true),
+      ),
+      ('a query refused otherwise', const LocalStepsFailure('count-due')),
+      ('not a database error at all', StateError('unexpected')),
+    ]) {
+      test('$name: phone busy, then one retry sends it', () async {
+        await queue(1);
+        final flaky = useFlakyDatabase()..failNext(error);
+        start();
+
+        final first = (await service.syncNow(SyncTrigger.afterSave))!;
+        expect(first.stop, SyncStop.phoneBusy);
+        expect(first.stop, isNot(SyncStop.savedWorkProblem));
+        expect(first.retrySoon, isTrue);
+        expect(first.message, isNull); // no error text ever reaches it
+        expect(server.batches, isEmpty);
+
+        final retried = await reportAfter(first);
+        expect(retried.stop, isNull);
+        expect(retried.sent, 1);
+        expect(retried.trigger, SyncTrigger.afterSave);
+        expect(server.batches, hasLength(1));
+        expect((await rows()).single.syncState, SyncState.synced);
+        expect(flaky.failAt, isEmpty);
+      });
+    }
+
+    test('a busy moment twice: one retry only, then "tap Send now"', () async {
+      await queue(1);
+      final flaky = useFlakyDatabase()
+        ..failAt[1] = const DatabaseBusy('key-check')
+        ..failAt[2] = const DatabaseBusy('key-check');
+      start();
+
+      final first = (await service.syncNow(SyncTrigger.afterSave))!;
+      final second = await reportAfter(first);
+      expect(second.stop, SyncStop.phoneBusy);
+      expect(second.retrySoon, isFalse);
+
+      await settle();
+      expect(flaky.calls, 2); // no third run
+      expect(
+        identical(container.read(syncServiceProvider).last, second),
+        isTrue,
+      );
+      expect((await rows()).single.syncState, SyncState.queued);
+    });
+
+    test('a real open failure during the run: still saved-work problem, '
+        'and no retry', () async {
+      await queue(1);
+      final flaky = useFlakyDatabase()..failNext(const DatabaseWrongKey());
+      start();
+
+      final report = (await service.syncNow(SyncTrigger.afterSave))!;
+      expect(report.stop, SyncStop.savedWorkProblem);
+      expect(report.retrySoon, isFalse);
+
+      await settle();
+      expect(flaky.calls, 1);
+      expect(
+        identical(container.read(syncServiceProvider).last, report),
+        isTrue,
+      );
+    });
+
+    test('busy while writing the answers: rows unchanged, the retry resends '
+        'and the server answers duplicate', () async {
+      await queue(1);
+      // Calls: 1 count, 2 due, 3 apply.
+      final flaky = useFlakyDatabase()
+        ..failAt[3] = const LocalStepsFailure('apply', busy: true);
+      start();
+
+      final first = (await service.syncNow(SyncTrigger.afterSave))!;
+      expect(first.stop, SyncStop.phoneBusy);
+      expect((await rows()).single.syncState, SyncState.queued);
+
+      final retried = await reportAfter(first);
+      expect(retried.stop, isNull);
+      expect(retried.sent, 1);
+      expect(server.batches, hasLength(2)); // the same step, sent again
+      expect((await rows()).single.syncState, SyncState.synced);
+      expect(flaky.failAt, isEmpty);
+    });
+
+    test('a tap while the retry waits replaces it', () async {
+      await queue(1);
+      useFlakyDatabase().failNext(const DatabaseBusy('key-check'));
+      // A long wait, so only the tap can be what sends.
+      start(busyRetryDelay: const Duration(hours: 1));
+
+      final first = (await service.syncNow(SyncTrigger.afterSave))!;
+      expect(first.retrySoon, isTrue);
+      final tapped = await tap();
+      expect(tapped.sent, 1);
+      expect(server.batches, hasLength(1));
+    });
+
+    test('debug builds log the stop and the error\'s TYPE only', () async {
+      final logged = <String>[];
+      final original = debugPrint;
+      debugPrint = (String? message, {int? wrapWidth}) =>
+          logged.add('$message');
+      addTearDown(() => debugPrint = original);
+
+      await queue(1);
+      // Its text stands for SQLite's, which repeats statements and values.
+      useFlakyDatabase().failNext(StateError('SELECT payload, x\'00ff\''));
+      start();
+      final first = (await service.syncNow(SyncTrigger.afterSave))!;
+      await reportAfter(first); // the retry, so nothing runs after the test
+
+      expect(kDebugMode, isTrue); // tests run as debug
+      final stops = logged.where((l) => l.contains('MineChain sync stopped'));
+      expect(stops, hasLength(1));
+      expect(stops.single, contains('phoneBusy'));
+      expect(stops.single, contains('StateError'));
+      expect(logged.join('\n'), isNot(contains('payload')));
+      expect(logged.join('\n'), isNot(contains('00ff')));
     });
   });
 

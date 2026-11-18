@@ -11,7 +11,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sqlite3/sqlite3.dart';
 
+import '../../../core/database/database_failure.dart';
 import '../../../core/database/local_database.dart';
+import '../../../core/database/sqlite_busy.dart';
 import '../domain/local_step.dart';
 
 /// Saving a step failed because a step with this `step_id` is already
@@ -26,13 +28,23 @@ final class LocalStepConflict implements Exception {
 
 /// SQLite refused something else. [operation] says what; the SQLite text is
 /// dropped, because it can repeat the statement's values (a payload).
+/// [busy]: the file was in use (SQLITE_BUSY or SQLITE_LOCKED), so the same
+/// call a moment later should work.
 final class LocalStepsFailure implements Exception {
-  const LocalStepsFailure(this.operation);
+  const LocalStepsFailure(this.operation, {this.busy = false});
   final String operation;
+  final bool busy;
 
   @override
-  String toString() => 'LocalStepsFailure($operation)';
+  String toString() => 'LocalStepsFailure($operation${busy ? ', busy' : ''})';
 }
+
+/// True when [error] means only that the database file was in use for a
+/// moment: opening it met a lock ([DatabaseBusy]) or a query did
+/// ([LocalStepsFailure.busy]). The same call a little later should work, so
+/// the screen says "try again", never "cannot be opened".
+bool isBusyMoment(Object error) =>
+    error is DatabaseBusy || (error is LocalStepsFailure && error.busy);
 
 class LocalStepsRepository {
   LocalStepsRepository(this._db);
@@ -149,7 +161,7 @@ void _insert(Database db, NewLocalStep step) {
     if (e.extendedResultCode == _primaryKeyClash) {
       throw const LocalStepConflict();
     }
-    throw const LocalStepsFailure('insert');
+    throw LocalStepsFailure('insert', busy: isBusyOrLocked(e));
   }
 }
 
@@ -163,8 +175,8 @@ List<LocalStep> _listForActor(Database db, String actorId) {
         )
         .map(LocalStep.fromRow)
         .toList();
-  } on SqliteException {
-    throw const LocalStepsFailure('list');
+  } on SqliteException catch (e) {
+    throw LocalStepsFailure('list', busy: isBusyOrLocked(e));
   }
 }
 
@@ -178,8 +190,8 @@ DateTime? _registeredOn(Database db, String qrCode) {
     );
     final first = rows.single['first'] as String?;
     return first == null ? null : DateTime.parse(first);
-  } on SqliteException {
-    throw const LocalStepsFailure('registered-on');
+  } on SqliteException catch (e) {
+    throw LocalStepsFailure('registered-on', busy: isBusyOrLocked(e));
   }
 }
 
@@ -225,8 +237,8 @@ List<LocalStep> _dueForSync(
         )
         .map(LocalStep.fromRow)
         .toList();
-  } on SqliteException {
-    throw const LocalStepsFailure('due');
+  } on SqliteException catch (e) {
+    throw LocalStepsFailure('due', busy: isBusyOrLocked(e));
   }
 }
 
@@ -237,8 +249,8 @@ int _countDue(Database db, String actorId, String now, bool ignoreBackoff) {
       [actorId, ignoreBackoff ? 1 : 0, now],
     );
     return rows.single['n'] as int;
-  } on SqliteException {
-    throw const LocalStepsFailure('count-due');
+  } on SqliteException catch (e) {
+    throw LocalStepsFailure('count-due', busy: isBusyOrLocked(e));
   }
 }
 
@@ -246,8 +258,9 @@ StepCounts _countsForActor(Database db, String actorId, String stuckSince) {
   try {
     // total() rather than sum(): it gives 0, not NULL, when there are no
     // rows, and a REAL, read back with toInt().
-    final row = db.select(
-      '''
+    final row = db
+        .select(
+          '''
       SELECT
         total(sync_state IN ('queued', 'deferred')) AS waiting,
         total(sync_state IN ('synced', 'flagged')) AS sent_to_server,
@@ -259,8 +272,9 @@ StepCounts _countsForActor(Database db, String actorId, String stuckSince) {
       FROM local_steps
       WHERE actor_id = ?
       ''',
-      [stuckSince, actorId],
-    ).single;
+          [stuckSince, actorId],
+        )
+        .single;
     int n(String column) => (row[column] as num).toInt();
     return StepCounts(
       waiting: n('waiting'),
@@ -269,8 +283,8 @@ StepCounts _countsForActor(Database db, String actorId, String stuckSince) {
       rejected: n('rejected'),
       stuck: n('stuck'),
     );
-  } on SqliteException {
-    throw const LocalStepsFailure('counts');
+  } on SqliteException catch (e) {
+    throw LocalStepsFailure('counts', busy: isBusyOrLocked(e));
   }
 }
 
@@ -334,12 +348,12 @@ int _applyResults(Database db, List<StepSyncUpdate> updates, String at) {
     }
     db.execute('COMMIT');
     return changed;
-  } on SqliteException {
+  } on SqliteException catch (e) {
     try {
       db.execute('ROLLBACK');
     } on SqliteException {
       // Nothing more to undo.
     }
-    throw const LocalStepsFailure('apply');
+    throw LocalStepsFailure('apply', busy: isBusyOrLocked(e));
   }
 }

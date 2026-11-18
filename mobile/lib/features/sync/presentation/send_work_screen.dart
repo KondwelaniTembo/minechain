@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/database/database_failure.dart';
 import '../../../core/errors/api_codes.dart';
 import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
@@ -48,7 +49,9 @@ class SendWorkScreen extends ConsumerWidget {
                   _Counts(counts),
                   const SizedBox(height: AppSizes.spaceL),
                   FilledButton.icon(
-                    onPressed: status.running ? null : () => _send(context, ref),
+                    onPressed: status.running
+                        ? null
+                        : () => _send(context, ref),
                     icon: const Icon(Icons.cloud_upload),
                     label: Text(
                       status.running ? AppText.sendingNow : AppText.sendNow,
@@ -139,9 +142,7 @@ class _Counts extends StatelessWidget {
             _Line(Icons.cloud_done, AppText.countSentToServer(c.sentToServer)),
             // Indented: part of the line above, not more records.
             Padding(
-              padding: const EdgeInsetsDirectional.only(
-                start: AppSizes.spaceL,
-              ),
+              padding: const EdgeInsetsDirectional.only(start: AppSizes.spaceL),
               child: _Line(
                 Icons.policy,
                 AppText.countOfWhichUnderReview(c.underReview),
@@ -159,11 +160,16 @@ class _Counts extends StatelessWidget {
       );
     }
     if (counts.hasError) {
-      return const _Line(
-        Icons.storage,
-        AppText.savedWorkProblem,
-        error: true,
-      );
+      // "Cannot be opened" only when it really cannot; a busy moment is
+      // calm (the counts are read again after the next send).
+      if (savedWorkUnreadable(counts.error!)) {
+        return const _Line(
+          Icons.storage,
+          AppText.savedWorkProblem,
+          error: true,
+        );
+      }
+      return const _Line(Icons.hourglass_empty, AppText.countsPhoneBusy);
     }
     return const _Line(Icons.hourglass_empty, AppText.openingSavedWork);
   }
@@ -247,8 +253,20 @@ class _LastSend extends StatelessWidget {
               AppText.unmatchedAnswers,
               error: true,
             ),
-          if (stop != null)
-            _Line(Icons.cloud_off, _stopText(stop, report.message), error: true),
+          if (stop == SyncStop.phoneBusy)
+            // Calm, not an error: nothing is wrong with the work.
+            _Line(
+              Icons.schedule,
+              report.retrySoon
+                  ? AppText.notSentPhoneBusy
+                  : AppText.notSentPhoneBusyTryAgain,
+            )
+          else if (stop != null)
+            _Line(
+              Icons.cloud_off,
+              _stopText(stop, report.message),
+              error: true,
+            ),
           // For measuring NFR-03 ("sync within 10 s") on the A57. Debug
           // builds only, and never logged.
           if (kDebugMode && !report.nothingToSend)
@@ -283,6 +301,7 @@ String _stopText(SyncStop stop, String? message) => switch (stop) {
   SyncStop.appProblem => AppText.notSentAppProblem,
   SyncStop.insecure => AppText.insecureConnection,
   SyncStop.savedWorkProblem => AppText.savedWorkProblem,
+  SyncStop.phoneBusy => AppText.notSentPhoneBusy, // shown above, calmly
   SyncStop.needsPassword => AppText.notSentNeedsPassword,
   SyncStop.notSignedIn => AppText.notSentSignedOut,
   SyncStop.keyOtherDevice => AppText.deviceKeyOtherDevice,

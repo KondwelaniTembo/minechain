@@ -13,6 +13,7 @@
 import 'package:sqlite3/sqlite3.dart';
 
 import 'database_failure.dart';
+import 'sqlite_busy.dart';
 
 /// Version 1 (plan §2). One statement per entry.
 ///
@@ -88,7 +89,8 @@ void migrate(Database db) {
   final int found;
   try {
     found = db.userVersion;
-  } on SqliteException {
+  } on SqliteException catch (e) {
+    if (isBusyOrLocked(e)) throw const DatabaseBusy('read-version');
     throw const DatabaseOpenFailed('read-version');
   }
   if (found > currentSchemaVersion) throw DatabaseTooNew(found);
@@ -103,12 +105,13 @@ void migrate(Database db) {
       }
       db.userVersion = version;
       db.execute('COMMIT');
-    } on SqliteException {
+    } on SqliteException catch (e) {
       try {
         db.execute('ROLLBACK');
       } on SqliteException {
         // Nothing more to undo.
       }
+      if (isBusyOrLocked(e)) throw DatabaseBusy('migration-$version');
       throw DatabaseOpenFailed('migration-$version');
     }
   }

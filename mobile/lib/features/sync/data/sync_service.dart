@@ -18,12 +18,24 @@
 //  - sending a rejected step again;
 //  - logging anything: no payload, signature, token or database key, and no
 //    SQLite text (the repository turns SQLite errors into its own types).
+//    The one exception is in debug builds only: when a run stops, the NAME
+//    of the error's type (see [_debugStop]).
+//
+// A failure on the phone itself (not the network) is "saved work cannot be
+// opened" ONLY for a real DatabaseFailure that is not busy. Anything else
+// (the file in use for a moment, a failed query, an unexpected error) is
+// [SyncStop.phoneBusy], and the run is tried once more after
+// [syncBusyRetryDelayProvider]. On the API 26 emulator a busy open right
+// after a save was shown as "cannot be opened", which sends a miner to an
+// administrator for nothing.
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/clock.dart';
+import '../../../core/database/database_failure.dart';
 import '../../../core/errors/api_codes.dart';
 import '../../../core/errors/app_failure.dart';
 import '../../../core/network/network_providers.dart';
@@ -48,6 +60,13 @@ const Duration defaultTooManyWait = Duration(minutes: 15);
 /// The longest a run waits for a device key check that is already running
 /// (it may include a PUT to a server that is waking up).
 const Duration keyCheckWait = Duration(minutes: 2);
+
+/// How long after a [SyncStop.phoneBusy] stop the one automatic retry
+/// starts. Longer than the database's busy timeout is not needed: the lock
+/// that caused it lasts milliseconds. A provider so tests can make it zero.
+final syncBusyRetryDelayProvider = Provider<Duration>(
+  (ref) => const Duration(seconds: 5),
+);
 
 /// What the screen shows: whether a run is going, how far it is, and the
 /// last run's report.
@@ -79,6 +98,9 @@ class SyncService extends Notifier<SyncStatus> {
   /// No automatic run before this (a 429's Retry-After).
   DateTime? _notBefore;
 
+  /// The one retry after a [SyncStop.phoneBusy] stop, while it waits.
+  Timer? _busyRetry;
+
   Clock get _now => ref.read(clockProvider);
 
   @override
@@ -86,15 +108,13 @@ class SyncService extends Notifier<SyncStatus> {
     // A fresh sign-in (including the session restored at start-up) is
     // "app start" (plan Q4). Created in main.dart before restore(), like
     // the device key controller, so it hears that first sign-in.
-    final subscription = ref
-        .read(signedInEventsProvider)
-        .users
-        .listen((user) {
-          if (signingRoles.contains(user.role)) {
-            unawaited(syncNow(SyncTrigger.signIn));
-          }
-        });
+    final subscription = ref.read(signedInEventsProvider).users.listen((user) {
+      if (signingRoles.contains(user.role)) {
+        unawaited(syncNow(SyncTrigger.signIn));
+      }
+    });
     ref.onDispose(subscription.cancel);
+    ref.onDispose(() => _busyRetry?.cancel());
 
     // Once the session is usable again, "Enter your password" or "You are
     // signed out" from an earlier run is no longer true, so it goes. The
@@ -123,8 +143,31 @@ class SyncService extends Notifier<SyncStatus> {
     final running = _running;
     if (running != null) return running;
     if (!_mayStart(trigger)) return Future.value(null);
+    return _start(trigger, mayRetry: true);
+  }
 
-    final run = _run(trigger).whenComplete(() => _running = null);
+  /// Runs once for [trigger]. With [mayRetry], a [SyncStop.phoneBusy] stop
+  /// sets up one more run after [syncBusyRetryDelayProvider]; that run may
+  /// not set up another, so a lasting fault cannot loop.
+  Future<SyncReport> _start(SyncTrigger trigger, {required bool mayRetry}) {
+    // Any new run replaces a waiting retry: it reads the same rows.
+    _busyRetry?.cancel();
+    _busyRetry = null;
+
+    final run = _run(trigger, mayRetry: mayRetry)
+        .then((report) {
+          if (report.retrySoon && ref.mounted) {
+            _busyRetry = Timer(ref.read(syncBusyRetryDelayProvider), () {
+              _busyRetry = null;
+              if (!ref.mounted || _running != null) return;
+              // Outside the 2-minute limit: it finishes the run that was
+              // allowed, it is not a new automatic one.
+              unawaited(_start(trigger, mayRetry: false));
+            });
+          }
+          return report;
+        })
+        .whenComplete(() => _running = null);
     _running = run;
     return run;
   }
@@ -150,11 +193,13 @@ class SyncService extends Notifier<SyncStatus> {
     return true;
   }
 
-  Future<SyncReport> _run(SyncTrigger trigger) async {
+  Future<SyncReport> _run(SyncTrigger trigger, {required bool mayRetry}) async {
     final stopwatch = Stopwatch()..start();
     final startedAt = _now();
     final manual = trigger == SyncTrigger.tap;
     state = SyncStatus(running: true, last: state.last);
+
+    bool retrySoon(SyncStop? stop) => stop == SyncStop.phoneBusy && mayRetry;
 
     SyncReport empty() => SyncReport(
       startedAt: startedAt,
@@ -179,6 +224,7 @@ class SyncService extends Notifier<SyncStatus> {
         elapsed: stopwatch.elapsed,
         stop: stop,
         message: message,
+        retrySoon: retrySoon(stop),
       ),
     );
 
@@ -206,8 +252,8 @@ class SyncService extends Notifier<SyncStatus> {
         now: _now(),
         ignoreBackoff: manual,
       );
-    } on Object {
-      return stopped(SyncStop.savedWorkProblem);
+    } on Object catch (error) {
+      return stopped(_localStop('count', error));
     }
     if (total == 0) return finish(empty());
     if (ref.mounted) {
@@ -276,6 +322,7 @@ class SyncService extends Notifier<SyncStatus> {
         problems: problems,
         stop: stop,
         message: message,
+        retrySoon: retrySoon(stop),
       );
     }
 
@@ -288,8 +335,8 @@ class SyncService extends Notifier<SyncStatus> {
           ignoreBackoff: manual,
           after: after,
         );
-      } on Object {
-        return finish(report(stop: SyncStop.savedWorkProblem));
+      } on Object catch (error) {
+        return finish(report(stop: _localStop('due', error)));
       }
       if (batch.isEmpty) break;
 
@@ -298,6 +345,7 @@ class SyncService extends Notifier<SyncStatus> {
         results = await api.send(token: token, steps: batch);
       } on AppFailure catch (failure) {
         final (stop, message) = _stopFor(failure);
+        _debugStop(stop, 'send', failure);
         return finish(report(stop: stop, message: message));
       }
 
@@ -329,8 +377,10 @@ class SyncService extends Notifier<SyncStatus> {
 
       try {
         await steps.applyResults(updates, at: at);
-      } on Object {
-        return finish(report(stop: SyncStop.savedWorkProblem));
+      } on Object catch (error) {
+        // The rows keep their old state; the server answers a resend of the
+        // same signed steps as duplicates, so nothing is lost or doubled.
+        return finish(report(stop: _localStop('apply', error)));
       }
       if (ref.mounted) {
         state = SyncStatus(
@@ -351,6 +401,36 @@ class SyncService extends Notifier<SyncStatus> {
       }
     }
     return finish(report());
+  }
+
+  /// What a failure on the phone means for the run. "Saved work cannot be
+  /// opened" only when it really cannot (see [savedWorkUnreadable]);
+  /// everything else is the calm [SyncStop.phoneBusy].
+  SyncStop _localStop(String where, Object error) {
+    final stop = savedWorkUnreadable(error)
+        ? SyncStop.savedWorkProblem
+        : SyncStop.phoneBusy;
+    _debugStop(stop, where, error);
+    return stop;
+  }
+
+  /// Debug builds only: which stop, where, and the error's TYPE name, so a
+  /// cause like the emulator's busy file can be seen in `flutter logs`.
+  ///
+  /// Safe because only names written in our own code are printed: the stop,
+  /// a fixed place name, the class name (`DatabaseBusy`,
+  /// `LocalStepsFailure`, `NoConnection`, …) and our own busy flag. Never
+  /// the error's message or toString(): a SqliteException's text repeats
+  /// the statement (a payload; for PRAGMA key, the key), and a server
+  /// message is not ours. In a release build kDebugMode is the constant
+  /// false, so this code is not even compiled in.
+  void _debugStop(SyncStop stop, String where, Object error) {
+    if (!kDebugMode) return;
+    final busy = error is LocalStepsFailure && error.busy ? ' (busy)' : '';
+    debugPrint(
+      'MineChain sync stopped: ${stop.name} at $where, '
+      '${error.runtimeType}$busy',
+    );
   }
 
   /// Makes sure the device key may be used (plan §3, step 3). Null when it

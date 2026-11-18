@@ -508,9 +508,7 @@ void main() {
       expect(find.text(AppText.findingLocation(null)), findsOneWidget);
     });
 
-    testWidgets('the readings cannot start: could not be read', (
-      tester,
-    ) async {
+    testWidgets('the readings cannot start: could not be read', (tester) async {
       gps.readingsError = Exception('plugin fault');
       await open(tester);
       expect(find.text(AppText.locationFailed), findsOneWidget);
@@ -707,6 +705,8 @@ void main() {
       ('storage failed', const SaveStorageFailed(), AppText.savedWorkProblem),
       ('invalid field', const SaveInvalidField('qr_code'), AppText.saveInvalid),
       ('duplicate step id', const SaveDuplicateStepId(), AppText.saveFailed),
+      // Mobile (26): calm, and never the "cannot be opened" sentence.
+      ('the phone busy', const SaveBusy(), AppText.saveBusy),
     ]) {
       testWidgets('$name: its sentence, the form kept', (tester) async {
         saver.answer = result;
@@ -717,6 +717,9 @@ void main() {
 
         expect(find.text(sentence), findsOneWidget);
         expect(find.text(AppText.scannedRecord(goodCode)), findsOneWidget);
+        if (result is SaveBusy) {
+          expect(find.text(AppText.savedWorkProblem), findsNothing);
+        }
       });
     }
   });

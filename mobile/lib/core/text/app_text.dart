@@ -354,6 +354,28 @@ abstract final class AppText {
       'Try again later.';
   static const String notSentAppProblem =
       'Something is wrong with the app. Your work is safe on this phone.';
+
+  /// A moment's problem on the phone itself (the saved work was in use),
+  /// never "cannot be opened": the work is fine and is tried again.
+  static const String notSentPhoneBusy =
+      'Not sent yet: the phone was busy. Your work is safe on this phone. '
+      'It will be sent shortly.';
+
+  /// A save that met the database in use for a moment (Mobile (26)).
+  /// Nothing was stored, and nothing saved before is affected.
+  static const String saveBusy =
+      'Not saved yet: the phone was busy. Your other saved work is safe. '
+      'Try Save again.';
+
+  /// The same, once the automatic retry has also been used.
+  static const String notSentPhoneBusyTryAgain =
+      'Not sent yet: the phone was busy. Your work is safe on this phone. '
+      'Tap Send now to try again.';
+
+  /// The counts on "Send my work" could not be read for a moment.
+  static const String countsPhoneBusy =
+      'The phone was busy and could not count your saved work. Your work is '
+      'safe on this phone.';
   static const String notSentNeedsPassword =
       'Your session has expired. Enter your password to send your work.';
   static const String notSentSignedOut =
@@ -439,8 +461,7 @@ abstract final class AppText {
       'short and factual, and leave out personal details. Only '
       'administrators see it.';
   static const String rejectReasonTooShort = 'Write at least 3 characters.';
-  static String rejected(String name) =>
-      'The request from $name was rejected.';
+  static String rejected(String name) => 'The request from $name was rejected.';
 
   /// 404 or 409 on approve or reject: another administrator got there first.
   static const String requestAlreadyHandled =

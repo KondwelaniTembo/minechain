@@ -17,12 +17,24 @@
 //      reading shows whether it is the right one ("file is not a database").
 //   4. Only then WAL, synchronous=FULL and migrations: nothing is written to
 //      a file that has not been proved to be ours.
+//
+// And before all of them, the busy timeout. It is a setting of this
+// connection only and touches no file, so it is safe before the key. It must
+// come before the first read (step 3): when another connection is closing,
+// SQLite folds the write-ahead log back into the file under an exclusive
+// lock, and without a timeout a read in that moment fails at once with
+// SQLITE_BUSY. On the API 26 emulator exactly that made the send after a
+// save report "cannot be opened": the busy read was taken for a wrong key.
 
 import 'package:sqlite3/sqlite3.dart';
 
 import 'database_failure.dart';
 import 'database_key.dart';
 import 'schema.dart';
+import 'sqlite_busy.dart';
+
+/// How long a connection waits for another one's lock before giving up.
+const int busyTimeoutMs = 5000;
 
 /// Opens [path] with [keyHex] (64 hex characters) and brings its schema up
 /// to date. The caller must close the result.
@@ -43,6 +55,7 @@ Database openEncrypted(String path, String keyHex) {
   }
 
   try {
+    _setBusyTimeout(db);
     _setCipher(db);
     _setKey(db, keyHex);
     _setUp(db);
@@ -51,6 +64,16 @@ Database openEncrypted(String path, String keyHex) {
   } catch (_) {
     db.close();
     rethrow;
+  }
+}
+
+void _setBusyTimeout(Database db) {
+  try {
+    // Two isolates may open the file at once; wait for the other's lock
+    // instead of failing straight away.
+    db.execute('PRAGMA busy_timeout = $busyTimeoutMs');
+  } on SqliteException {
+    throw const DatabaseOpenFailed('busy-timeout');
   }
 }
 
@@ -79,7 +102,9 @@ void _setKey(Database db, String keyHex) {
   try {
     // The proof: SQLite must decrypt page 1 to answer this.
     db.select('SELECT count(*) FROM sqlite_master');
-  } on SqliteException {
+  } on SqliteException catch (e) {
+    // Busy says nothing about the key: the page was never read.
+    if (isBusyOrLocked(e)) throw const DatabaseBusy('key-check');
     throw const DatabaseWrongKey();
   }
 }
@@ -93,10 +118,8 @@ void _setUp(Database db) {
     // FULL: a commit is on the storage before it returns, so a row that was
     // reported as saved survives a flat battery (NFR-04).
     db.execute('PRAGMA synchronous = FULL');
-    // Two isolates may open the file at once; wait for the other's lock
-    // instead of failing straight away.
-    db.execute('PRAGMA busy_timeout = 5000');
-  } on SqliteException {
+  } on SqliteException catch (e) {
+    if (isBusyOrLocked(e)) throw const DatabaseBusy('setup');
     throw const DatabaseOpenFailed('setup');
   }
 }

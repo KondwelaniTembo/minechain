@@ -54,8 +54,16 @@ enum SyncStop {
   /// The connection failed its safety checks (pinning, TLS 1.3).
   insecure,
 
-  /// The local database could not be read or written.
+  /// The saved work really cannot be opened with this phone's key (a
+  /// DatabaseFailure other than busy). Only this says "ask an
+  /// administrator".
   savedWorkProblem,
+
+  /// Something on the phone failed for a moment: the database file was in
+  /// use, or any other error that is not "cannot be opened". The work is
+  /// untouched, and the run is tried once more by itself
+  /// ([SyncReport.retrySoon]).
+  phoneBusy,
 }
 
 /// A step that came back under review or not accepted, to name on screen.
@@ -94,6 +102,7 @@ class SyncReport {
     this.problems = const [],
     this.stop,
     this.message,
+    this.retrySoon = false,
   });
 
   /// When the run started (UTC, from the app's clock). The screen shows it
@@ -134,6 +143,10 @@ class SyncReport {
   /// The server's message for [SyncStop.tooManyRequests], or the key
   /// problem's sentence for [SyncStop.keyProblem].
   final String? message;
+
+  /// For [SyncStop.phoneBusy]: true when the service will try again by
+  /// itself in a moment, false when that retry has been used up.
+  final bool retrySoon;
 
   int get answered => sent + underReview + rejected + waiting;
 

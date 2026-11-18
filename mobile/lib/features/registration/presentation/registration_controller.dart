@@ -13,6 +13,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/clock.dart';
+import '../../../core/database/database_failure.dart';
 import '../../../core/database/local_settings.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_controller.dart';
@@ -417,13 +418,28 @@ class RegistrationController extends Notifier<RegistrationState> {
     // The duplicate check once more, just before saving: another account
     // may have registered this record on this phone since the scan.
     final steps = await _stepsOrNull();
-    final earlier = await steps?.registeredOn(form.qrCode!);
+    final DateTime? earlier;
+    try {
+      earlier = await steps?.registeredOn(form.qrCode!);
+    } on Object catch (error) {
+      // Before, this escaped save() and left the screen saving. Nothing is
+      // signed or stored yet. A busy moment says "try Save again"; any
+      // other failure is the storage problem.
+      if (!ref.mounted) return;
+      state = state.copyWith(
+        saving: false,
+        result: () => isBusyMoment(error)
+            ? const SaveBusy()
+            : SaveStorageFailed(error is DatabaseFailure ? error : null),
+      );
+      return;
+    }
     if (!ref.mounted) return;
-    if (earlier != null) {
+    if (earlier case final DateTime first) {
       state = state.copyWith(
         saving: false,
         qrCode: () => null,
-        qrNotice: () => QrAlreadyRegistered(earlier),
+        qrNotice: () => QrAlreadyRegistered(first),
       );
       return;
     }
@@ -449,15 +465,23 @@ class RegistrationController extends Notifier<RegistrationState> {
       saveDuration: () => stopwatch.elapsed,
     );
     if (result is SaveDone) {
-      // Remembered for the next registration (Q5).
-      unawaited(_rememberMineral(form.mineral!));
-      // Sent at once if there is a network (M6, approved point 7). Not
-      // awaited: the miner sees "Saved on this phone" whatever happens, and
-      // a failed send leaves the step safely queued.
-      unawaited(
-        ref.read(syncServiceProvider.notifier).syncNow(SyncTrigger.afterSave),
-      );
+      // Not awaited: the miner sees "Saved on this phone" whatever happens,
+      // and a failed send leaves the step safely queued.
+      unawaited(_afterSave(form.mineral!));
     }
+  }
+
+  /// After a committed save: remember the mineral (Q5), THEN send (M6,
+  /// approved point 7). One after the other, not side by side: started
+  /// together, the two opened the database at the same moment on the API
+  /// 26 emulator, and the send met the other's lock. The database now also
+  /// queues its calls (local_database.dart); this keeps the order plain.
+  Future<void> _afterSave(Mineral mineral) async {
+    // The sync service lives on after this screen; read it before any await,
+    // while this controller's ref is certainly usable.
+    final sync = ref.read(syncServiceProvider.notifier);
+    await _rememberMineral(mineral);
+    await sync.syncNow(SyncTrigger.afterSave);
   }
 
   /// "Register another": a fresh form, keeping the mineral and the GPS.

@@ -20,6 +20,7 @@ import 'package:minechain/features/steps/domain/local_step.dart';
 
 import '../../../fakes/fake_controllers.dart';
 import '../../../fakes/fake_device_key_channel.dart';
+import '../../../fakes/flaky_database.dart';
 
 /// Signs by recording exactly what it was given, and answering with a fake
 /// DER-looking signature. Can be told to fail.
@@ -205,6 +206,69 @@ void main() {
       expect((result as SaveStorageFailed).failure, isA<DatabaseWrongKey>());
       expect(channel.signed, isEmpty); // never signed what cannot be saved
     });
+  });
+
+  // Mobile (26): a busy moment is "try Save again", never "cannot be opened".
+  group('the database busy for a moment', () {
+    test('busy while opening for the save: SaveBusy, nothing signed', () async {
+      final result = await saveWith(
+        useCase(stepsSource: () async => throw const DatabaseBusy('key-check')),
+      );
+      expect(result, isA<SaveBusy>());
+      expect(channel.signed, isEmpty);
+    });
+
+    for (final (name, error) in <(String, Object)>[
+      (
+        'the insert refused as busy',
+        const LocalStepsFailure('insert', busy: true),
+      ),
+      (
+        'the file busy while opening for the insert',
+        const DatabaseBusy('setup'),
+      ),
+    ]) {
+      test('$name: SaveBusy, nothing stored, and Save again works', () async {
+        final flaky = FlakyLocalDatabase(database)..failNext(error);
+        steps = LocalStepsRepository(flaky);
+        final registration = useCase();
+
+        expect(await saveWith(registration), isA<SaveBusy>());
+        expect(
+          await LocalStepsRepository(database).listForActor(miner.id),
+          isEmpty,
+        );
+
+        final again = await saveWith(registration);
+        expect(again, isA<SaveDone>());
+        // The dropped signature is never stored: one row, the new step.
+        final rows = await LocalStepsRepository(database)
+            .listForActor(miner.id);
+        expect(rows.single.stepId, (again as SaveDone).stepId);
+        expect(channel.signed, hasLength(2));
+      });
+    }
+
+    test(
+      'an insert refused for another reason is still a storage failure',
+      () async {
+        final flaky = FlakyLocalDatabase(database)
+          ..failNext(const LocalStepsFailure('insert'));
+        steps = LocalStepsRepository(flaky);
+        expect(await saveWith(useCase()), isA<SaveStorageFailed>());
+      },
+    );
+
+    test(
+      'a real open failure for the insert: storage failure, with why',
+      () async {
+        final flaky = FlakyLocalDatabase(database)
+          ..failNext(const DatabaseWrongKey());
+        steps = LocalStepsRepository(flaky);
+        final result = await saveWith(useCase());
+        expect((result as SaveStorageFailed).failure, isA<DatabaseWrongKey>());
+      },
+    );
   });
 
   test('signing fails: nothing is stored', () async {

@@ -17,7 +17,15 @@
 // a raw key there is no slow passphrase stretching, so opening costs little.
 // The integration test measures it; if it turns out slow on the A57, a
 // long-lived worker isolate can replace this class without changing callers.
+//
+// One call at a time: each call opens and closes the file, and the last
+// connection to close folds the write-ahead log back into the file under an
+// exclusive lock. Two calls at once (the mineral being remembered and the
+// send after a save, on the emulator) then meet that lock. So calls wait
+// in line here, and the file never has two of this app's connections at
+// once. The busy timeout (open_encrypted.dart) still covers anything else.
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 
@@ -49,6 +57,9 @@ class EncryptedLocalDatabase implements LocalDatabase {
   final String _path;
   final String _keyHex;
 
+  /// The end of the line of calls: the next call starts after it.
+  Future<void> _tail = Future<void>.value();
+
   /// The file's name inside the app's private support folder.
   static const String fileName = 'minechain.db';
 
@@ -71,19 +82,34 @@ class EncryptedLocalDatabase implements LocalDatabase {
 
   @override
   Future<T> run<T>(T Function(Database db) work) {
-    // Copies into locals, so the closure captures two strings and the work
-    // function, and not `this`.
     final path = _path;
     final keyHex = _keyHex;
-    return Isolate.run(() {
-      final db = openEncrypted(path, keyHex);
-      try {
-        return work(db);
-      } finally {
-        db.close();
-      }
-    });
+    final previous = _tail;
+    final done = Completer<void>();
+    _tail = done.future;
+    // Waits for the call before, whatever it came to (its caller has its
+    // error; `_tail` itself never fails), then runs; the next call waits
+    // for this one.
+    return previous
+        .then((_) => _inIsolate(path, keyHex, work))
+        .whenComplete(done.complete);
   }
+
+  /// Static, and given only two strings and the work function, so the
+  /// closure sent to the isolate captures nothing else (not `this`, not the
+  /// Completer, which cannot be sent).
+  static Future<T> _inIsolate<T>(
+    String path,
+    String keyHex,
+    T Function(Database db) work,
+  ) => Isolate.run(() {
+    final db = openEncrypted(path, keyHex);
+    try {
+      return work(db);
+    } finally {
+      db.close();
+    }
+  });
 
   // The path and key are not printed.
   @override
