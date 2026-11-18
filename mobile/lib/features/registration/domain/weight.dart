@@ -49,6 +49,20 @@ final class WeightRefused extends WeightParse {
   final WeightProblem problem;
 }
 
+/// Whole milligrams [milligrams] (the signed text, digits only) shown in
+/// [unit], exactly: "1500" mg in grams is "1.5", "2000000" mg in kilograms
+/// is "2". The reverse of [parseWeightToMg], on text again, never a double.
+/// Null if [milligrams] is not plain digits (a damaged row), so the caller
+/// can fall back to milligrams.
+String? weightInUnit(String milligrams, WeightUnit unit) {
+  if (!RegExp(r'^[0-9]+$').hasMatch(milligrams)) return null;
+  final digits = milligrams.padLeft(unit.decimals + 1, '0');
+  final cut = digits.length - unit.decimals;
+  final whole = BigInt.parse(digits.substring(0, cut)).toString();
+  final fraction = digits.substring(cut).replaceFirst(RegExp(r'0+$'), '');
+  return fraction.isEmpty ? whole : '$whole.$fraction';
+}
+
 /// Digits, then optionally one point or comma and more digits. A comma is
 /// allowed because some phone keyboards offer only "," as the decimal key.
 /// No thousands separators, no sign, no spaces inside.

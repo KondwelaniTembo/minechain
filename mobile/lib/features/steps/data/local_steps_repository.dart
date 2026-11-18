@@ -14,6 +14,7 @@ import 'package:sqlite3/sqlite3.dart';
 import '../../../core/database/database_failure.dart';
 import '../../../core/database/local_database.dart';
 import '../../../core/database/sqlite_busy.dart';
+import '../domain/consignment_list_item.dart';
 import '../domain/local_step.dart';
 
 /// Saving a step failed because a step with this `step_id` is already
@@ -60,9 +61,14 @@ class LocalStepsRepository {
   /// Throws [LocalStepConflict] or [LocalStepsFailure].
   Future<void> insert(NewLocalStep step) => _db.run((db) => _insert(db, step));
 
-  /// [actorId]'s steps, newest first (the "My consignments" list).
+  /// [actorId]'s steps, newest first, every column (for tests and checks).
   Future<List<LocalStep>> listForActor(String actorId) =>
       _db.run((db) => _listForActor(db, actorId));
+
+  /// [actorId]'s registrations for "My consignments", newest first: only
+  /// the columns the list shows (decision Mobile (34)).
+  Future<List<ConsignmentListItem>> listRegistrationsForActor(String actorId) =>
+      _db.run((db) => _listRegistrationsForActor(db, actorId));
 
   /// The next steps to send for [actorId], oldest first, at most
   /// [batchSize]: those `queued`, and those `deferred` whose wait is over at
@@ -177,6 +183,32 @@ List<LocalStep> _listForActor(Database db, String actorId) {
         .toList();
   } on SqliteException catch (e) {
     throw LocalStepsFailure('list', busy: isBusyOrLocked(e));
+  }
+}
+
+// The columns are named one by one: never `SELECT *`, so a payload,
+// signature, key fingerprint or coordinate is never even read for the list.
+List<ConsignmentListItem> _listRegistrationsForActor(
+  Database db,
+  String actorId,
+) {
+  try {
+    return db
+        .select(
+          '''
+          SELECT step_id, qr_code, mineral, weight_mg, sync_state,
+                 review_status, last_code, last_message, first_deferred_at,
+                 created_at
+          FROM local_steps
+          WHERE actor_id = ? AND type = 'registration'
+          ORDER BY created_at DESC, step_id DESC
+          ''',
+          [actorId],
+        )
+        .map(ConsignmentListItem.fromRow)
+        .toList();
+  } on SqliteException catch (e) {
+    throw LocalStepsFailure('list-registrations', busy: isBusyOrLocked(e));
   }
 }
 
@@ -301,6 +333,11 @@ int _applyResults(Database db, List<StepSyncUpdate> updates, String at) {
           :final reviewStatus,
           :final transactionId,
         ):
+          // The code and message are cleared, also when a `duplicate` says
+          // the review status is `flagged`: a duplicate answer carries no
+          // code or message (api.md), and a row being sent holds at most an
+          // earlier DEFERRAL's code (a flagged answer moves the row out of
+          // the queue for good), which would be wrong under "under review".
           db.execute(
             "UPDATE local_steps SET sync_state = 'synced', review_status = ?, "
             'server_transaction_id = ?, last_code = NULL, last_message = NULL, '

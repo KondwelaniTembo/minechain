@@ -3,6 +3,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:minechain/core/database/local_database.dart';
 import 'package:minechain/features/steps/data/local_steps_repository.dart';
+import 'package:minechain/features/steps/domain/consignment_list_item.dart';
 import 'package:minechain/features/steps/domain/local_step.dart';
 
 const miner = '3f2b6c1e-0000-4000-8000-000000000101';
@@ -319,6 +320,119 @@ void main() {
       ], at: at);
 
       expect(changed, 2);
+    });
+  });
+
+  group('listRegistrationsForActor (My consignments)', () {
+    test(
+      'this actor\'s registrations only, newest first, ties by step id',
+      () async {
+        await repository.insert(step(1, minute: 1));
+        await repository.insert(step(2, minute: 3));
+        await repository.insert(step(4, minute: 3)); // same time as 2
+        await repository.insert(step(3, minute: 5, actor: otherMiner));
+        // A handoff by the same actor: not a consignment they registered.
+        await repository.insert(
+          NewLocalStep(
+            stepId: '6f1d2c3a-0000-4000-8000-000000000005',
+            actorId: miner,
+            type: 'handoff',
+            qrCode: 'MC-DEMO-000009',
+            mineral: null,
+            weightMg: '1500000',
+            latitude: '-15.419012',
+            longitude: '28.288105',
+            capturedAt: '2026-11-17T08:09:00.000Z',
+            payload: 'minechain-step/1/handoff\n',
+            signature: 'MEQCIF==',
+            keyFingerprint: '4d61912d42cf',
+            gpsAccuracyM: null,
+            createdAt: DateTime.utc(2026, 11, 17, 8, 9),
+          ),
+        );
+
+        final list = await repository.listRegistrationsForActor(miner);
+        expect(list.map((i) => i.stepId), [idOf(4), idOf(2), idOf(1)]);
+        expect(await repository.listRegistrationsForActor('nobody'), isEmpty);
+      },
+    );
+
+    test('the fields the list shows, and the state the server gave', () async {
+      await repository.insert(step(1));
+      await repository.applyResults([
+        StepFlagged(
+          idOf(1),
+          code: 'GPS_ZONE',
+          message: 'Outside every zone.',
+          reviewStatus: 'flagged',
+          transactionId: 'tx-1',
+        ),
+      ], at: at);
+
+      final item = (await repository.listRegistrationsForActor(miner)).single;
+      expect(item.qrCode, 'MC-DEMO-000001');
+      expect(item.mineral, 'gold');
+      expect(item.weightMg, '1500000'); // the signed text
+      expect(item.createdAt, DateTime.utc(2026, 11, 17, 8));
+      expect(item.syncState, SyncState.flagged);
+      expect(item.lastCode, 'GPS_ZONE');
+      expect(item.lastMessage, 'Outside every zone.');
+      expect(item.statusAt(at), StepStatus.underReview);
+      // No payload, signature, fingerprint or coordinates: the class has no
+      // such fields, and its text names none of them.
+      expect(item.toString(), isNot(contains('MEQCIF')));
+    });
+
+    // Fix E as built: a duplicate answer carries no code or message
+    // (api.md), and a row still being sent can only hold an earlier
+    // DEFERRAL's code, because a flagged answer takes the row out of the
+    // queue for good. Keeping that code would show "This consignment is not
+    // ready…" under "under review", so it is cleared.
+    test('a duplicate answer that says flagged: under review, and an '
+        'earlier deferral\'s message is not shown as the review\'s', () async {
+      await repository.insert(step(1));
+      await repository.applyResults([
+        StepDeferred(
+          idOf(1),
+          code: 'STAGE_NOT_READY',
+          message: 'This consignment is not ready for this step yet.',
+          nextAttemptAt: at,
+        ),
+      ], at: at);
+      // Stored as flagged on the server; that answer was lost; the resend
+      // comes back duplicate, with the server's review status.
+      await repository.applyResults([
+        StepSynced(idOf(1), reviewStatus: 'flagged', transactionId: 'tx-1'),
+      ], at: at);
+
+      final item = (await repository.listRegistrationsForActor(miner)).single;
+      expect(item.syncState, SyncState.synced);
+      expect(item.reviewStatus, 'flagged');
+      expect(item.statusAt(at), StepStatus.underReview);
+      expect(item.lastCode, isNull);
+      expect(item.lastMessage, isNull);
+    });
+
+    test('a flagged step keeps its code and message for good', () async {
+      await repository.insert(step(1));
+      await repository.applyResults([
+        StepFlagged(
+          idOf(1),
+          code: 'DUPLICATE_CONSIGNMENT',
+          message: 'Already registered.',
+          reviewStatus: 'flagged',
+          transactionId: 'tx-1',
+        ),
+      ], at: at);
+      // Any later answer for it is ignored: it is no longer open.
+      final changed = await repository.applyResults([
+        StepSynced(idOf(1), reviewStatus: 'flagged', transactionId: 'tx-1'),
+      ], at: at);
+
+      expect(changed, 0);
+      final item = (await repository.listRegistrationsForActor(miner)).single;
+      expect(item.lastCode, 'DUPLICATE_CONSIGNMENT');
+      expect(item.lastMessage, 'Already registered.');
     });
   });
 

@@ -84,4 +84,29 @@ void main() {
       });
     }
   });
+
+  // "My consignments" shows the signed milligrams in the mineral's unit.
+  group('weightInUnit', () {
+    for (final (mg, unit, shown) in [
+      ('1500', WeightUnit.grams, '1.5'),
+      ('1500000', WeightUnit.grams, '1500'),
+      ('1', WeightUnit.grams, '0.001'),
+      ('1100000', WeightUnit.kilograms, '1.1'),
+      ('2000000', WeightUnit.kilograms, '2'),
+      ('1', WeightUnit.kilograms, '0.000001'),
+      ('9223372036854775807', WeightUnit.grams, '9223372036854775.807'),
+    ]) {
+      test('$mg mg in ${unit.name} is "$shown", and back again', () {
+        expect(weightInUnit(mg, unit), shown);
+        // Exact both ways: what is shown parses back to the signed text.
+        expect((parseWeightToMg(shown, unit) as WeightOk).milligrams, mg);
+      });
+    }
+
+    test('not plain digits (a damaged row): null', () {
+      expect(weightInUnit('1.5', WeightUnit.grams), isNull);
+      expect(weightInUnit('', WeightUnit.grams), isNull);
+      expect(weightInUnit('-1', WeightUnit.grams), isNull);
+    });
+  });
 }

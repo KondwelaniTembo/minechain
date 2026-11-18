@@ -35,6 +35,9 @@ abstract final class AppRoutes {
   /// later modules.
   static const String minerSync = '/miner/sync';
 
+  /// "My consignments" (plan M7). Under /miner like the screens above.
+  static const String minerConsignments = '/miner/consignments';
+
   /// The administrator's list of pending account requests. Under /admin, so
   /// the redirect's role rule keeps it for administrators only.
   static const String adminRequests = '/admin/requests';

@@ -330,17 +330,65 @@ abstract final class AppText {
   static String sendTook(Duration elapsed) =>
       'The send took ${(elapsed.inMilliseconds / 1000).toStringAsFixed(1)} s.';
 
+  // One record's state. "Send my work" puts the QR code in front of these;
+  // "My consignments" shows them under the record (decision Mobile (34)), so
+  // both screens say the same thing in the same words.
+  static const String _underReview = 'under review';
+  static String _notAccepted(String code) =>
+      'this record could not be accepted ($code). Show this to your '
+      'administrator.';
+  static const String _notAcceptedUpdateApp =
+      'this record could not be accepted. Please update the app.';
+
   /// One flagged step: the code and the server's message as given.
   static String underReviewLine(String qrCode, String message) =>
-      '$qrCode: under review. $message';
+      '$qrCode: $_underReview. $message';
 
   /// One rejected step (plan §3: the code, and "Show this to your
   /// administrator").
   static String rejectedLine(String qrCode, String code) =>
-      '$qrCode: this record could not be accepted ($code). Show this to your '
-      'administrator.';
+      '$qrCode: ${_notAccepted(code)}';
   static String updateAppLine(String qrCode) =>
-      '$qrCode: this record could not be accepted. Please update the app.';
+      '$qrCode: $_notAcceptedUpdateApp';
+
+  // ---- My consignments (features/consignments/, plan M7) ----
+
+  /// The singular of [waitingOnPhone].
+  static const String stepWaiting =
+      'Safe on this phone and waiting to be sent.';
+
+  /// The singular of [stuckDeferred] (plan §3).
+  static const String stepStuck =
+      'Not accepted yet after 3 days. Ask your administrator.';
+
+  /// As [resultSentToServer].
+  static const String stepSent = 'Sent to the server ✓';
+  static const String stepUnderReview = 'Sent to the server — $_underReview.';
+
+  /// As [countNeedsAttention] and [rejectedLine].
+  static String stepRejected(String code) =>
+      'Needs attention: ${_notAccepted(code)}';
+  static const String stepUpdateApp = 'Needs attention: $_notAcceptedUpdateApp';
+
+  /// "Gold, 1.5 g".
+  static String consignmentWhat(String mineral, String weight, String unit) =>
+      '$mineral, $weight $unit';
+  static const String milligrams = 'mg';
+
+  /// "Saved 18 Nov, 02:29", in the phone's own time.
+  static String savedAt(DateTime localTime) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return 'Saved ${localTime.day} ${_months[localTime.month - 1]}, '
+        '${two(localTime.hour)}:${two(localTime.minute)}';
+  }
+
+  static const String noConsignmentsYet =
+      'You have not registered any consignments yet.';
+
+  /// The list could not be read for a moment (Mobile (26)).
+  static const String consignmentsPhoneBusy =
+      'The phone was busy and could not show your consignments. Your work '
+      'is safe on this phone.';
 
   // Why a send stopped. Every one says the work is still on the phone,
   // because it is: a stop never changes a saved record.

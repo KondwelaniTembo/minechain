@@ -21,6 +21,7 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/buyer/presentation/buyer_home_screen.dart';
+import '../../features/consignments/presentation/my_consignments_screen.dart';
 import '../../features/miner/presentation/miner_home_screen.dart';
 import '../../features/officer/presentation/officer_home_screen.dart';
 import '../../features/registration/presentation/register_consignment_screen.dart';
@@ -45,7 +46,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   // ref.listen (not ref.watch): watching would rebuild this provider, and so
   // throw the router away and lose the back stack, on every change.
-  ref.listen<AuthState>(authControllerProvider, (_, _) => authChanges.changed());
+  ref.listen<AuthState>(
+    authControllerProvider,
+    (_, _) => authChanges.changed(),
+  );
 
   final router = GoRouter(
     initialLocation: AppRoutes.start,
@@ -88,6 +92,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.minerSync,
         builder: (context, state) => const SendWorkScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.minerConsignments,
+        builder: (context, state) => const MyConsignmentsScreen(),
       ),
       GoRoute(
         path: AppRoutes.transporter,

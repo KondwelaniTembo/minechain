@@ -25,6 +25,7 @@ import '../data/location_source.dart';
 import '../data/register_consignment.dart';
 import '../domain/mineral.dart';
 import '../domain/weight.dart';
+import 'mineral_text.dart';
 import 'qr_scanner_view.dart';
 import 'registration_controller.dart';
 
@@ -582,15 +583,6 @@ class _LocationPart extends StatelessWidget {
 
 // ---- 3. Mineral --------------------------------------------------------------
 
-String _mineralName(Mineral mineral) => switch (mineral) {
-  Mineral.gold => AppText.gold,
-  Mineral.copper => AppText.copper,
-  Mineral.cobalt => AppText.cobalt,
-  Mineral.manganese => AppText.manganese,
-  Mineral.emerald => AppText.emerald,
-  Mineral.amethyst => AppText.amethyst,
-};
-
 class _MineralPart extends StatelessWidget {
   const _MineralPart({required this.form, required this.controller});
   final RegistrationState form;
@@ -603,7 +595,7 @@ class _MineralPart extends StatelessWidget {
     children: [
       for (final mineral in Mineral.values)
         ChoiceChip(
-          label: Text(_mineralName(mineral)),
+          label: Text(mineralName(mineral)),
           selected: form.mineral == mineral,
           onSelected: form.saving
               ? null
