@@ -115,6 +115,28 @@ void main() {
       expect(refused.details[1].code, isNull);
     });
 
+    for (final (header, expected) in <(String?, Duration?)>[
+      ('120', const Duration(seconds: 120)),
+      (' 60 ', const Duration(seconds: 60)),
+      (null, null),
+      ('Wed, 18 Nov 2026 09:00:00 GMT', null), // the date form: not used
+      ('-5', null),
+    ]) {
+      test('429 with Retry-After "$header": retryAfter $expected', () async {
+        final api = apiWith(
+          MockClient(
+            (_) async => http.Response(
+              envelope(ApiCodes.tooManyRequests, 'Too many sync requests.'),
+              429,
+              headers: {'retry-after': ?header},
+            ),
+          ),
+        );
+        final failure = await failureOf(() => api.post(['sync', 'steps']));
+        expect((failure as ServerRefused).retryAfter, expected);
+      });
+    }
+
     test('an HTML 502 from the proxy is a BadResponse', () async {
       final failure = await failureOf(
         () => apiWith(answering(502, '<html>Bad gateway</html>')).get(['x']),

@@ -290,6 +290,27 @@ class AuthController extends Notifier<AuthState> {
     }, ignored: const LoginIgnored());
   }
 
+  /// Takes a fresher copy of the signed-in user from the server, for example
+  /// the answer to PUT /auth/me/public-key with the new fingerprint (M2).
+  /// The caller has already saved it. Only for the same account: an answer
+  /// for anyone else is ignored. It changes no token and announces no
+  /// sign-in.
+  void userUpdated(User user) {
+    final current = state;
+    switch (current) {
+      case SignedIn() when current.user.id == user.id:
+        state = SignedIn(
+          user: user,
+          token: current.token,
+          expiresAt: current.expiresAt,
+        );
+      case SignedInNeedsPassword() when current.user.id == user.id:
+        state = SignedInNeedsPassword(user);
+      case _:
+        break;
+    }
+  }
+
   // ---- inside ----
 
   /// Runs [action] unless another sign-in, sign-out or account request is

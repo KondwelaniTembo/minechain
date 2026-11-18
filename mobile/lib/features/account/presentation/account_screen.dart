@@ -17,6 +17,8 @@ import '../../auth/domain/auth_state.dart';
 import '../../auth/domain/user.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../auth/presentation/password_prompt.dart';
+import '../../device_key/domain/key_fingerprint.dart';
+import '../../device_key/presentation/device_key_controller.dart';
 
 /// The plain word for a role, the same as its home's title.
 String roleLabel(Role role) => switch (role) {
@@ -214,10 +216,34 @@ class _AccountDetails extends StatelessWidget {
                 label: AppText.licenceNumber,
                 value: licence,
               ),
+            // Only the roles that sign steps have a device key (plan M2).
+            if (signingRoles.contains(user.role)) const _DeviceKeyRow(),
           ],
         ),
       ),
     );
+  }
+}
+
+/// "Device key": registered (with the start of its fingerprint), not yet
+/// registered, or not this phone (plan M2).
+class _DeviceKeyRow extends ConsumerWidget {
+  const _DeviceKeyRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final value = switch (ref.watch(deviceKeyControllerProvider)) {
+      DeviceKeyReady(:final fingerprint) => AppText.deviceKeyRegistered(
+        shortFingerprint(fingerprint),
+      ),
+      DeviceKeyUnregistered() => AppText.deviceKeyNotRegistered,
+      DeviceKeyOtherDevice() => AppText.deviceKeyOtherDevice,
+      DeviceKeyFailed(:final message) => message,
+      // notNeeded only shows for a signing role before the first check has
+      // started, for a moment after start-up.
+      DeviceKeyChecking() || DeviceKeyNotNeeded() => AppText.deviceKeyChecking,
+    };
+    return _DetailRow(icon: Icons.key, label: AppText.deviceKey, value: value);
   }
 }
 

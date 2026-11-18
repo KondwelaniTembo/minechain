@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/account/presentation/account_screen.dart';
+import '../../features/admin/presentation/account_requests_screen.dart';
 import '../../features/admin/presentation/admin_home_screen.dart';
 import '../../features/auth/domain/auth_state.dart';
 import '../../features/auth/presentation/auth_controller.dart';
@@ -20,8 +21,11 @@ import '../../features/auth/presentation/login_screen.dart';
 import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/buyer/presentation/buyer_home_screen.dart';
+import '../../features/consignments/presentation/my_consignments_screen.dart';
 import '../../features/miner/presentation/miner_home_screen.dart';
 import '../../features/officer/presentation/officer_home_screen.dart';
+import '../../features/registration/presentation/register_consignment_screen.dart';
+import '../../features/sync/presentation/send_work_screen.dart';
 import '../../features/transporter/presentation/transporter_home_screen.dart';
 import 'redirect.dart';
 import 'routes.dart';
@@ -42,7 +46,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   // ref.listen (not ref.watch): watching would rebuild this provider, and so
   // throw the router away and lose the back stack, on every change.
-  ref.listen<AuthState>(authControllerProvider, (_, _) => authChanges.changed());
+  ref.listen<AuthState>(
+    authControllerProvider,
+    (_, _) => authChanges.changed(),
+  );
 
   final router = GoRouter(
     initialLocation: AppRoutes.start,
@@ -76,6 +83,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.miner,
         builder: (context, state) => const MinerHomeScreen(),
       ),
+      // Under /miner, so redirect rule 4 sends every other role home. The
+      // miner home opens it with push(), so the back arrow returns there.
+      GoRoute(
+        path: AppRoutes.minerRegister,
+        builder: (context, state) => const RegisterConsignmentScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.minerSync,
+        builder: (context, state) => const SendWorkScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.minerConsignments,
+        builder: (context, state) => const MyConsignmentsScreen(),
+      ),
       GoRoute(
         path: AppRoutes.transporter,
         builder: (context, state) => const TransporterHomeScreen(),
@@ -91,6 +112,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.admin,
         builder: (context, state) => const AdminHomeScreen(),
+      ),
+      // Under /admin, so redirect rule 4 sends every other role home. The
+      // admin home opens it with push(), so the back arrow returns there.
+      GoRoute(
+        path: AppRoutes.adminRequests,
+        builder: (context, state) => const AccountRequestsScreen(),
       ),
       // Every signed-in role, including SignedInNeedsPassword (redirect rule
       // 5). The homes open it with push(), so it sits on top of the home and

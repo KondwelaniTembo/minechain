@@ -26,6 +26,22 @@ abstract final class AppRoutes {
   static const String officer = '/officer';
   static const String admin = '/admin';
 
+  /// Register a consignment (plan M5). Under /miner, so the redirect's role
+  /// rule keeps it for miners only.
+  static const String minerRegister = '/miner/register';
+
+  /// "Send my work" (plan M6). Under /miner like the screen above. The sync
+  /// itself serves transporters and buyers too; their own screens come in
+  /// later modules.
+  static const String minerSync = '/miner/sync';
+
+  /// "My consignments" (plan M7). Under /miner like the screens above.
+  static const String minerConsignments = '/miner/consignments';
+
+  /// The administrator's list of pending account requests. Under /admin, so
+  /// the redirect's role rule keeps it for administrators only.
+  static const String adminRequests = '/admin/requests';
+
   /// The signed-in user's own account and Log out. Open to every role, so it
   /// is not under a home's path.
   static const String account = '/account';
