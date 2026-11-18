@@ -4,7 +4,7 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 19 Nov 2026, after Design integration T1.
+Last updated: 19 Nov 2026, after Design integration T2.
 
 ## (a) Whole project
 
@@ -74,16 +74,17 @@ Last updated: 19 Nov 2026, after Design integration T1.
 ## (b) Today, Wed 18 Nov
 
 1. ✅ Workflow setup
-2. ⬜ Design integration (T1 done, T2 next)
+2. ⬜ Design integration (T1, T2 done, T3 next)
 3. ⬜ Bottom navigation (own branch)
 4. ⬜ Hardening
 
-## (c) Current feature: Design integration — 1/4
+## (c) Current feature: Design integration — 2/4
 
-Plan: `docs/plans/design-integration-plan.md`, approved 19 Nov (Q1: scale the role down).
+Plan: `docs/plans/design-integration-plan.md`, approved 19 Nov (Q1: scale the role down;
+Q2: 3:1 for the icon; Q3: the `app_theme.dart` comment is fixed in T3).
 
 - ✅ T1 App bar title: role always whole, "MineChain" only when whole; account button ≥ 56 dp
-- ⬜ T2 Theme test: copper icon on `secondaryContainer`, light and dark
+- ✅ T2 Theme test: copper icon on `secondaryContainer`, light and dark
 - ⬜ T3 Docs: Mobile (35) with Mapalo's credit, the copper vs error-red limitation, the
   foundation plan's seed wording, the status line of the bottom navigation suggestion
 - ⬜ T4 Phone check on the A57: light, dark, largest text

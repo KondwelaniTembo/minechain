@@ -18,6 +18,7 @@ double contrast(Color a, Color b) {
 
 void main() {
   const aa = 4.5;
+  const nonText = 3.0;
 
   for (final (name, theme) in [
     ('light', AppTheme.light),
@@ -74,6 +75,18 @@ void main() {
       // Copper links, icons and borders sit on the screen background.
       test('primary colour on the screen background', () {
         expect(contrast(s.primary, s.surface), greaterThanOrEqualTo(aa));
+      });
+
+      // The other home tiles draw their icon in copper on the sand tile
+      // (action_tile.dart). An icon is not text, so WCAG asks for 3:1
+      // (1.4.11, non-text contrast) rather than 4.5:1. The pair passes more
+      // today; the test stops a later colour change from making the icons
+      // hard to find.
+      test('copper icon on the other home tiles', () {
+        expect(
+          contrast(s.primary, s.secondaryContainer),
+          greaterThanOrEqualTo(nonText),
+        );
       });
     });
   }
