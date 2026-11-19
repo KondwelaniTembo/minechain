@@ -14,6 +14,9 @@ import 'package:minechain/core/riverpod/no_retry.dart';
 import 'package:minechain/core/router/app_router.dart';
 import 'package:minechain/core/router/routes.dart';
 import 'package:minechain/core/text/app_text.dart';
+import 'package:minechain/core/theme/app_theme.dart';
+import 'package:minechain/core/theme/sizes.dart';
+import 'package:minechain/core/widgets/pill_button.dart';
 import 'package:minechain/features/auth/domain/auth_state.dart';
 import 'package:minechain/features/auth/domain/user.dart';
 import 'package:minechain/features/auth/presentation/auth_controller.dart';
@@ -41,8 +44,8 @@ Future<void> pumpApp(
   tester.platformDispatcher.textScaleFactorTestValue = textScale;
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
-  final config = (AppConfig.check('https://api.example.test') as ConfigOk)
-      .config;
+  final config =
+      (AppConfig.check('https://api.example.test') as ConfigOk).config;
   auth = FakeAuthController(state, reauthAnswer: reauthAnswer);
   container = ProviderContainer.test(
     retry: noRetry,
@@ -122,8 +125,9 @@ Future<void> openPrompt(WidgetTester tester) async {
 
 void main() {
   group('the account screen', () {
-    testWidgets('opens from the home and shows the user\'s details',
-        (tester) async {
+    testWidgets('opens from the home and shows the user\'s details', (
+      tester,
+    ) async {
       await pumpAccount(tester, signedInAs(Role.miner));
 
       expect(path, AppRoutes.account);
@@ -168,8 +172,9 @@ void main() {
         signedInAs(role),
         SignedInNeedsPassword(userOf(role)),
       ]) {
-        testWidgets('opens for ${role.name}, ${state.runtimeType}',
-            (tester) async {
+        testWidgets('opens for ${role.name}, ${state.runtimeType}', (
+          tester,
+        ) async {
           await pumpAccount(tester, state);
           expect(path, AppRoutes.account);
           expect(find.text(AppText.myAccount), findsOneWidget);
@@ -195,8 +200,9 @@ void main() {
       expect(path, AppRoutes.account);
     });
 
-    testWidgets('confirming logs out, and the router moves to /login',
-        (tester) async {
+    testWidgets('confirming logs out, and the router moves to /login', (
+      tester,
+    ) async {
       await pumpAccount(tester, signedInAs(Role.admin));
 
       await tester.tap(screenLogOut);
@@ -229,8 +235,9 @@ void main() {
       );
     });
 
-    testWidgets('shown, with its button, when the token has expired',
-        (tester) async {
+    testWidgets('shown, with its button, when the token has expired', (
+      tester,
+    ) async {
       await pumpAccount(tester, SignedInNeedsPassword(userOf(Role.miner)));
       expect(find.text(AppText.accountNeedsPassword), findsOneWidget);
       expect(
@@ -239,12 +246,39 @@ void main() {
       );
     });
 
-    testWidgets('the home\'s notice button opens the same prompt',
-        (tester) async {
+    // Mobile (36), Q4: the same copper notice and pill button as on the homes.
+    testWidgets('copper, with the pill button at full tap height', (
+      tester,
+    ) async {
+      await pumpAccount(tester, SignedInNeedsPassword(userOf(Role.miner)));
+
+      final card = find
+          .ancestor(
+            of: find.text(AppText.accountNeedsPassword),
+            matching: find.byType(Material),
+          )
+          .first;
+      expect(
+        tester.widget<Material>(card).color,
+        AppTheme.light.colorScheme.primary,
+      );
+      final button = find.widgetWithText(PillButton, AppText.enterYourPassword);
+      expect(button, findsOneWidget);
+      expect(
+        tester.getSize(button).height,
+        greaterThanOrEqualTo(AppSizes.tapTargetMin),
+      );
+    });
+
+    testWidgets('the home\'s notice button opens the same prompt', (
+      tester,
+    ) async {
       await pumpApp(tester, SignedInNeedsPassword(userOf(Role.miner)));
 
+      // A PillButton since Mobile (36) (it was a TextButton on the green
+      // notice); the tap and the prompt are unchanged.
       await tester.tap(
-        find.widgetWithText(TextButton, AppText.enterPasswordButton),
+        find.widgetWithText(PillButton, AppText.enterPasswordButton),
       );
       await tester.pumpAndSettle();
 
@@ -265,8 +299,9 @@ void main() {
       expect(prompt, findsOneWidget);
     });
 
-    testWidgets('the empty-field error goes on typing, back on Continue',
-        (tester) async {
+    testWidgets('the empty-field error goes on typing, back on Continue', (
+      tester,
+    ) async {
       await pumpAccount(tester, SignedInNeedsPassword(userOf(Role.miner)));
       await openPrompt(tester);
       String? error() =>
@@ -287,29 +322,32 @@ void main() {
       expect(auth.reauthenticateCalls, isEmpty);
     });
 
-    testWidgets('a wrong password: the sentence, the field cleared, still open',
-        (tester) async {
-      await pumpAccount(
-        tester,
-        SignedInNeedsPassword(userOf(Role.miner)),
-        reauthAnswer: (_) async => wrongPassword,
-      );
-      await openPrompt(tester);
+    testWidgets(
+      'a wrong password: the sentence, the field cleared, still open',
+      (tester) async {
+        await pumpAccount(
+          tester,
+          SignedInNeedsPassword(userOf(Role.miner)),
+          reauthAnswer: (_) async => wrongPassword,
+        );
+        await openPrompt(tester);
 
-      await tester.enterText(promptField, 'not my password');
-      await tester.tap(promptContinue);
-      await tester.pumpAndSettle();
+        await tester.enterText(promptField, 'not my password');
+        await tester.tap(promptContinue);
+        await tester.pumpAndSettle();
 
-      expect(auth.reauthenticateCalls, ['not my password']);
-      expect(find.text(AppText.invalidCredentials), findsOneWidget);
-      expect(tester.widget<TextField>(promptField).controller!.text, isEmpty);
-      expect(prompt, findsOneWidget);
-      // The notice stays, because the state did not change.
-      expect(find.text(AppText.accountNeedsPassword), findsOneWidget);
-    });
+        expect(auth.reauthenticateCalls, ['not my password']);
+        expect(find.text(AppText.invalidCredentials), findsOneWidget);
+        expect(tester.widget<TextField>(promptField).controller!.text, isEmpty);
+        expect(prompt, findsOneWidget);
+        // The notice stays, because the state did not change.
+        expect(find.text(AppText.accountNeedsPassword), findsOneWidget);
+      },
+    );
 
-    testWidgets('the right password: the prompt closes, the notice goes',
-        (tester) async {
+    testWidgets('the right password: the prompt closes, the notice goes', (
+      tester,
+    ) async {
       await pumpAccount(tester, SignedInNeedsPassword(userOf(Role.miner)));
       await openPrompt(tester);
 
@@ -341,8 +379,9 @@ void main() {
       expect(auth.reauthenticateCalls, isEmpty);
     });
 
-    testWidgets('signed out while checking (a suspended account): it closes',
-        (tester) async {
+    testWidgets('signed out while checking (a suspended account): it closes', (
+      tester,
+    ) async {
       await pumpAccount(
         tester,
         SignedInNeedsPassword(userOf(Role.miner)),
@@ -369,8 +408,9 @@ void main() {
       expect(find.text(AppText.accountSuspended), findsOneWidget);
     });
 
-    testWidgets('show/hide reveals the password and has a tooltip',
-        (tester) async {
+    testWidgets('show/hide reveals the password and has a tooltip', (
+      tester,
+    ) async {
       await pumpAccount(tester, SignedInNeedsPassword(userOf(Role.miner)));
       await openPrompt(tester);
       TextField field() => tester.widget<TextField>(promptField);

@@ -82,6 +82,20 @@ void main() {
       // (1.4.11, non-text contrast) rather than 4.5:1. The pair passes more
       // today; the test stops a later colour change from making the icons
       // hard to find.
+      // Mobile (36): notices are drawn in primary, with onPrimary text
+      // (checked above, "primary button text"), and their button is the pill
+      // (primaryContainer). The pill's edge must stand out on the notice.
+      test('the pill button on a copper notice', () {
+        expect(
+          contrast(s.primaryContainer, s.primary),
+          greaterThanOrEqualTo(nonText),
+        );
+        expect(
+          contrast(s.onPrimaryContainer, s.primaryContainer),
+          greaterThanOrEqualTo(aa),
+        );
+      });
+
       test('copper icon on the other home tiles', () {
         expect(
           contrast(s.primary, s.secondaryContainer),

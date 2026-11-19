@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:minechain/core/text/app_text.dart';
 import 'package:minechain/core/theme/app_theme.dart';
 import 'package:minechain/core/theme/sizes.dart';
 import 'package:minechain/core/widgets/action_tile.dart';
@@ -35,6 +36,7 @@ Future<void> pumpHome(
   required Size size,
   double textScale = 1.0,
   String title = 'MineChain',
+  String? username,
 }) async {
   // The test screen is set in physical pixels; 3 pixels per dp is typical of
   // a modern phone. reset() puts it back after the test.
@@ -50,6 +52,7 @@ Future<void> pumpHome(
       theme: AppTheme.light,
       home: HomeScaffold(
         title: title,
+        username: username,
         actions: actions,
         onAccountPressed: () {},
       ),
@@ -198,6 +201,109 @@ void main() {
       expect(find.text('MineChain'), findsOneWidget);
       expect(isWhole(tester, find.text('MineChain')), isTrue);
       expect(isWhole(tester, find.text('Administrator')), isTrue);
+    });
+  });
+
+  // The pill shows "role · username" (Mobile (36)). The role keeps every rule
+  // above; the username gives way first, and is either whole, shortened with
+  // "…" but still showing at least 3 characters, or left out.
+  group('role pill with the username', () {
+    const short = 'mutale';
+    const long = 'mc_administrator_lusaka_province_office';
+
+    for (final role in ['Transporter', 'Administrator']) {
+      for (final username in [short, long]) {
+        for (final (name, size) in [
+          ('portrait', portrait),
+          ('landscape', landscape),
+        ]) {
+          for (final textScale in [1.0, 2.0]) {
+            testWidgets('$role · ${username.length} characters, $name, text '
+                '$textScale', (tester) async {
+              await pumpHome(
+                tester,
+                size: size,
+                textScale: textScale,
+                title: role,
+                username: username,
+              );
+              expect(tester.takeException(), isNull);
+
+              expect(isWhole(tester, find.text(role)), isTrue);
+              final buttonLeft = tester.getRect(accountButton).left;
+              expect(
+                tester.getRect(find.text(role)).right,
+                lessThanOrEqualTo(buttonLeft),
+              );
+
+              final user = find.text(username);
+              if (user.evaluate().isEmpty) return; // left out: allowed
+
+              expect(tester.getRect(user).right, lessThanOrEqualTo(buttonLeft));
+              if (!isWhole(tester, user)) {
+                // Shortened: at least "mc_…" must still be drawn.
+                final paragraph = tester.renderObject<RenderParagraph>(user);
+                final threeAndDots = TextPainter(
+                  text: TextSpan(
+                    text: '${username.substring(0, 3)}…',
+                    style: paragraph.text.style,
+                  ),
+                  textDirection: TextDirection.ltr,
+                  textScaler: paragraph.textScaler,
+                )..layout();
+                expect(
+                  paragraph.size.width,
+                  greaterThanOrEqualTo(threeAndDots.width - 0.01),
+                );
+                threeAndDots.dispose();
+              }
+            });
+          }
+        }
+      }
+    }
+
+    testWidgets('with room, the whole username is shown beside the role', (
+      tester,
+    ) async {
+      await pumpHome(
+        tester,
+        size: const Size(900, 640),
+        title: 'Miner',
+        username: short,
+      );
+
+      expect(find.text('Miner'), findsOneWidget);
+      expect(find.text(AppText.pillSeparator), findsOneWidget);
+      expect(isWhole(tester, find.text(short)), isTrue);
+    });
+
+    testWidgets('a long username is shortened with "…", not left out, when '
+        'some of it fits', (tester) async {
+      await pumpHome(tester, size: landscape, title: 'Miner', username: long);
+
+      expect(find.text(long), findsOneWidget);
+      expect(isWhole(tester, find.text(long)), isFalse);
+    });
+
+    testWidgets('TalkBack reads the role and the whole username', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      await pumpHome(tester, size: portrait, title: 'Miner', username: long);
+
+      expect(
+        find.bySemanticsLabel(AppText.signedInAs('Miner', long)),
+        findsOneWidget,
+      );
+      semantics.dispose();
+    });
+
+    testWidgets('no username: the role alone, as before', (tester) async {
+      await pumpHome(tester, size: portrait, title: 'Miner');
+
+      expect(find.text('Miner'), findsOneWidget);
+      expect(find.text(AppText.pillSeparator), findsNothing);
     });
   });
 

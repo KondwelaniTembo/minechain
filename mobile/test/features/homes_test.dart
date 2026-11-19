@@ -7,7 +7,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:minechain/core/riverpod/no_retry.dart';
 import 'package:minechain/core/text/app_text.dart';
 import 'package:minechain/core/theme/app_theme.dart';
+import 'package:minechain/core/theme/sizes.dart';
 import 'package:minechain/core/widgets/action_tile.dart';
+import 'package:minechain/core/widgets/pill_button.dart';
 import 'package:minechain/features/admin/presentation/admin_home_screen.dart';
 import 'package:minechain/features/auth/domain/auth_state.dart';
 import 'package:minechain/features/auth/domain/user.dart';
@@ -146,6 +148,51 @@ void main() {
       testWidgets('token expired: the expired-password notice', (tester) async {
         await pumpHome(tester, screen, SignedInNeedsPassword(userOf(role)));
         expect(find.text(AppText.needsPasswordNotice), findsOneWidget);
+      });
+
+      // Mobile (36): the notice takes the main tile's copper, and its button
+      // looks like the role pill, at full tap height.
+      testWidgets('the expired-password notice is copper, and its pill button '
+          'opens the prompt', (tester) async {
+        await pumpHome(tester, screen, SignedInNeedsPassword(userOf(role)));
+
+        final notice = find
+            .ancestor(
+              of: find.text(AppText.needsPasswordNotice),
+              matching: find.byType(Material),
+            )
+            .first;
+        expect(
+          tester.widget<Material>(notice).color,
+          AppTheme.light.colorScheme.primary,
+        );
+
+        final button = find.widgetWithText(
+          PillButton,
+          AppText.enterPasswordButton,
+        );
+        expect(
+          tester.getSize(button).height,
+          greaterThanOrEqualTo(AppSizes.tapTargetMin),
+        );
+        await tester.tap(button);
+        await tester.pumpAndSettle();
+        expect(find.text(AppText.passwordPromptExplanation), findsOneWidget);
+      });
+
+      // Wide enough that the test font's wide letters fit; the narrow cases
+      // are in home_scaffold_test.dart.
+      testWidgets('the top bar shows the role and the username', (
+        tester,
+      ) async {
+        await pumpHome(
+          tester,
+          screen,
+          signedInAs(role),
+          size: const Size(900, 640),
+        );
+        expect(find.text(title), findsOneWidget);
+        expect(find.text(userOf(role).username), findsOneWidget);
       });
 
       for (final (name, size, scale) in [

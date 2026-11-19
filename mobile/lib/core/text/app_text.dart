@@ -152,6 +152,13 @@ abstract final class AppText {
   static const String officerTitle = 'Officer';
   static const String adminTitle = 'Administrator';
 
+  /// Between the role and the username in the top bar's pill (Mobile (36)).
+  static const String pillSeparator = ' · ';
+
+  /// What TalkBack reads for that pill: "Miner, signed in as mutale_banda".
+  static String signedInAs(String role, String username) =>
+      '$role, signed in as $username';
+
   /// Shown on a home while the token has expired (decision Q2).
   static const String needsPasswordNotice =
       'Enter your password the next time you send your work.';

@@ -36,6 +36,7 @@ class HomeScaffold extends StatelessWidget {
     required this.actions,
     required this.onAccountPressed,
     this.header,
+    this.username,
   }) : assert(
          actions.where((a) => a.primary).length <= 1,
          'A home screen has at most one primary action.',
@@ -49,6 +50,10 @@ class HomeScaffold extends StatelessWidget {
   /// scrolls with the tiles, so it never pushes them off a small screen.
   final Widget? header;
 
+  /// The signed-in user's username, shown in the role pill. Optional so this
+  /// shared layout does not depend on the auth feature; the homes pass it.
+  final String? username;
+
   @override
   Widget build(BuildContext context) {
     // The primary action always goes first, whatever order it was listed in.
@@ -59,9 +64,9 @@ class HomeScaffold extends StatelessWidget {
     // body for the rest.
     return Scaffold(
       appBar: AppBar(
-        // The app's name first, then the role as a small label, so the user
-        // always sees which app this is and which account type they are in.
-        title: _AppBarTitle(role: title),
+        // The app's name first, then the role and username as a small label,
+        // so the user always sees which account type and whose account this is.
+        title: _AppBarTitle(role: title, username: username),
         // `actions` here are AppBar's buttons on the right (not our tiles).
         actions: [
           // filledTonal draws a round, filled button: the account button
@@ -147,25 +152,31 @@ Widget _tileFor(HomeAction action) => ActionTile(
   primary: action.primary,
 );
 
-/// "MineChain" in bold, then the role in a small rounded label.
+/// "MineChain" in bold, then a small rounded pill with the role and the
+/// username: "Miner · mutale_banda".
 ///
 /// One line, not two stacked: an app bar has a fixed height, and two lines
 /// would overflow it at the largest text size.
 ///
-/// The role matters more than the name: it tells the user which kind of
-/// account they are in, while "MineChain" is only branding. So, when space is
-/// short (a 5-inch phone with the largest text):
-/// 1. the role is never cut to "Admini…";
-/// 2. "MineChain" is shown only if it fits whole beside the role, and is
-///    otherwise left out, never shown as "Mine…";
-/// 3. if even the role alone is too wide, it is scaled down to fit rather than
+/// What gives way first when space is short (a 5-inch phone with the largest
+/// text), from most to least important:
+/// 1. the role is never cut to "Admini…": it tells the user which kind of
+///    account they are in;
+/// 2. the username shrinks and ends in "…", and is left out when fewer than
+///    [_minUsernameChars] characters would show (never "m…");
+/// 3. "MineChain" is shown only if it fits whole beside the full pill, never
+///    as "Mine…";
+/// 4. if even the role alone is too wide, it is scaled down to fit rather than
 ///    cut. The phone's text size is never clamped anywhere else.
 class _AppBarTitle extends StatelessWidget {
-  const _AppBarTitle({required this.role});
+  const _AppBarTitle({required this.role, this.username});
 
   final String role;
+  final String? username;
 
-  static const _rolePadding = EdgeInsets.symmetric(
+  static const _minUsernameChars = 3;
+
+  static const _pillPadding = EdgeInsets.symmetric(
     horizontal: AppSizes.spaceS + AppSizes.spaceXs,
     vertical: AppSizes.spaceXs,
   );
@@ -183,30 +194,58 @@ class _AppBarTitle extends StatelessWidget {
       color: scheme.onPrimaryContainer,
       fontWeight: FontWeight.w600,
     );
+    // Lighter than the role, so the role is read first.
+    final userStyle = roleStyle?.copyWith(fontWeight: FontWeight.w400);
 
-    // The label is a different colour pair from the buttons on purpose: it is
+    // The pill is a different colour pair from the buttons on purpose: it is
     // information about the account, not something to tap.
-    final roleLabel = DecoratedBox(
+    Widget pill(List<Widget> children) => DecoratedBox(
       decoration: BoxDecoration(
         color: scheme.primaryContainer,
         borderRadius: BorderRadius.circular(AppSizes.tileRadius),
       ),
       child: Padding(
-        padding: _rolePadding,
-        child: Text(role, style: roleStyle, maxLines: 1, softWrap: false),
+        padding: _pillPadding,
+        child: Row(mainAxisSize: MainAxisSize.min, children: children),
       ),
     );
 
+    final roleText = Text(role, style: roleStyle, maxLines: 1, softWrap: false);
+
     // LayoutBuilder gives the width the app bar has left for its title (after
-    // the account button), so the choice below follows the real space: the
+    // the account button), so the choices below follow the real space: the
     // screen width, the orientation and the phone's text size.
-    return LayoutBuilder(
+    final title = LayoutBuilder(
       builder: (context, constraints) {
-        final roleWidth =
-            _textWidth(context, role, roleStyle) + _rolePadding.horizontal;
-        final nameWidth = _textWidth(context, AppText.appTitle, nameStyle);
+        double width(String value, TextStyle? style) =>
+            _textWidth(context, value, style);
+
+        final user = username;
+        final roleOnly = width(role, roleStyle) + _pillPadding.horizontal;
+        final withUser = user == null
+            ? roleOnly
+            : roleOnly +
+                  width(AppText.pillSeparator, userStyle) +
+                  width(user, userStyle);
+        final nameWidth = width(AppText.appTitle, nameStyle);
         final showName =
-            nameWidth + AppSizes.spaceS + roleWidth <= constraints.maxWidth;
+            nameWidth + AppSizes.spaceS + withUser <= constraints.maxWidth;
+        final room =
+            constraints.maxWidth - (showName ? nameWidth + AppSizes.spaceS : 0);
+
+        // The narrowest pill that still shows some of the username: the role,
+        // the separator and the first few characters with "…".
+        final showUser =
+            user != null &&
+            (user.length <= _minUsernameChars
+                ? withUser <= room
+                : roleOnly +
+                          width(AppText.pillSeparator, userStyle) +
+                          width(
+                            '${user.substring(0, _minUsernameChars)}…',
+                            userStyle,
+                          ) <=
+                      room);
 
         return Row(
           mainAxisSize: MainAxisSize.min,
@@ -220,20 +259,51 @@ class _AppBarTitle extends StatelessWidget {
               ),
               const SizedBox(width: AppSizes.spaceS),
             ],
-            // FittedBox lets the label take its full natural width, then
-            // shrinks the drawing only if that width is more than there is.
-            // scaleDown never makes it bigger. Unlike "…", the word stays
-            // whole and readable.
-            Flexible(
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: AlignmentDirectional.centerStart,
-                child: roleLabel,
+            if (showUser)
+              // Flexible hands the pill the width that is left; inside it,
+              // only the username is Flexible, so it is the part that ends
+              // in "…" while the role keeps its full width.
+              Flexible(
+                child: pill([
+                  roleText,
+                  Text(AppText.pillSeparator, style: userStyle),
+                  Flexible(
+                    child: Text(
+                      user,
+                      style: userStyle,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ]),
+              )
+            else
+              // FittedBox lets the pill take its full natural width, then
+              // shrinks the drawing only if that width is more than there
+              // is. scaleDown never makes it bigger. Unlike "…", the role
+              // stays whole and readable.
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: pill([roleText]),
+                ),
               ),
-            ),
           ],
         );
       },
+    );
+
+    // TalkBack reads the pill as one sentence, with the whole username even
+    // when the screen shows it shortened or not at all.
+    final user = username;
+    if (user == null) return title;
+    return Semantics(
+      container: true,
+      label: AppText.signedInAs(role, user),
+      excludeSemantics: true,
+      child: title,
     );
   }
 

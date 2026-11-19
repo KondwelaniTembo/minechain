@@ -4,6 +4,7 @@
 // shown only when this phone may not sign.
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router/routes.dart';
@@ -12,13 +13,14 @@ import '../../../core/widgets/home_scaffold.dart';
 import '../../auth/presentation/home_header.dart';
 import '../../device_key/presentation/device_key_notice.dart';
 
-class MinerHomeScreen extends StatelessWidget {
+class MinerHomeScreen extends ConsumerWidget {
   const MinerHomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return HomeScaffold(
       title: AppText.minerTitle,
+      username: watchUsername(ref),
       header: const Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,

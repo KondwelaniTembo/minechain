@@ -14,6 +14,7 @@ import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/sizes.dart';
+import '../../../core/widgets/pill_button.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/domain/user.dart';
 import '../../auth/presentation/auth_controller.dart';
@@ -148,8 +149,10 @@ class _NeedsPasswordCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // The same copper notice as on the homes (decision Mobile (36)), so the
+    // same state looks the same everywhere.
     return Material(
-      color: scheme.tertiaryContainer,
+      color: scheme.primary,
       elevation: 2,
       shadowColor: AppTheme.shadow,
       borderRadius: BorderRadius.circular(AppSizes.tileRadius),
@@ -161,12 +164,12 @@ class _NeedsPasswordCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.key, color: scheme.onTertiaryContainer),
+                Icon(Icons.key, color: scheme.onPrimary),
                 const SizedBox(width: AppSizes.spaceM),
                 Expanded(
                   child: Text(
                     AppText.accountNeedsPassword,
-                    style: TextStyle(color: scheme.onTertiaryContainer),
+                    style: TextStyle(color: scheme.onPrimary),
                   ),
                 ),
               ],
@@ -174,11 +177,9 @@ class _NeedsPasswordCard extends StatelessWidget {
             const SizedBox(height: AppSizes.spaceM),
             // The answer is not needed: on success the state becomes SignedIn
             // and this card disappears on its own.
-            // The strong copper button, not tonal: on the green notice it is
-            // the one thing to do, and a sand button would hardly show on it.
-            FilledButton(
+            PillButton(
+              label: AppText.enterYourPassword,
               onPressed: () => showPasswordPrompt(context),
-              child: const Text(AppText.enterYourPassword),
             ),
           ],
         ),
