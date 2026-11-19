@@ -2,9 +2,8 @@
 // transporter, the buyer and the officer, at /transporter/check,
 // /buyer/check and /officer/check (Q3).
 //
-// T3 builds the scan step and every way it can end except the answer
-// itself: the result page (verdict and custody steps) comes in T4, and until
-// then a finished check only says which record was checked.
+// This file is the scan step and every way a check can end; the answer
+// itself (verdict and custody steps) is drawn by check_result_view.dart.
 //
 // The camera is built only while the screen is scanning, so it stops as soon
 // as a code is accepted and starts again on "Scan again".
@@ -20,6 +19,7 @@ import '../../../core/theme/sizes.dart';
 import '../../auth/presentation/password_prompt.dart';
 import '../../registration/data/location_source.dart';
 import '../../registration/presentation/qr_scanner_view.dart';
+import 'check_result_view.dart';
 import 'consignment_check_controller.dart';
 
 class ConsignmentCheckScreen extends ConsumerWidget {
@@ -58,9 +58,12 @@ class ConsignmentCheckScreen extends ConsumerWidget {
                   onRetry: controller.retry,
                   onScanAgain: controller.scanAgain,
                 ),
-                CheckDone(:final view) => _Done(
-                  qrCode: view.qrCode,
-                  onScanAgain: controller.scanAgain,
+                CheckDone(:final view) => CheckResultView(
+                  view: view,
+                  footer: _Buttons(
+                    main: null,
+                    onScanAgain: controller.scanAgain,
+                  ),
                 ),
               },
             ),
@@ -222,27 +225,6 @@ class _Failed extends StatelessWidget {
               : null,
           onScanAgain: onScanAgain,
         ),
-      ],
-    );
-  }
-}
-
-class _Done extends StatelessWidget {
-  const _Done({required this.qrCode, required this.onScanAgain});
-  final String qrCode;
-  final VoidCallback onScanAgain;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _StatusLine(
-          icon: Icons.fact_check,
-          text: AppText.checkedRecord(qrCode),
-        ),
-        const SizedBox(height: AppSizes.spaceM),
-        _Buttons(main: null, onScanAgain: onScanAgain),
       ],
     );
   }

@@ -1,6 +1,7 @@
 // "Check a consignment", T3: the way in from each home, the scan step, and
-// every way a check can end except the result page (T4). The whole app runs
-// with the real router, a fake camera and a fake server.
+// every way a check can end; the result page itself is in
+// check_result_view_test.dart. The whole app runs with the real router, a
+// fake camera and a fake server.
 
 import 'dart:async';
 
@@ -137,7 +138,9 @@ void main() {
 
       expect(server.requests, hasLength(1));
       expect(server.lastQrCode, knownQrCode);
-      expect(find.text(AppText.checkedRecord(knownQrCode)), findsOneWidget);
+      // Changed in T4 (plan): the placeholder "Custody record … checked."
+      // became the result page, so the verdict shows the check finished.
+      expect(find.text(AppText.verdictVerified), findsOneWidget);
       expect(find.text('fake camera'), findsNothing);
     });
 
@@ -232,7 +235,9 @@ void main() {
 
       expect(server.requests, hasLength(2));
       expect(server.lastQrCode, knownQrCode);
-      expect(find.text(AppText.checkedRecord(knownQrCode)), findsOneWidget);
+      // Changed in T4 (plan): the placeholder "Custody record … checked."
+      // became the result page, so the verdict shows the check finished.
+      expect(find.text(AppText.verdictVerified), findsOneWidget);
     });
 
     testWidgets('a server fault (500) can be tried again', (tester) async {

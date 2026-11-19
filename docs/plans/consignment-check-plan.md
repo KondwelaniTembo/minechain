@@ -1,7 +1,7 @@
 # Consignment check plan
 
 Status: **approved 19 Nov 2026, Q1–Q5 and Q7 as proposed; Q6 (demo accounts) asked again
-before T6.** T1–T3 done.
+before T6.** T1–T4 done.
 
 Branch: `feature/consignment-check`, created by the developer from `main` after PR #14.
 
@@ -116,9 +116,15 @@ check in words. Shown only when the answer has it:
   a timeout, a 5xx, an unreadable answer), never after a 4xx; a 429's `Retry-After` is shown
   in whole minutes, rounded up. Until T4, a finished check says only which record was
   checked.
-- ⬜ **T4 Result page** (about 60 min). Banner, consignment block and step cards (§4) for
+- ✅ **T4 Result page** (about 60 min). Banner, consignment block and step cards (§4) for
   the common view (any buyer in transit, a transporter who has handed off). Widget tests per
   verdict; text 2.0 in portrait and landscape; light and dark contrast of the banner colours.
+  As built (`presentation/check_result_view.dart`): the banner uses theme pairs only:
+  error container (mismatch), light copper primary container for "under review" (the theme
+  has no amber), the raised surface for the three neutral verdicts, patina tertiary container
+  for verified; each with an icon and words, and a TalkBack live region. A field absent from
+  the answer is not drawn at all (an absent hash is never "not sent yet"). "Scan again" is
+  the last thing on the page. To record in T7 as Verification app decisions.
 - ⬜ **T5 Role differences** (about 45 min). Blind transporter (no weights, no hash, the
   "weigh first" line), officer extras (review status, alerts, mismatch fields, flagged and
   rejected steps listed), owning buyer (location). Widget tests from fixtures that follow the
