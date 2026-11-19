@@ -37,8 +37,8 @@ Last updated: 19 Nov 2026, after the "My account" back arrow (Mobile (39)), on
 
 ### Thu 19 Nov
 
-- ⬜ Consignment check: scan and verify, with the provenance view (FR-04, Scope (9)),
-  shared by transporter, buyer and officer
+- ⬜ Consignment check (1/7, plan approved 19 Nov): scan and verify, with the provenance
+  view (FR-04, Scope (9)), shared by transporter, buyer and officer
 - ⬜ Transporter handoff: scan, weigh, GPS, sign, cache, sync (FR-01, FR-02, FR-07)
 
 ### Fri 20 Nov
@@ -82,29 +82,23 @@ Last updated: 19 Nov 2026, after the "My account" back arrow (Mobile (39)), on
 5. ✅ "My account" back arrow (Mobile (39), `fix/account-back-arrow`): tested, A57 fine;
    PR left
 
-## (c) Current feature: Hardening — 5/5
+## (c) Current feature: Consignment check — 1/7
 
-Plan: `docs/plans/hardening-plan.md`, approved 19 Nov (Q1–Q5 as proposed). Branch
-`chore/hardening`, created by the developer from `main`.
+Plan: `docs/plans/consignment-check-plan.md`, approved 19 Nov (Q1–Q5, Q7 as proposed; Q6
+before T6). Branch
+`feature/consignment-check`, created by the developer from `main` after PR #14.
 
-- ✅ T1 The review: `docs/security-review.md`, MASVS v2 group by group, with evidence and a
-  rating per control. No Critical; one High (H1, the signing key works on a phone with no
-  screen lock); Mediums M1 and M2; Lows L1–L5
-- ✅ T2 Fixes (Q6: A): H1, a screen lock is required before a key is made and before every
-  signature (`NO_SCREEN_LOCK`), and new keys are unusable while the phone is locked
-  (Android 9+); M1, `FLAG_SECURE` when not debuggable; L1, touches through an overlay
-  dropped. Checked on the emulator (no PIN: refused; PIN: saved) and the A57 (fine)
-- ✅ T3 The skipped miner case in `homes_test.dart` replaced by three router tests, one per
-  miner tile; tests 1437 passed, 0 skipped
-- ✅ T4 Three device checks on the A57, all passed: the obfuscated release build works;
-  nothing sensitive in the log; database encrypted, no backup, recent-apps card blank and
-  screenshots blocked (after fixing `FLAG_SECURE` to use `BuildConfig.DEBUG`)
-- ✅ T5 Docs: `decisions.md` Hardening (1)–(5) and five known limitations; the review marked
-  with the T2 fixes and T4 results (new Low L6, `run-as` on the release build); PR description
-  drafted
+- ✅ T1 Domain: `ConsignmentView` read strictly (absent vs null kept apart), `verdictFor()`
+  worst first; 55 new tests
+- ⬜ T2 Data: `GET /consignments/by-qr/{qrCode}` and its errors
+- ⬜ T3 Scan step, three paths, the home tiles wired
+- ⬜ T4 Result page: banner, consignment, step cards
+- ⬜ T5 Role differences: blind transporter, officer extras, owning buyer
+- ⬜ T6 Phone check on the A57 (the developer)
+- ⬜ T7 Docs and PR
 
-Design integration (14/14, T1–T14) is finished and merged as PR #11; its subtask list is in
-`docs/plans/design-integration-plan.md`.
+Hardening (5/5, PR #13) and the "My account" back arrow (PR #14) are finished; their
+subtasks are in `docs/plans/hardening-plan.md` and `docs/decisions.md` Mobile (39).
 
 **Schedule (19 Nov): behind by about one day.**
 - Still open from Wed 18: Hardening (Design integration merged as PR #11). The navigation
