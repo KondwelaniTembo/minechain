@@ -102,6 +102,112 @@ void main() {
           greaterThanOrEqualTo(nonText),
         );
       });
+
+      // Mobile (36), T8: cards take the tiles' sand. A card draws its text and
+      // icons in the default onSurface, and "My consignments" draws its error
+      // lines in the error colour, both straight on the sand.
+      test('text and error lines on a sand card', () {
+        expect(
+          contrast(s.onSurface, s.secondaryContainer),
+          greaterThanOrEqualTo(aa),
+        );
+        expect(
+          contrast(s.error, s.secondaryContainer),
+          greaterThanOrEqualTo(aa),
+        );
+      });
+    });
+
+    // T8: how the theme dresses fields, cards and chips in each state. The
+    // contrast of every colour used here is checked above (primary, error
+    // and onPrimary on their backgrounds).
+    group('$name theme, fields, cards and chips', () {
+      final s = theme.colorScheme;
+      const none = <WidgetState>{};
+      const focused = {WidgetState.focused};
+      const error = {WidgetState.error};
+      const disabled = {WidgetState.disabled};
+
+      BorderSide fieldLine(Set<WidgetState> states) =>
+          WidgetStateProperty.resolveAs<InputBorder?>(
+            theme.inputDecorationTheme.border,
+            states,
+          )!.borderSide;
+
+      Color? fieldLabel(TextStyle? style, Set<WidgetState> states) =>
+          WidgetStateProperty.resolveAs<TextStyle?>(style, states)?.color;
+
+      test('the line under a field: copper, 2 dp while typing', () {
+        expect(fieldLine(none).color, s.primary);
+        expect(fieldLine(none).width, 1);
+        expect(fieldLine(focused).color, s.primary);
+        expect(fieldLine(focused).width, 2);
+        // Still an underline, the shape the fields had before T8.
+        expect(
+          WidgetStateProperty.resolveAs<InputBorder?>(
+            theme.inputDecorationTheme.border,
+            none,
+          ),
+          isA<UnderlineInputBorder>(),
+        );
+      });
+
+      test('an error keeps the red line and label', () {
+        expect(fieldLine(error).color, s.error);
+        expect(fieldLine({...error, ...focused}).width, 2);
+        final d = theme.inputDecorationTheme;
+        expect(fieldLabel(d.labelStyle, error), s.error);
+        expect(fieldLabel(d.floatingLabelStyle, error), s.error);
+      });
+
+      test('labels and the icon in front in copper', () {
+        final d = theme.inputDecorationTheme;
+        expect(fieldLabel(d.labelStyle, none), s.primary);
+        expect(fieldLabel(d.floatingLabelStyle, focused), s.primary);
+        expect(
+          WidgetStateProperty.resolveAs<Color?>(d.prefixIconColor, none),
+          s.primary,
+        );
+      });
+
+      test('a disabled field is greyed out, not copper', () {
+        final d = theme.inputDecorationTheme;
+        expect(fieldLine(disabled).color, isNot(s.primary));
+        expect(fieldLabel(d.labelStyle, disabled), isNot(s.primary));
+        expect(
+          WidgetStateProperty.resolveAs<Color?>(d.prefixIconColor, disabled),
+          isNot(s.primary),
+        );
+      });
+
+      test('cards: sand, a raised shadow and a copper outline', () {
+        final card = theme.cardTheme;
+        expect(card.color, s.secondaryContainer);
+        expect(card.elevation, 3);
+        expect(card.shadowColor, AppTheme.shadow);
+        final shape = card.shape! as RoundedRectangleBorder;
+        expect(shape.side.color, s.primary);
+        expect(shape.side.width, 1);
+      });
+
+      test(
+        'chips: outlined on the screen colour, filled copper when chosen',
+        () {
+          final chip = theme.chipTheme;
+          Color? fill(Set<WidgetState> states) => chip.color?.resolve(states);
+          BorderSide? side(Set<WidgetState> states) =>
+              WidgetStateProperty.resolveAs<BorderSide?>(chip.side, states);
+
+          expect(fill(none), s.surface);
+          expect(fill({WidgetState.selected}), s.primary);
+          expect(side(none)!.color, s.primary);
+          expect(side(none)!.width, 1.5);
+          expect(side({WidgetState.selected})!.color, s.primary);
+          expect(fill(disabled), isNot(s.primary));
+          expect(side(disabled)!.color, isNot(s.primary));
+          expect(chip.shadowColor, AppTheme.shadow);
+        },
+      );
     });
   }
 }

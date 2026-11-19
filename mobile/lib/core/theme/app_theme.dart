@@ -105,16 +105,71 @@ abstract final class AppTheme {
         surfaceTintColor: Colors.transparent,
         centerTitle: false,
       ),
-      // Cards (the account details) lift off the page with a soft shadow.
-      // surfaceTintColor is turned off: Material 3 would otherwise wash the
-      // card with the primary colour as its elevation grows.
+      // Cards ("My account", "My consignments", account requests) take the
+      // tiles' sand with a soft shadow (Mobile (36)). The sand alone is only
+      // about 1.2:1 from the light screen, so a thin copper outline (6.1:1)
+      // marks the edge even where the shadow is weak. surfaceTintColor is
+      // turned off: Material 3 would otherwise wash the card with the primary
+      // colour as its elevation grows.
       cardTheme: CardThemeData(
-        elevation: 2,
+        color: scheme.secondaryContainer,
+        elevation: 3,
         shadowColor: shadow,
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppSizes.tileRadius),
+          side: BorderSide(color: scheme.primary),
         ),
+      ),
+      // Text fields in copper (Mobile (36)): the label, the icon in front and
+      // the line under the field, 2 dp while typing. An error keeps
+      // Material's red, but copper and red are almost equally bright (the
+      // Mobile (35) limitation), so the sentence under the field is what
+      // really marks the error. The theme applies to every field, so the
+      // weight field matches the login (Q5).
+      inputDecorationTheme: InputDecorationThemeData(
+        border: WidgetStateInputBorder.resolveWith(
+          (states) =>
+              UnderlineInputBorder(borderSide: _fieldLine(scheme, states)),
+        ),
+        labelStyle: WidgetStateTextStyle.resolveWith(
+          (states) => TextStyle(color: _fieldLabelColour(scheme, states)),
+        ),
+        floatingLabelStyle: WidgetStateTextStyle.resolveWith(
+          (states) => TextStyle(color: _fieldLabelColour(scheme, states)),
+        ),
+        prefixIconColor: WidgetStateColor.resolveWith(
+          (states) => states.contains(WidgetState.disabled)
+              ? scheme.onSurface.withValues(alpha: 0.38)
+              : scheme.primary,
+        ),
+      ),
+      // Mineral chips (Mobile (36)): the screen's colour with a copper outline
+      // when not chosen, filled copper when chosen. The chosen chip keeps its
+      // tick, so the choice is never shown by colour alone. The label colour
+      // and the raised shadow of the chosen chip are set on the chip itself
+      // (register_consignment_screen.dart): a theme label style would replace
+      // the chip's own text style rather than add to it, and a chip has one
+      // elevation for both states.
+      chipTheme: ChipThemeData(
+        color: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.disabled)) {
+            return scheme.onSurface.withValues(alpha: 0.12);
+          }
+          if (states.contains(WidgetState.selected)) return scheme.primary;
+          return scheme.surface;
+        }),
+        side: WidgetStateBorderSide.resolveWith(
+          (states) => BorderSide(
+            color: states.contains(WidgetState.disabled)
+                ? scheme.onSurface.withValues(alpha: 0.12)
+                : scheme.primary,
+            width: 1.5,
+          ),
+        ),
+        shadowColor: shadow,
+        selectedShadowColor: shadow,
+        surfaceTintColor: Colors.transparent,
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(minimumSize: minimum),
@@ -131,5 +186,26 @@ abstract final class AppTheme {
         behavior: SnackBarBehavior.floating,
       ),
     );
+  }
+
+  /// The line under a text field in each state.
+  static BorderSide _fieldLine(ColorScheme scheme, Set<WidgetState> states) {
+    final focused = states.contains(WidgetState.focused);
+    if (states.contains(WidgetState.disabled)) {
+      return BorderSide(color: scheme.onSurface.withValues(alpha: 0.38));
+    }
+    if (states.contains(WidgetState.error)) {
+      return BorderSide(color: scheme.error, width: focused ? 2 : 1);
+    }
+    return BorderSide(color: scheme.primary, width: focused ? 2 : 1);
+  }
+
+  /// A field's label, in the field or floating above it.
+  static Color _fieldLabelColour(ColorScheme scheme, Set<WidgetState> states) {
+    if (states.contains(WidgetState.disabled)) {
+      return scheme.onSurface.withValues(alpha: 0.38);
+    }
+    if (states.contains(WidgetState.error)) return scheme.error;
+    return scheme.primary;
   }
 }

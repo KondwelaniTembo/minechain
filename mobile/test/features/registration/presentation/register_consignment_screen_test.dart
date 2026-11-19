@@ -9,6 +9,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:minechain/core/clock.dart';
 import 'package:minechain/core/database/database_failure.dart';
@@ -17,11 +18,13 @@ import 'package:minechain/core/database/local_settings.dart';
 import 'package:minechain/core/router/app_router.dart';
 import 'package:minechain/core/router/routes.dart';
 import 'package:minechain/core/text/app_text.dart';
+import 'package:minechain/core/theme/sizes.dart';
 import 'package:minechain/features/auth/domain/user.dart';
 import 'package:minechain/features/device_key/presentation/device_key_controller.dart';
 import 'package:minechain/features/registration/data/location_source.dart';
 import 'package:minechain/features/registration/data/register_consignment.dart';
 import 'package:minechain/features/registration/domain/mineral.dart';
+import 'package:minechain/features/registration/presentation/mineral_text.dart';
 import 'package:minechain/features/registration/presentation/qr_scanner_view.dart';
 import 'package:minechain/features/registration/presentation/registration_controller.dart';
 import 'package:minechain/features/steps/data/local_steps_repository.dart';
@@ -566,6 +569,43 @@ void main() {
       expect(tester.widget<ChoiceChip>(chip(AppText.copper)).selected, isTrue);
       expect(find.text(AppText.weightInKilograms), findsOneWidget);
     });
+
+    // Mobile (36), T8: the chips' outline and fill come from the theme
+    // (app_theme_test.dart); the chip itself sets the label colour, the raised
+    // shadow of the chosen one, and the 56 dp tap height.
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('chips: the chosen one raised and in white, all at least '
+          '56 dp tall, text $scale', (tester) async {
+        await open(tester, textScale: scale);
+        await tapIt(tester, chip(AppText.gold));
+
+        final scheme = Theme.of(tester.element(chip(AppText.gold))).colorScheme;
+        for (final mineral in Mineral.values) {
+          final name = mineralName(mineral);
+          final chosen = mineral == Mineral.gold;
+          expect(
+            tester.getSize(chip(name)).height,
+            greaterThanOrEqualTo(AppSizes.tapTargetMin),
+            reason: name,
+          );
+          expect(
+            tester.widget<ChoiceChip>(chip(name)).elevation,
+            chosen ? 4 : 2,
+          );
+          expect(
+            tester
+                .renderObject<RenderParagraph>(
+                  find.descendant(of: chip(name), matching: find.text(name)),
+                )
+                .text
+                .style
+                ?.color,
+            chosen ? scheme.onPrimary : scheme.onSurface,
+            reason: name,
+          );
+        }
+      });
+    }
 
     testWidgets('no mineral yet: the weight asks for it', (tester) async {
       await open(tester);

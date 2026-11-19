@@ -140,6 +140,27 @@ void main() {
       expect(find.text('ZM-ASM-0042'), findsOneWidget);
     });
 
+    // Mobile (36), T8: the details card in the tiles' sand, raised, with a
+    // copper outline so its edge shows on the light screen.
+    testWidgets('the details card: sand, a shadow and a copper outline', (
+      tester,
+    ) async {
+      await pumpAccount(tester, signedInAs(Role.miner));
+
+      final card = find.byType(Card);
+      expect(card, findsOneWidget);
+      final scheme = Theme.of(tester.element(card)).colorScheme;
+      final material = tester.widget<Material>(
+        find.descendant(of: card, matching: find.byType(Material)).first,
+      );
+      expect(material.color, scheme.secondaryContainer);
+      expect(material.elevation, 3);
+      expect(
+        (material.shape! as RoundedRectangleBorder).side.color,
+        scheme.primary,
+      );
+    });
+
     testWidgets('no licence number: the row is left out', (tester) async {
       final json = userJson(role: 'officer')..['licenceNumber'] = null;
       final officer = (User.fromJson(json) as UserParsed).user;
