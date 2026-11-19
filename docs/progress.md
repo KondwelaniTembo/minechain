@@ -4,8 +4,8 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 19 Nov 2026, after Hardening T5 (docs); Hardening complete. Next: the back
-arrow on "My account" (small extra on this branch), then the pull request.
+Last updated: 19 Nov 2026, after the "My account" back arrow (Mobile (39)), on
+`fix/account-back-arrow`. Hardening merged as PR #13. Next: Thu 19's Consignment check.
 
 ## (a) Whole project
 
@@ -31,7 +31,7 @@ arrow on "My account" (small extra on this branch), then the pull request.
   (`docs/plans/design-integration-plan.md`; PR #11, merged 19 Nov, `d86e33c`)
 - ~~Bottom navigation as its own feature~~ Dropped 19 Nov in the morning, then brought back
   by the developer the same afternoon inside Design integration (Part 3)
-- ✅ Hardening: OWASP MASVS/MSTG review of the miner module, fix every Critical and High
+- ✅ Hardening (PR #13): OWASP MASVS/MSTG review of the miner module, fix every Critical and High
   finding, replace the skipped miner case in `homes_test.dart`, 3 device checks
   (`docs/plans/hardening-plan.md`)
 
@@ -78,7 +78,9 @@ arrow on "My account" (small extra on this branch), then the pull request.
 1. ✅ Workflow setup
 2. ✅ Design integration (PR #11, merged 19 Nov)
 3. ~~Bottom navigation~~ (dropped in the morning; back in the afternoon as Design integration Part 3)
-4. ✅ Hardening (T1–T5; PR after the "My account" back arrow)
+4. ✅ Hardening (T1–T5, PR #13)
+5. ⬜ "My account" back arrow (Mobile (39), `fix/account-back-arrow`): built and tested;
+   phone check and PR left
 
 ## (c) Current feature: Hardening — 5/5
 

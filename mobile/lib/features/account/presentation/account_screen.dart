@@ -7,10 +7,12 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/sizes.dart';
+import '../../../core/widgets/app_navigation.dart';
 import '../../../core/widgets/pill_button.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/domain/user.dart';
@@ -43,11 +45,17 @@ class AccountScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        // No back arrow (Mobile (37), Q10): "My account" is one of the
-        // navigation bar's two places, like Home, not a page on top of the
-        // home. Home is one tap away in the bar, and Android's back button
-        // goes there too (app_navigation.dart).
-        automaticallyImplyLeading: false,
+        // A back arrow after all (Mobile (39), reversing Q10 of Mobile (37)):
+        // users look for one at the top left, even with Home in the bar.
+        // "My account" is the first page of its own branch, so there is
+        // nothing to pop; the arrow moves to the Home branch instead, exactly
+        // like Android's back button (app_navigation.dart), so the home keeps
+        // its scroll position.
+        leading: BackButton(
+          onPressed: () =>
+              StatefulNavigationShell.of(context)
+                  .goBranch(AppNavigationShell.homeBranch),
+        ),
         title: const Text(AppText.myAccount),
       ),
       body: SafeArea(

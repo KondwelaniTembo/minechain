@@ -16,6 +16,7 @@ import 'package:minechain/core/router/routes.dart';
 import 'package:minechain/core/text/app_text.dart';
 import 'package:minechain/core/theme/app_theme.dart';
 import 'package:minechain/core/theme/sizes.dart';
+import 'package:minechain/core/widgets/app_navigation.dart';
 import 'package:minechain/core/widgets/pill_button.dart';
 import 'package:minechain/features/auth/domain/auth_state.dart';
 import 'package:minechain/features/auth/domain/user.dart';
@@ -178,15 +179,30 @@ void main() {
       expect(find.text(AppText.licenceNumber), findsNothing);
     });
 
-    // Changed by decision (Mobile (37), Q10). Until T12 this test tapped the
-    // back arrow. "My account" is now one of the navigation bar's two
-    // places, so it has no back arrow; Home in the bar and Android's back
-    // button take the user home instead.
-    testWidgets('no back arrow; Home in the bar returns to the home', (
+    // Changed by decision twice. Design integration T12 (Mobile (37), Q10)
+    // removed the back arrow and this test checked it was gone. Mobile (39)
+    // brings it back: it goes to the Home branch, like Android's back button.
+    testWidgets('the back arrow returns to the home, the bar stays', (
       tester,
     ) async {
       await pumpAccount(tester, signedInAs(Role.transporter));
-      expect(find.byType(BackButton), findsNothing);
+      expect(find.byType(BackButton), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+
+      expect(path, AppRoutes.transporter);
+      expect(find.text(AppText.takeCustody), findsOneWidget);
+      // Home is selected in the bar again, not still Account.
+      expect(
+        tester.widget<NavigationBar>(find.byType(NavigationBar)).selectedIndex,
+        AppNavigationShell.homeBranch,
+      );
+    });
+
+    testWidgets('Home in the bar still returns to the home', (tester) async {
+      await pumpAccount(tester, signedInAs(Role.transporter));
 
       await tester.tap(
         find.descendant(
