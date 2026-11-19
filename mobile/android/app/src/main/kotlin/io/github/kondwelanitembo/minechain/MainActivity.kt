@@ -1,6 +1,5 @@
 package io.github.kondwelanitembo.minechain
 
-import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
@@ -16,10 +15,14 @@ class MainActivity : FlutterActivity() {
         // build the screen is left out of the recent-apps picture,
         // screenshots and screen recordings, so names, licence numbers and
         // consignments cannot be read from them. Debug builds keep them, for
-        // the thesis screenshots. "Debuggable" is Android's own flag, set by
-        // the build type, so no Gradle setting is needed.
-        val debuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
-        if (!debuggable) {
+        // the thesis screenshots.
+        //
+        // BuildConfig.DEBUG is fixed when the app is BUILT (false in every
+        // release build). The first version asked Android at run time
+        // (ApplicationInfo.FLAG_DEBUGGABLE), and on the A57 the release build
+        // came out without the flag (Hardening T4, window flags fl=81810100,
+        // no 0x2000), so the choice must not depend on what the phone says.
+        if (!BuildConfig.DEBUG) {
             window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
 

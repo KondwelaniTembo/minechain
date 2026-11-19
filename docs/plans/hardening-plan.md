@@ -1,6 +1,6 @@
 # Hardening plan
 
-Status: **approved 19 Nov 2026, Q1–Q5 as proposed.** T1–T3 done (Q6: option A).
+Status: **approved 19 Nov 2026, Q1–Q5 as proposed.** T1–T4 done (Q6: option A).
 
 Branch: `chore/hardening`, created by the developer from `main` after PR #11.
 
@@ -62,7 +62,7 @@ phone the database key can be read from secure storage.
   `homes_test.dart` (`skip: role == Role.miner`) with a real one: in the app harness with
   the router, each of the miner's three tiles opens its own screen, and "Coming soon" never
   appears. The other four roles keep their "Coming soon" case. Test count: 1 skipped → 0.
-- ⬜ **T4 Three device checks on the A57** (the developer, about 30 min; exact commands in
+- ✅ **T4 Three device checks on the A57** (the developer, about 30 min; exact commands in
   the T4 report):
   1. **Release build works:** `flutter run --release` with obfuscation; log in as the demo
      miner, register a consignment, send it. Proves R8 left the channel, sqlite3mc and the

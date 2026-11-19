@@ -4,7 +4,7 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 19 Nov 2026, after Hardening T3 (no skipped test left); T4 device checks next.
+Last updated: 19 Nov 2026, after Hardening T4 (device checks passed); T5 docs next.
 
 ## (a) Whole project
 
@@ -77,9 +77,9 @@ Last updated: 19 Nov 2026, after Hardening T3 (no skipped test left); T4 device 
 1. ✅ Workflow setup
 2. ✅ Design integration (PR #11, merged 19 Nov)
 3. ~~Bottom navigation~~ (dropped in the morning; back in the afternoon as Design integration Part 3)
-4. ⬜ Hardening (T1–T3 done; T4 device checks next)
+4. ⬜ Hardening (T1–T4 done; T5 docs next)
 
-## (c) Current feature: Hardening — 3/5
+## (c) Current feature: Hardening — 4/5
 
 Plan: `docs/plans/hardening-plan.md`, approved 19 Nov (Q1–Q5 as proposed). Branch
 `chore/hardening`, created by the developer from `main`.
@@ -93,8 +93,9 @@ Plan: `docs/plans/hardening-plan.md`, approved 19 Nov (Q1–Q5 as proposed). Bra
   dropped. Checked on the emulator (no PIN: refused; PIN: saved) and the A57 (fine)
 - ✅ T3 The skipped miner case in `homes_test.dart` replaced by three router tests, one per
   miner tile; tests 1437 passed, 0 skipped
-- ⬜ T4 Three device checks on the A57: release build works, nothing sensitive in the log,
-  nothing readable outside the app
+- ✅ T4 Three device checks on the A57, all passed: the obfuscated release build works;
+  nothing sensitive in the log; database encrypted, no backup, recent-apps card blank and
+  screenshots blocked (after fixing `FLAG_SECURE` to use `BuildConfig.DEBUG`)
 - ⬜ T5 Docs: Hardening decisions, the review marked, testing log, PR description
 
 Design integration (14/14, T1–T14) is finished and merged as PR #11; its subtask list is in

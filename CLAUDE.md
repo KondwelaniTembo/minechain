@@ -61,10 +61,18 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
     keep working; no new key or registration.
   - T3 done: the skipped miner case in `homes_test.dart` is now three "miner tiles" router
     tests; tests 1437 passed, 0 skipped.
-  - Next: T4 (device checks, the developer), T5 (docs: Hardening decisions in
-    `decisions.md`, review marked, PR description).
-  - Open design question from the developer (19 Nov): a back arrow on "My account"
-    (reverses Q10 of Mobile (37)); answer pending, not part of Hardening.
+  - T4 done (19 Nov, A57): the obfuscated release build (`flutter build apk --release
+    --obfuscate --split-debug-info=build/symbols`, then `adb install -r`, never
+    `flutter install`) works; logcat holds no token, payload, QR code or password (the
+    `Bearer` lines are Samsung network services); database header random; no
+    `ALLOW_BACKUP`. `FLAG_SECURE` first failed (window flags had no 0x2000): the runtime
+    `FLAG_DEBUGGABLE` check was replaced by `BuildConfig.DEBUG` (`buildFeatures.buildConfig
+    = true` in `build.gradle.kts`); then recent-apps blank and screenshots blocked.
+    `run-as` worked on the release build on normal firmware (`user`, `ro.debuggable=0`):
+    record as a Low finding. The build warned about unobfuscated DWARF info (`--strip`).
+  - Next: T5 (docs: Hardening decisions in `decisions.md`, the review marked with T2/T4,
+    PR description), then the small extra: a back arrow on "My account" (the developer
+    chose option B after T5, on this branch; reverses Q10 of Mobile (37)).
 
 - **Design integration merged as PR #11** (`d86e33c`, 19 Nov;
   `docs/plans/design-integration-plan.md`, T1–T14). Mapalo Maseko's copper theme, the home
