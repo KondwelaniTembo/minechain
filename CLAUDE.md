@@ -72,11 +72,12 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
     Mobile (35) marked (title rule part 2 replaced, option A extended), Mobile (37) the
     navigation bar with its 1.3× known limitation, and Mobile (38) the launcher icon; the
     bar is off the future improvements list; the suggestion file says "built".
-  - Next: T14, the developer's full phone check on the A57 (plan section T14: light and
-    dark, default and largest text, every screen in the list, the bar, the launcher icon,
-    13 screenshots). Then the PR for `design/mapalo-theme`: draft its title and description
-    (what, how tested, known limitations), crediting Mapalo for the theme and the bar idea,
-    and noting that Mobile (36)–(38) hold the developer's changes.
+  - T13 is `7d19b57`. T14, the developer's full phone check on the A57, was fine (19 Nov).
+    All 14 subtasks are done.
+  - Next: the developer opens the PR for `design/mapalo-theme` into `main` with the drafted
+    title and description, and merges it. It changes only `mobile/` and `docs/` (plus three
+    new Android launcher resources), so merging deploys nothing to Render. After the merge
+    the next feature is Hardening (`docs/progress.md`).
   - Bottom navigation was dropped on the morning of 19 Nov, then brought back the same day
     as Part 3 (above). The schedule is about one day behind plus the bar's 3 h, which the
     developer accepted; see `docs/progress.md`.

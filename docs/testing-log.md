@@ -67,3 +67,4 @@ after B2.5a, confirmed by the developer); contract 37 (12 Nov).
 | 19 Nov 2026 | `design/mapalo-theme` | Design integration T12 | backend `npm test`, `npm run test:db`; contract tests | Not run: no backend or contract file changed |
 | 19 Nov 2026 | `design/mapalo-theme` | Design integration T12 | `flutter run` on the A57 (the developer): the bar, the account button, Android back on Account and Home, a task page, landscape rail, largest text, dark mode | Fine. Q14 answered: keep Flutter's 1.3× cap on the bar's words |
 | 19 Nov 2026 | `design/mapalo-theme` | Design integration T13 | none | Docs only (`decisions.md`, the two plans, `progress.md`, `CLAUDE.md`); no code changed, so no test run. Last full run: 1430 passed, 1 skipped (T12) |
+| 19 Nov 2026 | `design/mapalo-theme` | Design integration T14 | `flutter run` on the A57 (the developer): light and dark, default and largest text, every screen in the plan's T14 list, the navigation bar, the launcher icon | Fine |

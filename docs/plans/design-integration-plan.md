@@ -463,13 +463,13 @@ navigation bar idea, and noting that Mobile (36) and (37) hold the developer's c
 - ✅ T7 Adaptive launcher icon from the same geometry, no package
 - ✅ T8 Copper login fields, sand cards with a copper outline, outlined chips
 - ✅ T9 Stronger tile shadows, no mid-word breaks, spacing on "Send my work"
-- ⬜ T10 Navigation bar look in the theme, light and dark (45 min)
-- ⬜ T11 The shell: homes and "My account" in one frame; task pages outside it (60 min)
-- ⬜ T12 The bar (rail in landscape), the account button to the Account destination, the
+- ✅ T10 Navigation bar look in the theme, light and dark
+- ✅ T11 The shell: homes and "My account" in one frame; task pages outside it
+- ✅ T12 The bar (rail in landscape), the account button to the Account destination, the
   back button (75 min)
-- ⬜ T13 Docs: Mobile (36) completed, Mobile (35) title rule marked replaced, Mobile (37)
+- ✅ T13 Docs: Mobile (36) completed, Mobile (35) title rule marked replaced, Mobile (37)
   navigation bar (30 min)
-- ⬜ T14 Phone check on the A57, including the navigation bar (45 min, the developer)
+- ✅ T14 Phone check on the A57, including the navigation bar (the developer, 19 Nov: fine)
 
 T10 and T11 were renumbered T13 and T14 on 19 Nov when Part 3 was added. Part 3 adds about
 3 h of Claude Code's time and 15 min to the phone check.

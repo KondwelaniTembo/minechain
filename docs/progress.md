@@ -4,7 +4,7 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 19 Nov 2026, after Design integration T13.
+Last updated: 19 Nov 2026, after Design integration T14; the PR is next.
 
 ## (a) Whole project
 
@@ -74,11 +74,11 @@ Last updated: 19 Nov 2026, after Design integration T13.
 ## (b) Today, Wed 18 Nov
 
 1. ✅ Workflow setup
-2. ⬜ Design integration (T1–T13 done; T14, the phone check, next; then the PR)
+2. ⬜ Design integration (T1–T14 done; the PR is drafted, for the developer to open and merge)
 3. ~~Bottom navigation~~ (dropped in the morning; back in the afternoon as Design integration Part 3)
 4. ⬜ Hardening
 
-## (c) Current feature: Design integration — 13/14
+## (c) Current feature: Design integration — 14/14
 
 Plan: `docs/plans/design-integration-plan.md`, approved 19 Nov (Q1: scale the role down;
 Q2: 3:1 for the icon; Q3: the `app_theme.dart` comment is fixed in T3).
@@ -104,7 +104,7 @@ Q2: 3:1 for the icon; Q3: the `app_theme.dart` comment is fixed in T3).
   checked on the A57
 - ✅ T13 Docs: Mobile (36) completed, Mobile (35) marked, Mobile (37) navigation bar and its
   1.3× limitation, Mobile (38) launcher icon; the suggestion file marked "built"
-- ⬜ T14 Phone check on the A57, including the navigation bar
+- ✅ T14 Phone check on the A57, including the navigation bar (fine)
 
 T5–T11 approved 19 Nov (Q4–Q7 as proposed; Q8: server notices in copper too). Part 3
 (T10–T12) added 19 Nov at the developer's request and approved (Q9–Q13 as proposed); the
@@ -113,7 +113,7 @@ old T10 and T11 are now T13 and T14.
 T9's and T8's choices, Q4–Q8 and Q9–Q14 were recorded in T13 (Mobile (36), (37), (38)).
 
 **Schedule (19 Nov): behind by about one day.**
-- Still open from Wed 18: Design integration (only T14 left: 45 min of phone check, then the
-  PR) and Hardening. The navigation bar added about 3 h; the developer accepted that on
+- Still open from Wed 18: Design integration (only the PR left: the developer opens and merges
+  it) and Hardening. The navigation bar added about 3 h; the developer accepted that on
   19 Nov.
 - Thu 19's two features (Consignment check, Transporter handoff) have not started.
