@@ -70,9 +70,11 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
     = true` in `build.gradle.kts`); then recent-apps blank and screenshots blocked.
     `run-as` worked on the release build on normal firmware (`user`, `ro.debuggable=0`):
     record as a Low finding. The build warned about unobfuscated DWARF info (`--strip`).
-  - Next: T5 (docs: Hardening decisions in `decisions.md`, the review marked with T2/T4,
-    PR description), then the small extra: a back arrow on "My account" (the developer
-    chose option B after T5, on this branch; reverses Q10 of Mobile (37)).
+  - T5 done: `decisions.md` Hardening (1)–(5) plus five known limitations (L6 `run-as`,
+    M2, L4, L5, untested Kotlin); `security-review.md` marked with T2/T4 results and a new
+    Low L6 (re-check in the final OWASP review); PR description drafted. Hardening 5/5.
+  - Next: the small extra, a back arrow on "My account" (the developer chose option B, on
+    this branch; reverses Q10 of Mobile (37)), then the PR for `chore/hardening`.
 
 - **Design integration merged as PR #11** (`d86e33c`, 19 Nov;
   `docs/plans/design-integration-plan.md`, T1–T14). Mapalo Maseko's copper theme, the home

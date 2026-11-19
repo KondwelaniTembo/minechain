@@ -3,6 +3,11 @@
 Hardening T1, 19 Nov 2026, on `chore/hardening` from `main` at `58b4c81`. Plan:
 `docs/plans/hardening-plan.md`.
 
+**Status (Hardening T5, 19 Nov):** H1, M1 and L1 are fixed (T2 `18d5808`, M1 corrected in T4
+`8c18bbf`). The device checks in §5 all passed on the A57 (T4), which closes L2 and L3. T4
+added one finding, L6. The choices and accepted limits are recorded in `docs/decisions.md`,
+"Hardening (1)–(5)" and the known limitations after them.
+
 ## 1. Scope and method
 
 - **What:** the Android app as merged on `main` after PR #11: the mobile foundation (login,
@@ -18,8 +23,9 @@ Hardening T1, 19 Nov 2026, on `chore/hardening` from `main` at `58b4c81`. Plan:
   merged manifest of the latest build (the debug build of 19 Nov; a release build was started
   but stopped after 15 minutes without progress, and is run in T4 instead) and the lock file,
   plus advisory lookups. Plugins add the same entries to a debug and a release manifest; the
-  only differences are `android:debuggable` and the debug-only INTERNET line. The tests that need a phone are T4 (§5). Unit and widget tests
-  that already prove a control are named as evidence.
+  only differences are `android:debuggable` and the debug-only INTERNET line. The tests that
+  need a phone are T4 (§5). Unit and widget tests that already prove a control are named as
+  evidence.
 - **Not done:** no dynamic testing with Frida, no traffic interception with a proxy, and no
   decompiling of the APK. These are listed as limits of the review (§6).
 
@@ -38,16 +44,17 @@ phones carried at mine sites, no app store):
 
 ## 3. Findings
 
-| ID | Rating | MASVS | Finding | Proposed |
+| ID | Rating | MASVS | Finding | Status (T5) |
 |---|---|---|---|---|
-| H1 | **High** | AUTH-2, CRYPTO-2 | **The signing key works on a phone with no screen lock.** The key is made with `setUserAuthenticationRequired(false)` (`DeviceKeyPlugin.kt`, `createKey`) and nothing checks that the phone has a PIN, pattern or password. Anyone who picks up such a phone can open the app and register consignments signed as its owner, even after the token has expired (Mobile (11): offline work stays open). Mobile (11) recorded the unlocked-phone case as a known limit; the no-screen-lock case is the same gap, and it is the one an attacker meets most | Fix in T2, after the developer chooses (Q6 in the T1 report) |
-| M1 | Medium | PLATFORM-3, STORAGE-2 | **No `FLAG_SECURE`.** The recent-apps screen keeps a picture of the last screen (an administrator's account requests with names and licence numbers, a miner's consignments), and screenshots and screen recording are allowed | Fix in T2: release builds only (Q1, approved) |
-| M2 | Medium | STORAGE-1 | **On a rooted phone the database key can be read from secure storage**, so the database can be opened. The Keystore keeps the wrapping key, but root can ask the Keystore to unwrap | Accepted limit (already in the miner plan §7) |
-| L1 | Low | PLATFORM-3 | **No tapjacking guard.** Android 12+ blocks touches that pass through another app's overlay; Android 8–11, inside NFR-09's range, does not | Fix in T2 (Q2, approved) |
-| L2 | Low | CODE-4, RESILIENCE-3 | **No release build has been run on a phone.** Flutter turns on R8 shrinking for release builds, but nobody has built one yet or checked that the Keystore channel, sqlite3mc and ML Kit work after shrinking. Dart code is not obfuscated | T4 check 1, with `--obfuscate --split-debug-info` |
-| L3 | Low | STORAGE-2 | **The demo has so far been run from debug builds**, which are debuggable: a debugger can attach and read memory (the token, the database key while open) | T4 check 1; the thesis demo uses a release build |
-| L4 | Low | NETWORK-2 | **Pinning is to root CAs, not to the server's own key.** A wrongly issued certificate from one of the three pinned roots would be trusted | Accepted (Deployment (11): Render renews its certificates, so a leaf pin would break the app) |
-| L5 | Low | PRIVACY-2, PRIVACY-3 | **ML Kit brings Google's data transport library** (`com.google.android.datatransport`, its CCT backend and a job scheduler in the merged manifest), which ML Kit uses to send usage and performance statistics to Google. The app itself sends nothing to Google, and no consignment data goes through it, but a user is not told | Accepted limit, named in the thesis; removing the library from the manifest could break the scanner, so not done |
+| H1 | **High** | AUTH-2, CRYPTO-2 | **The signing key works on a phone with no screen lock.** The key is made with `setUserAuthenticationRequired(false)` (`DeviceKeyPlugin.kt`, `createKey`) and nothing checks that the phone has a PIN, pattern or password. Anyone who picks up such a phone can open the app and register consignments signed as its owner, even after the token has expired (Mobile (11): offline work stays open). Mobile (11) recorded the unlocked-phone case as a known limit; the no-screen-lock case is the same gap, and it is the one an attacker meets most | **Fixed in T2** (Q6: A). `createKey` and `sign` refuse with `NO_SCREEN_LOCK` unless `KeyguardManager.isDeviceSecure`, and new keys get `setUnlockedDeviceRequired(true)` on Android 9+. Checked on the emulator (no PIN: refused, nothing saved; PIN set: the same key signed) and on the A57. Hardening (2) |
+| M1 | Medium | PLATFORM-3, STORAGE-2 | **No `FLAG_SECURE`.** The recent-apps screen keeps a picture of the last screen (an administrator's account requests with names and licence numbers, a miner's consignments), and screenshots and screen recording are allowed | **Fixed in T2, corrected in T4** (Q1: A). `FLAG_SECURE` is set when `BuildConfig.DEBUG` is false. The first version asked Android at run time, and on the A57 the flag was not set. With the build-time check the recent-apps card is blank and screenshots are blocked. Hardening (3) |
+| M2 | Medium | STORAGE-1 | **On a rooted phone the database key can be read from secure storage**, so the database can be opened. The Keystore keeps the wrapping key, but root can ask the Keystore to unwrap | Accepted limit (miner plan §7; known limitation after Hardening (5)) |
+| L1 | Low | PLATFORM-3 | **No tapjacking guard.** Android 12+ blocks touches that pass through another app's overlay; Android 8–11, inside NFR-09's range, does not | **Fixed in T2** (Q2). `filterTouchesWhenObscured` on the decor view in `MainActivity.kt`. Not tried with a real overlay app (§6). Hardening (4) |
+| L2 | Low | CODE-4, RESILIENCE-3 | **No release build has been run on a phone.** Flutter turns on R8 shrinking for release builds, but nobody has built one yet or checked that the Keystore channel, sqlite3mc and ML Kit work after shrinking. Dart code is not obfuscated | **Closed in T4.** The obfuscated release build installed over the debug one and logged in, registered and sent on the A57, so R8 left the Keystore channel, sqlite3mc and ML Kit working. The build warned that the native library keeps unobfuscated DWARF debug information (`--strip`); see Hardening (5) |
+| L3 | Low | STORAGE-2 | **The demo has so far been run from debug builds**, which are debuggable: a debugger can attach and read memory (the token, the database key while open) | **Closed in T4.** `dumpsys package` shows no `DEBUGGABLE` flag on the release build, and the thesis demo uses a release build (Hardening (5)). But see L6 |
+| L4 | Low | NETWORK-2 | **Pinning is to root CAs, not to the server's own key.** A wrongly issued certificate from one of the three pinned roots would be trusted | Accepted (Deployment (11): Render renews its certificates, so a leaf pin would break the app); known limitation after Hardening (5) |
+| L5 | Low | PRIVACY-2, PRIVACY-3 | **ML Kit brings Google's data transport library** (`com.google.android.datatransport`, its CCT backend and a job scheduler in the merged manifest), which ML Kit uses to send usage and performance statistics to Google. The app itself sends nothing to Google, and no consignment data goes through it, but a user is not told | Accepted limit, named in the thesis; removing the library from the manifest could break the scanner, so not done; known limitation after Hardening (5) |
+| L6 | Low | STORAGE-2, RESILIENCE-4 | **`run-as` worked on the release build** on the A57 (T4), although the phone runs normal firmware (`ro.build.type=user`, `ro.debuggable=0`) and `dumpsys package` shows no `DEBUGGABLE` flag. `run-as` gives the app's own files to a computer that USB debugging trusts. The database is encrypted and the token is wrapped by a Keystore key, but why `run-as` was allowed is not known, and it was not repeated on the corrected T4 build | Open, rated Low: it needs the phone unlocked, USB debugging on and the computer trusted. Re-checked in the final OWASP review (Sun 22 Nov). Known limitation after Hardening (5) |
 | I1 | Info | AUTH-2 | Someone holding the owner's unlocked phone can sign as the owner. After H1 this is the remaining part of Mobile (11) | Accepted limit (NFR-06) |
 | I2 | Info | CRYPTO-2 | No key attestation, so the server cannot tell a hardware key from a software one | Accepted limit (signing spec, known limits) |
 | I3 | Info | RESILIENCE-1, 2, 4 | No root, emulator, tamper or debugger detection | Out of scope (MASVS-R is not a goal) |
@@ -55,7 +62,9 @@ phones carried at mine sites, no app store):
 | I5 | Info | CODE-2 | No forced-update mechanism | Prototype limit; the app is installed by hand |
 | I6 | Info | STORAGE-1 | After a logout the previous user's signed steps stay in the database (on purpose, so unsynced work is not lost, NFR-04). "My consignments" shows only the signed-in user's rows | Accepted, by design (Mobile (34)) |
 
-**Result: no Critical, one High (H1).** NFR-02 is met once H1 is fixed.
+**Result at T1: no Critical, one High (H1).** **After T2–T4: no Critical or High finding is
+open**, so NFR-02 is met for the app as built (foundation, miner module, design). The role
+modules still to come are covered by the final OWASP review.
 
 ## 4. Control by control
 
@@ -70,7 +79,7 @@ phones carried at mine sites, no app store):
 | | Logs: release builds print only the name of a broken config rule; the sync debug line and the timing lines are behind `kDebugMode`, so not compiled into release; every failure's `toString()` prints codes and counts only; the Kotlin channel never logs and sends fixed codes only | `main.dart:85`, `sync_service.dart:428`, `core/errors/app_failure.dart`, `DeviceKeyPlugin.kt` | Testing Logs for Sensitive Data | Pass (T4 check 2) |
 | | Keyboards: password, username, licence, activation code and weight fields have `autocorrect: false`, `enableSuggestions: false`; passwords are obscured, so they cannot be copied | `password_field.dart:63`, `login_screen.dart:181`, `register_screen.dart:227`, `activate_screen.dart:168`, `register_consignment_screen.dart:683` | Determining Whether the Keyboard Cache Is Disabled for Text Input Fields | Pass |
 | | No clipboard use in the app's own code | grep of `lib/` | Determining Whether Sensitive Data Is Exposed via the Clipboard | Pass |
-| | The recent-apps picture and screenshots | none | Finding Sensitive Information in Auto-Generated Screenshots | **M1** |
+| | The recent-apps picture and screenshots: `FLAG_SECURE` in release builds (since T2/T4) | `MainActivity.kt` (`BuildConfig.DEBUG`), T4 check 3b | Finding Sensitive Information in Auto-Generated Screenshots | **M1** fixed |
 
 ### MASVS-CRYPTO
 
@@ -79,14 +88,14 @@ phones carried at mine sites, no app store):
 | CRYPTO-1 Strong, current crypto | ECDSA P-256 with SHA-256 (`SHA256withECDSA`), DER; AES-256 for the database (SQLCipher v4 scheme) and secure storage; SHA-256 for the key fingerprint. No hand-written crypto | `DeviceKeyPlugin.kt`, `docs/signing-spec.md`, `key_fingerprint.dart` | Testing for Weak Cryptographic Algorithms | Pass |
 | | Randomness: `Random.secure()` for the database key and step ids | `database_key.dart:33`, `payload_format.dart:53` | Testing Random Number Generation | Pass |
 | | The signature is checked against fixed vectors, byte for byte | `docs/signing-vectors.json`, `registration_payload_test.dart`, `integration_test/device_key_test.dart` | Testing the Configuration of Cryptographic Standard Algorithms | Pass |
-| CRYPTO-2 Key management | The private key is made inside the Keystore (TEE) and has no export or delete path; the alias is checked in Kotlin against one pattern, so no other Keystore entry can be reached; never overwritten (`KEY_EXISTS`) | `DeviceKeyPlugin.kt` (`ALIAS`, `createKey`), Mobile (4), (17) | Testing Key Management | Pass, except **H1** |
+| CRYPTO-2 Key management | The private key is made inside the Keystore (TEE) and has no export or delete path; the alias is checked in Kotlin against one pattern, so no other Keystore entry can be reached; never overwritten (`KEY_EXISTS`) | `DeviceKeyPlugin.kt` (`ALIAS`, `createKey`), Mobile (4), (17) | Testing Key Management | Pass (**H1** fixed in T2) |
 
 ### MASVS-AUTH
 
 | Control | What the app does | Evidence | MASTG test | Result |
 |---|---|---|---|---|
 | AUTH-1 Secure authentication | JWT from the server, 60 minutes at most, sent only in the `Authorization` header; the phone also checks its own expiry and on every return to the foreground; a 401 `TOKEN_EXPIRED` forgets the token; logout removes exactly the three session keys | `api_client.dart:147`, `auth_controller.dart:276`, `session_expiry_watcher.dart`, `session_store.dart:96–104`, Mobile (11) | Testing Stateful Session Management | Pass |
-| AUTH-2 Local authentication | The signing key needs no screen lock and no PIN | `DeviceKeyPlugin.kt` (`setUserAuthenticationRequired(false)`) | Testing Confirm Credentials | **H1**, I1 |
+| AUTH-2 Local authentication | At T1 the signing key needed no screen lock and no PIN. Since T2 a secure screen lock is required before a key is made and before every signature, and new keys cannot be used while the phone is locked (Android 9+). Still no PIN at each signature (NFR-06) | `DeviceKeyPlugin.kt` (`requireScreenLock`, `setUnlockedDeviceRequired`), `device_key_channel_test.dart`, `register_consignment_test.dart` | Testing Confirm Credentials | **H1** fixed; I1 |
 | AUTH-3 Extra check for sensitive actions | A password change asks for the current password; account approval is an admin's, checked by the server | `api.md`, `/auth/me/password` | — | Pass |
 
 ### MASVS-NETWORK
@@ -102,7 +111,7 @@ phones carried at mine sites, no app store):
 |---|---|---|---|---|
 | PLATFORM-1 IPC | One exported activity (the launcher, which must be), plus a DUMP-guarded AndroidX receiver. `taskAffinity=""` stops task hijacking. No deep links, no content providers, receivers or services of the app's own. The method channel is reachable only from the app's own Dart code and checks every argument | `AndroidManifest.xml`, merged manifest (below), `DeviceKeyPlugin.kt` | Testing for Sensitive Functionality Exposure Through IPC; Testing App Links | Pass |
 | PLATFORM-2 WebViews | None | `pubspec.yaml`, grep of `lib/` | Testing WebView Configuration | Pass (not used) |
-| PLATFORM-3 UI | Server text is shown as plain `Text`, never as HTML; no FLAG_SECURE; no tapjacking guard | — | Testing for Overlay Attacks; Finding Sensitive Information in Auto-Generated Screenshots | **M1**, **L1** |
+| PLATFORM-3 UI | Server text is shown as plain `Text`, never as HTML; `FLAG_SECURE` in release builds; touches through another app's window are dropped (`filterTouchesWhenObscured`) | `MainActivity.kt` | Testing for Overlay Attacks; Finding Sensitive Information in Auto-Generated Screenshots | **M1**, **L1** fixed |
 
 **Merged manifest (19 Nov):** `minSdkVersion` 26, `targetSdkVersion` 36. Permissions: INTERNET,
 CAMERA, the two location permissions, ACCESS_NETWORK_STATE (from a plugin) and AndroidX's
@@ -125,8 +134,10 @@ the data transport services and receiver (L5). Pass.
 
 ### MASVS-RESILIENCE
 
-Not a goal (§1). R8 shrinking is on in release builds (Flutter's default); Dart obfuscation is
-off (L2); no root, emulator, tamper or debugger detection (I3); debug signing key (I4).
+Not a goal (§1). R8 shrinking is on in release builds (Flutter's default). Since T4 the
+release build is made with Dart obfuscation (`--obfuscate --split-debug-info`, L2 closed). No
+root, emulator, tamper or debugger detection (I3); debug signing key (I4); `run-as` on the
+release build (L6).
 
 ### MASVS-PRIVACY
 
@@ -139,11 +150,15 @@ off (L2); no root, emulator, tamper or debugger detection (I3); debug signing ke
 
 ## 5. Device checks (T4)
 
-1. A release build, obfuscated, works on the A57: log in as the demo miner, register, send.
-2. `adb logcat` during login, registration and sync holds no token (`eyJ`), QR code, payload
-   or password.
-3. Nothing readable outside the app: blank recent-apps card (after M1's fix); the database
-   file from a debug install does not start with `SQLite format 3`; `adb backup` is empty.
+Done by the developer on the A57 on 19 Nov; the raw results are in `docs/testing-log.md`.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | An obfuscated release build (`flutter build apk --release --obfuscate --split-debug-info=build/symbols`, then `adb install -r`) works: log in as the demo miner, register, send | **Pass.** Installed over the debug build with the data kept; registered and sent smoothly |
+| 2 | `adb logcat` during login, registration and sync holds no token (`eyJ`), QR code, payload or password | **Pass.** `eyJ`, `minechain-step/1`, `qr_code=`, `step_id=`, the QR code and the password: 0 hits each. The 28 `Bearer` lines all came from Samsung's mobile-network services, none from the app's process |
+| 3a | The database file does not start with `SQLite format 3` | **Pass.** The first 16 bytes are random |
+| 3b | Blank recent-apps card, screenshots blocked | **Failed, then passed.** The first release build had no `FLAG_SECURE` (window flags without 0x2000). After the build-time check (Hardening (3)) the card is blank and screenshots are blocked |
+| 3c | No backup | **Pass.** No `ALLOW_BACKUP` flag in `dumpsys package` for either build, so Android makes no backup of the app. An `adb backup` run was not recorded |
 
 ## 6. Limits of this review
 
@@ -152,3 +167,8 @@ off (L2); no root, emulator, tamper or debugger detection (I3); debug signing ke
 - The advisory check covers Dart packages only. Native parts (ML Kit, the sqlite3mc build,
   the AndroidX libraries plugins bring) are not covered by the GitHub pub database.
 - One reviewer, who also wrote much of the code.
+- The Kotlin fixes (H1, M1, L1) have no automated test, because `flutter test` cannot reach
+  Kotlin. They were checked on the emulator and the A57 only, and L1 was not tried with a
+  real overlay app.
+- The cause of M1's first failure is likely, not proven: the window flags and `run-as` were
+  not reported again for the corrected build (L6).

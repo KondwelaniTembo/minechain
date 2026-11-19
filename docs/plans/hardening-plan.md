@@ -1,6 +1,6 @@
 # Hardening plan
 
-Status: **approved 19 Nov 2026, Q1–Q5 as proposed.** T1–T4 done (Q6: option A).
+Status: **approved 19 Nov 2026, Q1–Q5 as proposed.** T1–T5 done (Q6: option A); feature complete.
 
 Branch: `chore/hardening`, created by the developer from `main` after PR #11.
 
@@ -73,7 +73,7 @@ phone the database key can be read from secure storage.
   3. **Nothing readable outside the app:** the recent-apps screen shows a blank card (P1);
      the database file pulled from a debug install with `run-as` does not start with
      `SQLite format 3`; `adb backup` of the app is empty.
-- ⬜ **T5 Docs** (about 30 min). `docs/decisions.md` "Hardening (1)…" for each choice and
+- ✅ **T5 Docs** (about 30 min). `docs/decisions.md` "Hardening (1)…" for each choice and
   each accepted limit; `docs/security-review.md` marked with the T2 fixes and T4 results;
   `docs/testing-log.md`; `docs/progress.md`; the PR title and description.
 

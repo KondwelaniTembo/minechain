@@ -4,7 +4,8 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 19 Nov 2026, after Hardening T4 (device checks passed); T5 docs next.
+Last updated: 19 Nov 2026, after Hardening T5 (docs); Hardening complete. Next: the back
+arrow on "My account" (small extra on this branch), then the pull request.
 
 ## (a) Whole project
 
@@ -30,7 +31,7 @@ Last updated: 19 Nov 2026, after Hardening T4 (device checks passed); T5 docs ne
   (`docs/plans/design-integration-plan.md`; PR #11, merged 19 Nov, `d86e33c`)
 - ~~Bottom navigation as its own feature~~ Dropped 19 Nov in the morning, then brought back
   by the developer the same afternoon inside Design integration (Part 3)
-- ⬜ Hardening: OWASP MASVS/MSTG review of the miner module, fix every Critical and High
+- ✅ Hardening: OWASP MASVS/MSTG review of the miner module, fix every Critical and High
   finding, replace the skipped miner case in `homes_test.dart`, 3 device checks
   (`docs/plans/hardening-plan.md`)
 
@@ -77,9 +78,9 @@ Last updated: 19 Nov 2026, after Hardening T4 (device checks passed); T5 docs ne
 1. ✅ Workflow setup
 2. ✅ Design integration (PR #11, merged 19 Nov)
 3. ~~Bottom navigation~~ (dropped in the morning; back in the afternoon as Design integration Part 3)
-4. ⬜ Hardening (T1–T4 done; T5 docs next)
+4. ✅ Hardening (T1–T5; PR after the "My account" back arrow)
 
-## (c) Current feature: Hardening — 4/5
+## (c) Current feature: Hardening — 5/5
 
 Plan: `docs/plans/hardening-plan.md`, approved 19 Nov (Q1–Q5 as proposed). Branch
 `chore/hardening`, created by the developer from `main`.
@@ -96,7 +97,9 @@ Plan: `docs/plans/hardening-plan.md`, approved 19 Nov (Q1–Q5 as proposed). Bra
 - ✅ T4 Three device checks on the A57, all passed: the obfuscated release build works;
   nothing sensitive in the log; database encrypted, no backup, recent-apps card blank and
   screenshots blocked (after fixing `FLAG_SECURE` to use `BuildConfig.DEBUG`)
-- ⬜ T5 Docs: Hardening decisions, the review marked, testing log, PR description
+- ✅ T5 Docs: `decisions.md` Hardening (1)–(5) and five known limitations; the review marked
+  with the T2 fixes and T4 results (new Low L6, `run-as` on the release build); PR description
+  drafted
 
 Design integration (14/14, T1–T14) is finished and merged as PR #11; its subtask list is in
 `docs/plans/design-integration-plan.md`.
