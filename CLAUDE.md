@@ -40,12 +40,30 @@ Updated 19 Nov 2026. Read this first in a new session, then `docs/progress.md` (
 plan and the current feature's subtasks), then `docs/decisions.md`.
 
 - **Now: Design integration on `design/mapalo-theme`** (`docs/plans/design-integration-plan.md`).
-  - T1–T6 are done (T1–T5 committed and pushed; T6 waiting for the developer's commit).
-  - Next: T7, the adaptive launcher icon written from `core/brand/logo_geometry.dart`.
-    It needs no package, and approving the plan approved only three new resource files
-    under `mobile/android`.
-  - Then T8 (cards, fields, chips), T9 (tiles, no mid-word breaks, spacing), T10 (docs),
-    and T11, the developer's phone check. After that, the PR.
+  - T1–T8 are done, committed and pushed (T7 `548d7d8`, T8 `ee5f20c`; tests 1351 passed,
+    1 skipped).
+    - T7: the launcher icon is written by `mobile/tool/make_launcher_icon.dart`
+      (`dart run tool/make_launcher_icon.dart` from `mobile/`). `launcher_icon_test.dart`
+      fails if the committed XML drifts from `logo_geometry.dart`. The developer has
+      seen the icon on the A57.
+    - T8: copper fields, sand cards and outlined chips, all set in the theme
+      (`app_theme.dart`).
+  - Next: T9 (plan section T9):
+    - T9.a: tile elevation 3 → 5, and 6 → 8 for the main tile (`action_tile.dart`);
+    - T9.b: a home switches to one column when a tile's longest word does not fit two
+      columns at the current text size; only a word too wide even for the full width is
+      scaled down (Q6);
+    - T9.c: an 8 dp gap between the four status lines on "Send my work" (`_Counts` in
+      `send_work_screen.dart`).
+  - Then T10 (docs) and T11 (the developer's phone check), then the PR.
+  - T10 must also record T8's choices in Mobile (36):
+    - the fields keep their underline shape, now in copper (no outlined box);
+    - the admin "Account requests" cards take the new card style too (it is set in the
+      theme);
+    - unselected chip text is `onSurface`;
+    - the chips' label colour and raised selected chip are set on the chip, because a
+      theme `labelStyle` replaces the chip's text style;
+    - chips reach 56 dp through a `minHeight` box.
   - Bottom navigation was dropped on 19 Nov. The schedule is about one day behind; see
     `docs/progress.md`.
   - Rules learned in this feature:
@@ -53,6 +71,8 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
     - a test whose behaviour changed by decision says so in a comment and in
       `docs/testing-log.md`;
     - drafted commit messages have no Co-Authored-By line;
+    - a widget test that reads an animated colour or border pumps twice: `pump()`, then
+      `pump(300 ms)`. The first frame only starts the animation;
     - give the developer the commit the way "Git rules", "How the developer commits", says
       (Source Control for one commit, a whole-paste script for two or more).
 
