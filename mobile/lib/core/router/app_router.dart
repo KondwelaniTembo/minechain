@@ -27,6 +27,7 @@ import '../../features/officer/presentation/officer_home_screen.dart';
 import '../../features/registration/presentation/register_consignment_screen.dart';
 import '../../features/sync/presentation/send_work_screen.dart';
 import '../../features/transporter/presentation/transporter_home_screen.dart';
+import '../widgets/app_navigation.dart';
 import 'redirect.dart';
 import 'routes.dart';
 
@@ -79,10 +80,57 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.activate,
         builder: (context, state) => const ActivateScreen(),
       ),
-      GoRoute(
-        path: AppRoutes.miner,
-        builder: (context, state) => const MinerHomeScreen(),
+      // The frame with the navigation bar (Mobile (37)): Home and Account.
+      // "Indexed stack" keeps both places alive while one is hidden, so the
+      // home keeps its scroll position while Account is open.
+      //
+      // The Home branch holds all five homes. Only one is ever reached: the
+      // redirect puts each role on its own home, and keeps it out of the
+      // others (rules 3 and 4), inside the frame as outside it.
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, shell) => AppNavigationShell(shell: shell),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.miner,
+                builder: (context, state) => const MinerHomeScreen(),
+              ),
+              GoRoute(
+                path: AppRoutes.transporter,
+                builder: (context, state) => const TransporterHomeScreen(),
+              ),
+              GoRoute(
+                path: AppRoutes.buyer,
+                builder: (context, state) => const BuyerHomeScreen(),
+              ),
+              GoRoute(
+                path: AppRoutes.officer,
+                builder: (context, state) => const OfficerHomeScreen(),
+              ),
+              GoRoute(
+                path: AppRoutes.admin,
+                builder: (context, state) => const AdminHomeScreen(),
+              ),
+            ],
+          ),
+          // Every signed-in role, including SignedInNeedsPassword (redirect
+          // rule 5). The homes' account button and the bar both go() here,
+          // so there is one "My account" with two ways in (Q9).
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.account,
+                builder: (context, state) => const AccountScreen(),
+              ),
+            ],
+          ),
+        ],
       ),
+      // The task pages are outside the frame, on the app's top navigator, so
+      // a push() covers the whole screen, bar included (Q11), and the back
+      // arrow returns to the home in its frame.
+      //
       // Under /miner, so redirect rule 4 sends every other role home. The
       // miner home opens it with push(), so the back arrow returns there.
       GoRoute(
@@ -97,34 +145,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.minerConsignments,
         builder: (context, state) => const MyConsignmentsScreen(),
       ),
-      GoRoute(
-        path: AppRoutes.transporter,
-        builder: (context, state) => const TransporterHomeScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.buyer,
-        builder: (context, state) => const BuyerHomeScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.officer,
-        builder: (context, state) => const OfficerHomeScreen(),
-      ),
-      GoRoute(
-        path: AppRoutes.admin,
-        builder: (context, state) => const AdminHomeScreen(),
-      ),
       // Under /admin, so redirect rule 4 sends every other role home. The
       // admin home opens it with push(), so the back arrow returns there.
       GoRoute(
         path: AppRoutes.adminRequests,
         builder: (context, state) => const AccountRequestsScreen(),
-      ),
-      // Every signed-in role, including SignedInNeedsPassword (redirect rule
-      // 5). The homes open it with push(), so it sits on top of the home and
-      // the back arrow returns there.
-      GoRoute(
-        path: AppRoutes.account,
-        builder: (context, state) => const AccountScreen(),
       ),
     ],
     // No path, query or other text from the address is logged.

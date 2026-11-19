@@ -15,10 +15,12 @@ Mapalo Maseko (GitHub `mapalomaseko`) restyled the app in commit `de7600d`:
 This feature finishes that work so it can be merged.
 - **In scope:** it fixes one layout fault in the title, tests the parts that are not yet
   tested, credits the design and records its decisions.
-- **Out of scope:** navigation does not change. The round account button in the top bar
-  stays (navigation option A). Mapalo's bottom navigation suggestion
-  (`docs/plans/bottom-navigation-suggestion.md`) is the **next** feature, built on its own
-  branch, so it can be dropped without touching this one.
+- **Out of scope (Parts 1 and 2):** navigation does not change. The round account button
+  in the top bar stays (navigation option A).
+- **Added on 19 Nov (Part 3):** Mapalo's bottom navigation suggestion
+  (`docs/plans/bottom-navigation-suggestion.md`), dropped earlier that day, is back at the
+  developer's request. The account button stays as well, so there are two ways to reach
+  "My account". See Part 3 (T10–T12).
 
 ## The fault being fixed
 
@@ -306,16 +308,109 @@ supports adaptive icons on every phone the app can run on.
   - The existing "no overflow, every tile reachable" tests stay.
 - **Estimate:** 60 min.
 
-### T10. Docs
+## Part 3: the navigation bar (T10–T12)
+
+Asked for on 19 Nov by the developer: Mapalo's bottom navigation bar **and** the round
+account button, both, for usability. Recorded as decision Mobile (37), which reverses the
+morning's "dropped" note.
+
+**What the user sees:**
+- On every home and on "My account", a bar with two destinations: **Home** and
+  **Account**, each an icon and a word (plan section 7), at least 56 dp to tap.
+- The bar shows where you are: the current destination sits in a copper pill.
+- The round account button in the top bar stays. It goes to the same "My account" as the
+  bar's Account, so there is one account page with two ways in (Q9).
+- Inside a task ("Register consignment", "Send my work", "My consignments", "Account
+  requests") the bar is hidden. The task covers the whole screen and its back arrow returns
+  to the home (Q11).
+- Android's back button on Account returns to Home; on Home it leaves the app.
+
+**Rules it must keep:**
+- Redirect rules 1–5 are unchanged: each role still reaches only its own home and
+  `/account`, and signed-out users never see the bar.
+- `SignedInNeedsPassword` keeps both destinations open (Mobile (11)), and the "Enter your
+  password" notice shows on both.
+- 360×640 dp at text 2.0, portrait and landscape: no overflow, the bar's words whole.
+- Contrast in light and dark: text at least 4.5:1, icons at least 3:1.
+- No new package: go_router 18.1.4 (already in the app) has `StatefulShellRoute`.
+
+### T10. The bar's look in the theme
+
+- `NavigationBarThemeData` and `NavigationRailThemeData` in `app_theme.dart`, light and dark:
+  - background: the screen's colour (`surface`, like the top bar), raised by the warm
+    shadow (elevation 3);
+  - selected: a peach pill (`primaryContainer`, the role pill's colour) with a copper
+    outline, an `onPrimaryContainer` icon and a bold copper word;
+  - unselected: `onSurfaceVariant` icon and word (medium weight);
+  - words at 14 sp, always shown (`alwaysShow`, rail `all`), never an icon alone.
+  - As built: the peach pill is only 1.2:1 from the light screen, so its copper outline
+    (6.1:1) is what marks it. Words 6.1:1 (chosen) and 8.9:1 light, 10.3:1 and 10.9:1 dark;
+    the chosen icon 12.3:1 light, 7.5:1 dark.
+- **Tests:** each colour pair's contrast, light and dark (`app_theme_test.dart`); the words
+  are always shown.
+- **Fails on the old code:** the theme has no navigation bar settings.
+- **Estimate:** 45 min.
+
+### T11. The shell: one frame around the homes and "My account"
+
+- `core/router/app_router.dart`: the five homes and `/account` go inside one
+  `StatefulShellRoute.indexedStack` with two branches, Home and Account. "Indexed stack"
+  keeps the home alive while Account is shown, so its scroll position is kept.
+- The task pages stay outside the shell, on the root navigator, so a `push()` covers the bar
+  (Q11).
+- Home's branch holds all five home paths; the redirect already puts each role on its own,
+  and the bar's Home goes to `homeOf(role)`.
+- **Tests (`app_router_test.dart`, `redirect_test.dart` re-run):**
+  - every role: home → Account → Home, the right home each time;
+  - log out as a miner, log in as an administrator: Home is the admin home, not the miner's
+    (the shell must not keep the old role's page);
+  - a task page has no bar; its back arrow returns to the home, with the bar;
+  - `SignedInNeedsPassword`: both destinations open, the notice on both;
+  - signed out: no bar on login, register, activate.
+- **Estimate:** 60 min.
+- **As built:** the shell needs a bar to be tested, so T11 also brought in a plain
+  `NavigationBar` (`core/widgets/app_navigation.dart`, outlined and filled icons) and moved
+  the five homes' account button from `push` to `go` (Q9): a push across the shell's
+  branches would leave a second account page. T12 keeps the rest below.
+
+### T12. The bar, the account button and the back button
+
+- `core/widgets/app_navigation.dart`: the bar (Home, Account), built by the shell.
+  - Portrait: Material 3 `NavigationBar` at the bottom.
+  - Landscape on a phone (height under 480 dp): a `NavigationRail` on the side with icon and
+    word, so an 80 dp bar does not take a quarter of a 360 dp screen (Q12).
+  - At large text the bar grows with the words instead of cutting them.
+  - The icon is outlined when not chosen and filled when chosen (`Icons.home_outlined` /
+    `Icons.home`), so the choice is shown by shape as well as colour (T10's theme comment
+    relies on this).
+  - TalkBack reads "Home, tab 1 of 2" and "Account, tab 2 of 2" (Flutter gives the tab
+    semantics).
+- The account button in `HomeScaffold` now switches to the Account destination (`go`, not
+  `push`), so the bar shows Account as selected (Q9).
+- `AccountScreen`: no back arrow, because it is a destination now, not a page on top
+  (Q10). Android back on Account goes to Home (`PopScope`).
+- **Tests:**
+  - 360×640 and text 2.0, portrait (bar) and landscape (rail), on each home and on
+    Account: no overflow, both words whole, every tile still reachable;
+  - the account button and the bar's Account open the same page, with Account selected;
+  - Android back: Account → Home, then the app closes;
+  - each destination at least 56 dp; TalkBack names;
+  - `account_screen_test.dart`: the back-arrow tests change by decision (Q10), with a
+    comment and a row in `docs/testing-log.md`.
+- **Estimate:** 75 min.
+
+### T13. Docs
 
 - Complete Mobile (36) in `docs/decisions.md` with what was built (colours, rules, the
   measured contrasts) and with the answers to Q4–Q6.
 - Mark Mobile (35)'s title rule part 2 as replaced by Mobile (36); Mapalo's credit is
   unchanged.
 - Add a row on the launcher icon approach.
-- **Estimate:** 20 min.
+- Add Mobile (37), the navigation bar (Q9–Q12), credited to Mapalo's suggestion; take it off
+  the future improvements list; set the suggestion file's status to "built".
+- **Estimate:** 30 min.
 
-### T11. Phone check on the A57 (the developer)
+### T14. Phone check on the A57 (the developer)
 
 - **Light and dark, default and largest text:**
   - homes: the pill with the username, the brand block below the tiles, the stronger tile
@@ -326,6 +421,10 @@ supports adaptive icons on every phone the app can run on.
   - "My account" and "My consignments": the cards;
   - "Register consignment": the chips;
   - "Send my work": the spacing.
+- **Navigation bar (Part 3):** on each home you can sign in as, in portrait and landscape:
+  Home → Account → Home with the bar, and Account with the top bar's button; Android back on
+  Account goes Home and on Home closes the app; a task page ("Register consignment") has no
+  bar; the bar's words whole at the largest text; light and dark.
 - **Launcher icon:** on the home screen and in the app drawer, with the round mask.
 - **Screenshots:**
   - `ui2-miner-home-light.png`, `ui2-miner-home-dark.png`
@@ -337,10 +436,12 @@ supports adaptive icons on every phone the app can run on.
   - `ui2-chips-light.png`
   - `ui2-send-work.png`
   - `ui2-launcher-icon.png`
-- **Estimate:** 30 min (the developer).
+  - `ui2-nav-bar-home.png`, `ui2-nav-bar-account.png` (portrait)
+  - `ui2-nav-rail-landscape.png`
+- **Estimate:** 45 min (the developer).
 
-After T11 comes the PR for `design/mapalo-theme`, crediting Mapalo for the theme and noting
-that Mobile (36) holds the developer's changes.
+After T14 comes the PR for `design/mapalo-theme`, crediting Mapalo for the theme and the
+navigation bar idea, and noting that Mobile (36) and (37) hold the developer's changes.
 
 ## Checklist
 
@@ -350,16 +451,22 @@ that Mobile (36) holds the developer's changes.
   foundation plan's seed wording, the status line of the bottom navigation suggestion
 - ✅ T4 Phone check on the A57: light, dark, largest text (the T1 rule holds; twelve changes
   requested)
-- ⬜ T5 Home header: copper password notice with a pill button; role pill with the username (60 min)
-- ⬜ T6 Logo (CustomPainter) and brand block under the tiles; name out of the app bar; splash
-  and login (75 min)
-- ⬜ T7 Adaptive launcher icon from the same geometry, no package (45 min)
-- ⬜ T8 Copper login fields, sand cards with a copper outline, outlined chips (60 min)
-- ⬜ T9 Stronger tile shadows, no mid-word breaks, spacing on "Send my work" (60 min)
-- ⬜ T10 Docs: Mobile (36) completed, Mobile (35) title rule marked replaced (20 min)
-- ⬜ T11 Phone check on the A57 (30 min, the developer)
+- ✅ T5 Home header: copper password notice with a pill button; role pill with the username
+- ✅ T6 Logo (CustomPainter) and brand block under the tiles; name out of the app bar; splash
+  and login
+- ✅ T7 Adaptive launcher icon from the same geometry, no package
+- ✅ T8 Copper login fields, sand cards with a copper outline, outlined chips
+- ✅ T9 Stronger tile shadows, no mid-word breaks, spacing on "Send my work"
+- ⬜ T10 Navigation bar look in the theme, light and dark (45 min)
+- ⬜ T11 The shell: homes and "My account" in one frame; task pages outside it (60 min)
+- ⬜ T12 The bar (rail in landscape), the account button to the Account destination, the
+  back button (75 min)
+- ⬜ T13 Docs: Mobile (36) completed, Mobile (35) title rule marked replaced, Mobile (37)
+  navigation bar (30 min)
+- ⬜ T14 Phone check on the A57, including the navigation bar (45 min, the developer)
 
-Claude Code's time is about 5 h 20 min, plus the developer's phone check and the commits.
+T10 and T11 were renumbered T13 and T14 on 19 Nov when Part 3 was added. Part 3 adds about
+3 h of Claude Code's time and 15 min to the phone check.
 
 ## Open questions
 
@@ -396,3 +503,26 @@ Answered on 19 Nov:
   T5. Server problems keep the red error colours: a pill on red would hardly show
   (`primaryContainer` and `errorContainer` are nearly the same pink).
 - The Bottom navigation feature is dropped. The top bar's account button stays.
+  **Reversed later on 19 Nov:** the developer asked for the bar and the button both (Part 3).
+
+Part 3 (the navigation bar), open:
+
+- **Q9.** What does the top bar's account button do now? The proposal: it goes to the same
+  Account destination as the bar, and the bar shows Account as selected. One account page,
+  two ways in. The other way: it keeps pushing a separate account page on top of the home,
+  which would leave two copies of "My account" in the app.
+- **Q10.** Does "My account" keep its back arrow? The proposal: no. It is a destination of
+  the bar now, like Home, and Material puts no back arrow on those. Home is one tap away on
+  the bar, and Android's back button goes there too.
+- **Q11.** Is the bar shown inside a task ("Register consignment", "Send my work", …)? The
+  proposal: no. The task covers the screen, so a scan or a form has no stray buttons to hit
+  by accident, and the screen keeps its full height. Its back arrow returns to the home.
+- **Q12.** In landscape, where is the bar? The proposal: a rail on the side with icon and
+  word, because at the bottom it takes 80 of the 360 dp of height. The other way: the
+  same bottom bar in both orientations (simpler, less room in landscape).
+- **Q13.** Built on this branch, before the docs and the phone check (the proposal), so one
+  docs pass, one phone check and one PR cover the theme and the bar. The other way: the PR
+  for the theme first, then the bar on its own branch (safer to drop, but a second phone
+  check and PR).
+
+Q9–Q13 were answered on 19 Nov: all as proposed.

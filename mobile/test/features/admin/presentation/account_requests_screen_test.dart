@@ -123,6 +123,19 @@ void main() {
       expect(app.path, AppRoutes.admin);
     });
 
+    // Mobile (37), Q11: a task covers the whole screen, navigation bar
+    // included; back on the home, the bar is there again.
+    testWidgets('no navigation bar on this page; back on the home it shows', (
+      tester,
+    ) async {
+      await openRequests(tester);
+      expect(find.byType(NavigationBar), findsNothing);
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.byType(NavigationBar), findsOneWidget);
+    });
+
     testWidgets('another role cannot open it', (tester) async {
       app = await AppHarness.pump(
         tester,

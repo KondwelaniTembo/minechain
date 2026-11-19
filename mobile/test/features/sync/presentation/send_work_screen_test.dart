@@ -160,6 +160,20 @@ void main() {
     expect(app.path, AppRoutes.transporter);
   });
 
+  // Mobile (37), Q11: a task covers the whole screen, navigation bar
+  // included; back on the home, the bar is there again.
+  testWidgets('no navigation bar on this page; back on the home it shows', (
+    tester,
+  ) async {
+    await open(tester);
+    expect(find.byType(NavigationBar), findsNothing);
+
+    await tester.tap(find.byType(BackButton));
+    await frames(tester);
+    expect(app.path, AppRoutes.miner);
+    expect(find.byType(NavigationBar), findsOneWidget);
+  });
+
   testWidgets('nothing waiting', (tester) async {
     await open(tester);
     expect(find.text(AppText.nothingWaiting), findsOneWidget);

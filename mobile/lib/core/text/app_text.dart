@@ -27,6 +27,13 @@ abstract final class AppText {
   static const String comingSoon = 'Coming soon';
   static const String myAccount = 'My account';
 
+  // ---- Navigation bar (core/widgets/app_navigation.dart, Mobile (37)) ----
+  // One short word each: the bar has little room, and the page's own title
+  // ("My account") says the rest.
+
+  static const String navHome = 'Home';
+  static const String navAccount = 'Account';
+
   // ---- Login (features/auth/presentation/login_screen.dart) ----
 
   static const String username = 'Username';

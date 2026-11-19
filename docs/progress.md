@@ -4,7 +4,7 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 19 Nov 2026, after Design integration T9.
+Last updated: 19 Nov 2026, after Design integration T11.
 
 ## (a) Whole project
 
@@ -25,12 +25,11 @@ Last updated: 19 Nov 2026, after Design integration T9.
 
 - ✅ Workflow setup: autopilot working agreement, permissions, progress and testing logs
   (PR #12)
-- ⬜ Design integration: bring in Mapalo's theme from the `design/mapalo-theme` branch;
-  navigation option A is kept here, and bottom navigation is the next feature
+- ⬜ Design integration: bring in Mapalo's theme from the `design/mapalo-theme` branch,
+  plus Mapalo's navigation bar beside the account button (Part 3, T10–T12)
   (`docs/plans/design-integration-plan.md`)
-- ~~Bottom navigation (Mapalo's suggestion; Home + Account; try on its own branch, merge
-  only if approved on the phone)~~ Dropped 19 Nov by the developer to recover time; kept
-  as a future improvement
+- ~~Bottom navigation as its own feature~~ Dropped 19 Nov in the morning, then brought back
+  by the developer the same afternoon inside Design integration (Part 3)
 - ⬜ Hardening: OWASP MASVS/MSTG review of the miner module, fix every Critical and High
   finding, replace the skipped miner case in `homes_test.dart`, 3 device checks
 
@@ -75,11 +74,11 @@ Last updated: 19 Nov 2026, after Design integration T9.
 ## (b) Today, Wed 18 Nov
 
 1. ✅ Workflow setup
-2. ⬜ Design integration (T1–T9 done; T10 next)
-3. ~~Bottom navigation~~ (dropped)
+2. ⬜ Design integration (T1–T11 done; T12 next)
+3. ~~Bottom navigation~~ (dropped in the morning; back in the afternoon as Design integration Part 3)
 4. ⬜ Hardening
 
-## (c) Current feature: Design integration — 9/11
+## (c) Current feature: Design integration — 11/14
 
 Plan: `docs/plans/design-integration-plan.md`, approved 19 Nov (Q1: scale the role down;
 Q2: 3:1 for the icon; Q3: the `app_theme.dart` comment is fixed in T3).
@@ -93,22 +92,29 @@ Q2: 3:1 for the icon; Q3: the `app_theme.dart` comment is fixed in T3).
 - ✅ T5 Home header: copper password and server notices with a pill button; role pill with
   the username
 - ✅ T6 Logo and brand block under the tiles; name out of the app bar; splash and login
-- ✅ T7 Adaptive launcher icon from the same geometry (phone check of the icon in T11)
+- ✅ T7 Adaptive launcher icon from the same geometry (phone check of the icon in T14)
 - ✅ T8 Copper fields (underline kept), sand cards with a copper outline, outlined chips at 56 dp
 - ✅ T9 Stronger tile shadows (5 and 8), no mid-word breaks (fewer columns first, then a
   smaller label), 16 dp between the "Send my work" lines
-- ⬜ T10 Docs: Mobile (36) completed
-- ⬜ T11 Phone check on the A57
+- ✅ T10 Navigation bar and rail look in the theme, light and dark (peach pill, copper outline)
+- ✅ T11 The shell: homes and "My account" in one frame with a plain bar; task pages outside
+  it; the account button goes to Account
+- ⬜ T12 The bar (rail in landscape), the account button to Account, the back button
+- ⬜ T13 Docs: Mobile (36) completed, Mobile (37) navigation bar
+- ⬜ T14 Phone check on the A57, including the navigation bar
 
-T5–T11 approved 19 Nov (Q4–Q7 as proposed; Q8: server notices in copper too).
+T5–T11 approved 19 Nov (Q4–Q7 as proposed; Q8: server notices in copper too). Part 3
+(T10–T12) added 19 Nov at the developer's request and approved (Q9–Q13 as proposed); the
+old T10 and T11 are now T13 and T14.
 
-For T10, T9's choices to record in Mobile (36): the "Send my work" gap is 16 dp, not the
+For T13, T9's choices to record in Mobile (36): the "Send my work" gap is 16 dp, not the
 plan's 8 dp (the lines already had 8 dp; the developer chose 16 on 19 Nov), and the 32 dp
 above "Send now" is kept; columns drop one at a time (3, then 2, then 1), so landscape with
 large text keeps two columns when the words fit; a label too wide even for one column is
 drawn at a smaller font size and still wraps between words (not a one-line FittedBox).
 
 **Schedule (19 Nov): behind by about one day.**
-- Still open from Wed 18: Design integration (T5–T11, about 5 h 20 min of Claude Code time),
-  Bottom navigation and Hardening.
+- Still open from Wed 18: Design integration (T10–T14: about 3 h 30 min of Claude Code
+  time and 45 min of phone check) and Hardening. The navigation bar adds about 3 h; the
+  developer accepted that on 19 Nov.
 - Thu 19's two features (Consignment check, Transporter handoff) have not started.

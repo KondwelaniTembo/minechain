@@ -28,7 +28,9 @@ class MinerHomeScreen extends ConsumerWidget {
       ),
       // push (not go): each screen goes on top of this home, so its back
       // arrow and Android's back button return here.
-      onAccountPressed: () => context.push(AppRoutes.account),
+      // go(), not push(): Account is a place of the navigation bar, and the
+      // bar then shows it as chosen (Mobile (37), Q9).
+      onAccountPressed: () => context.go(AppRoutes.account),
       actions: [
         HomeAction(
           icon: Icons.qr_code_scanner,
