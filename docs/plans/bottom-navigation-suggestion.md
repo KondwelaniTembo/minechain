@@ -1,9 +1,23 @@
 # Suggestion: a bottom navigation bar (Home and Account)
 
-**Status: dropped on 19 Nov 2026 to recover time before submission; kept as a future
-improvement.** Nothing here has been built. It was left out of the copper restyle on
-purpose, because it changes routing, and the restyle was meant to touch looks only. The
-top bar's account button stays (decisions Mobile (35) and (36)).
+**Status: built on 19 Nov 2026** (decision Mobile (37); `docs/plans/design-integration-plan.md`,
+Part 3, T10–T12). Dropped that morning to recover time, then brought back the same afternoon
+at the developer's request.
+
+Built differently from this suggestion in one way: the round account button in the top bar
+**stays** beside the bar (point 3 under "How it could be built" was not done), and it opens
+the same Account place. The rest follows the suggestion:
+- `StatefulShellRoute.indexedStack`, so the home keeps its scroll position;
+- no back arrow on "My account";
+- Android back on Account goes Home;
+- a rail on the side in landscape;
+- task pages hide the bar.
+
+One correction to "What to watch": a `StatefulShellRoute` does not send back from Account to
+Home by itself. Android closes the app from any branch's first page, so a `PopScope` in the
+frame does it (`core/widgets/app_navigation.dart`).
+
+The text below is the suggestion as written, kept as history.
 
 ## Why consider it
 

@@ -68,23 +68,15 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
       the way the system does. Flutter's `NavigationBar` caps its words at 1.3×
       (`_kMaxLabelTextScaleFactor`); the bar is measured at that cap, and **Q14 (19 Nov):
       keep the cap**, for the bar only.
-  - Next: T13 (plan section T13), docs only:
-    - complete Mobile (36) with T5–T9 (colours, contrasts, Q4–Q8) and mark Mobile (35)'s
-      title rule part 2 replaced;
-    - add a row on the launcher icon approach;
-    - add Mobile (37), the navigation bar: credited to Mapalo's suggestion, Q9–Q14, the
-      contrasts from T10 (plan Part 3, "As built"), and the 1.3× cap as a known limitation;
-      take it off the future improvements list; set
-      `docs/plans/bottom-navigation-suggestion.md`'s status to "built".
-  - Then T14 (the developer's full phone check, including the bar), then the PR.
-  - T13 must also record T9's choices (in `docs/progress.md`) and T8's choices in Mobile (36):
-    - the fields keep their underline shape, now in copper (no outlined box);
-    - the admin "Account requests" cards take the new card style too (it is set in the
-      theme);
-    - unselected chip text is `onSurface`;
-    - the chips' label colour and raised selected chip are set on the chip, because a
-      theme `labelStyle` replaces the chip's text style;
-    - chips reach 56 dp through a `minHeight` box.
+  - T13 (docs) done: `docs/decisions.md` has Mobile (36) completed with the built details,
+    Mobile (35) marked (title rule part 2 replaced, option A extended), Mobile (37) the
+    navigation bar with its 1.3× known limitation, and Mobile (38) the launcher icon; the
+    bar is off the future improvements list; the suggestion file says "built".
+  - Next: T14, the developer's full phone check on the A57 (plan section T14: light and
+    dark, default and largest text, every screen in the list, the bar, the launcher icon,
+    13 screenshots). Then the PR for `design/mapalo-theme`: draft its title and description
+    (what, how tested, known limitations), crediting Mapalo for the theme and the bar idea,
+    and noting that Mobile (36)–(38) hold the developer's changes.
   - Bottom navigation was dropped on the morning of 19 Nov, then brought back the same day
     as Part 3 (above). The schedule is about one day behind plus the bar's 3 h, which the
     developer accepted; see `docs/progress.md`.

@@ -4,7 +4,7 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 19 Nov 2026, after Design integration T12 and its phone check.
+Last updated: 19 Nov 2026, after Design integration T13.
 
 ## (a) Whole project
 
@@ -74,11 +74,11 @@ Last updated: 19 Nov 2026, after Design integration T12 and its phone check.
 ## (b) Today, Wed 18 Nov
 
 1. ✅ Workflow setup
-2. ⬜ Design integration (T1–T12 done; T13 next)
+2. ⬜ Design integration (T1–T13 done; T14, the phone check, next; then the PR)
 3. ~~Bottom navigation~~ (dropped in the morning; back in the afternoon as Design integration Part 3)
 4. ⬜ Hardening
 
-## (c) Current feature: Design integration — 12/14
+## (c) Current feature: Design integration — 13/14
 
 Plan: `docs/plans/design-integration-plan.md`, approved 19 Nov (Q1: scale the role down;
 Q2: 3:1 for the icon; Q3: the `app_theme.dart` comment is fixed in T3).
@@ -102,21 +102,18 @@ Q2: 3:1 for the icon; Q3: the `app_theme.dart` comment is fixed in T3).
 - ✅ T12 Rail when the screen is short, words whole at large text (the bar's words capped at
   1.3× by Flutter, kept: Q14), Android back on Account goes Home, no back arrow on Account;
   checked on the A57
-- ⬜ T13 Docs: Mobile (36) completed, Mobile (37) navigation bar
+- ✅ T13 Docs: Mobile (36) completed, Mobile (35) marked, Mobile (37) navigation bar and its
+  1.3× limitation, Mobile (38) launcher icon; the suggestion file marked "built"
 - ⬜ T14 Phone check on the A57, including the navigation bar
 
 T5–T11 approved 19 Nov (Q4–Q7 as proposed; Q8: server notices in copper too). Part 3
 (T10–T12) added 19 Nov at the developer's request and approved (Q9–Q13 as proposed); the
 old T10 and T11 are now T13 and T14.
 
-For T13, T9's choices to record in Mobile (36): the "Send my work" gap is 16 dp, not the
-plan's 8 dp (the lines already had 8 dp; the developer chose 16 on 19 Nov), and the 32 dp
-above "Send now" is kept; columns drop one at a time (3, then 2, then 1), so landscape with
-large text keeps two columns when the words fit; a label too wide even for one column is
-drawn at a smaller font size and still wraps between words (not a one-line FittedBox).
+T9's and T8's choices, Q4–Q8 and Q9–Q14 were recorded in T13 (Mobile (36), (37), (38)).
 
 **Schedule (19 Nov): behind by about one day.**
-- Still open from Wed 18: Design integration (T10–T14: about 3 h 30 min of Claude Code
-  time and 45 min of phone check) and Hardening. The navigation bar adds about 3 h; the
-  developer accepted that on 19 Nov.
+- Still open from Wed 18: Design integration (only T14 left: 45 min of phone check, then the
+  PR) and Hardening. The navigation bar added about 3 h; the developer accepted that on
+  19 Nov.
 - Thu 19's two features (Consignment check, Transporter handoff) have not started.
