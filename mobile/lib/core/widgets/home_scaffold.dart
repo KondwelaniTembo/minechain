@@ -7,6 +7,7 @@
 import 'package:flutter/material.dart';
 
 import '../text/app_text.dart';
+import '../text/text_width.dart';
 import '../theme/sizes.dart';
 import 'action_tile.dart';
 import 'mine_chain_logo.dart';
@@ -94,12 +95,20 @@ class HomeScaffold extends StatelessWidget {
         // breakpoints). It rebuilds when the phone is rotated.
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final columns = AppSizes.columnsForWidth(constraints.maxWidth);
+            final content = constraints.maxWidth - 2 * _pagePadding;
+            final columns = _columnsFor(context, others, constraints.maxWidth);
+            final rowTileWidth = _tileWidth(content, columns);
 
             final children = <Widget>[
-              for (final action in primary) _tileFor(action),
+              // The main tile spans the whole width.
+              for (final action in primary)
+                _tileFor(action, ActionTile.labelRoomFor(content)),
               for (final row in _rowsOf(others, columns))
-                _TileRow(actions: row, columns: columns),
+                _TileRow(
+                  actions: row,
+                  columns: columns,
+                  labelRoom: ActionTile.labelRoomFor(rowTileWidth),
+                ),
             ];
 
             // SingleChildScrollView lets the content scroll when it is taller
@@ -110,7 +119,7 @@ class HomeScaffold extends StatelessWidget {
             // so a label that wraps onto three lines at large text would not
             // fit and would overflow. Rows that grow with their content cannot.
             return SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSizes.spaceM),
+              padding: const EdgeInsets.all(_pagePadding),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 // The header is outside the gaps: it may be empty (a banner
@@ -134,6 +143,43 @@ class HomeScaffold extends StatelessWidget {
     );
   }
 
+  /// The space around the tiles, and also the gap between two tiles.
+  static const double _pagePadding = AppSizes.spaceM;
+
+  /// How wide one tile is when [columns] tiles share [content] dp.
+  static double _tileWidth(double content, int columns) =>
+      (content - _pagePadding * (columns - 1)) / columns;
+
+  /// The number of columns for the tiles that are not the main one.
+  ///
+  /// The screen width gives the most columns ([AppSizes.columnsForWidth]).
+  /// Fewer are used when a word of some label would not fit in a tile that
+  /// narrow at the phone's text size, because Flutter would then break that
+  /// word in the middle ("My consig / nments"). One column less at a time, so
+  /// a landscape phone with large text goes from 3 to 2 before 1 (Mobile (36),
+  /// Q6): the text keeps the size the user chose.
+  static int _columnsFor(
+    BuildContext context,
+    List<HomeAction> tiles,
+    double maxWidth,
+  ) {
+    final content = maxWidth - 2 * _pagePadding;
+    final widest = tiles.fold(0.0, (most, action) {
+      final width = ActionTile.widestWord(
+        context,
+        action.label,
+        primary: false,
+      );
+      return width > most ? width : most;
+    });
+    var columns = AppSizes.columnsForWidth(maxWidth);
+    while (columns > 1 &&
+        widest > ActionTile.labelRoomFor(_tileWidth(content, columns))) {
+      columns--;
+    }
+    return columns;
+  }
+
   /// Splits [items] into rows of [columns]: 5 items in 2 columns become rows of
   /// 2, 2 and 1.
   static List<List<HomeAction>> _rowsOf(List<HomeAction> items, int columns) {
@@ -154,11 +200,14 @@ class HomeScaffold extends StatelessWidget {
   }
 }
 
-Widget _tileFor(HomeAction action) => ActionTile(
+/// [labelRoom] lets the tile shrink a word that does not fit even one column
+/// (see [ActionTile.labelRoom]).
+Widget _tileFor(HomeAction action, double labelRoom) => ActionTile(
   icon: action.icon,
   label: action.label,
   onTap: action.onTap,
   primary: action.primary,
+  labelRoom: labelRoom,
 );
 
 /// A small rounded pill with the role and the username: "Miner · mutale_banda".
@@ -223,7 +272,7 @@ class _AppBarTitle extends StatelessWidget {
     final title = LayoutBuilder(
       builder: (context, constraints) {
         double width(String value, TextStyle? style) =>
-            _textWidth(context, value, style);
+            drawnTextWidth(context, value, style);
 
         final user = username;
         final roleOnly = width(role, roleStyle) + _pillPadding.horizontal;
@@ -298,42 +347,21 @@ class _AppBarTitle extends StatelessWidget {
       child: title,
     );
   }
-
-  /// How wide [value] is drawn in [style] here, the same way a Text widget
-  /// would draw it.
-  ///
-  /// Text merges its style with the surrounding default style (the app bar
-  /// sets one) and applies the phone's text size and "bold text" settings, so
-  /// the measurement does the same; otherwise it could say "fits" for a word
-  /// that is then drawn wider.
-  static double _textWidth(
-    BuildContext context,
-    String value,
-    TextStyle? style,
-  ) {
-    var effective = DefaultTextStyle.of(context).style.merge(style);
-    if (MediaQuery.boldTextOf(context)) {
-      effective = effective.merge(const TextStyle(fontWeight: FontWeight.bold));
-    }
-    final painter = TextPainter(
-      text: TextSpan(text: value, style: effective),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 1,
-    )..layout();
-    final width = painter.width;
-    // A TextPainter holds native resources until disposed.
-    painter.dispose();
-    return width;
-  }
 }
 
 /// One row of equal-width tiles, all as tall as the tallest one.
 class _TileRow extends StatelessWidget {
-  const _TileRow({required this.actions, required this.columns});
+  const _TileRow({
+    required this.actions,
+    required this.columns,
+    required this.labelRoom,
+  });
 
   final List<HomeAction> actions;
   final int columns;
+
+  /// The width each tile's label has, the same for every tile in the row.
+  final double labelRoom;
 
   @override
   Widget build(BuildContext context) {
@@ -346,13 +374,13 @@ class _TileRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (var i = 0; i < columns; i++) ...[
-            if (i > 0) const SizedBox(width: AppSizes.spaceM),
+            if (i > 0) const SizedBox(width: HomeScaffold._pagePadding),
             // Expanded shares the row's width equally. A last row with fewer
             // tiles keeps empty slots, so its tiles stay the same width as the
             // ones above instead of stretching across.
             Expanded(
               child: i < actions.length
-                  ? _tileFor(actions[i])
+                  ? _tileFor(actions[i], labelRoom)
                   : const SizedBox.shrink(),
             ),
           ],

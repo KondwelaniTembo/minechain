@@ -47,7 +47,9 @@ class SendWorkScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _Counts(counts),
-                  const SizedBox(height: AppSizes.spaceL),
+                  // 32 dp, the same as before the lines lost their own 8 dp
+                  // below (the last one's 8 plus 24 here).
+                  const SizedBox(height: AppSizes.spaceXl),
                   FilledButton.icon(
                     onPressed: status.running
                         ? null
@@ -103,18 +105,17 @@ class _Line extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = error ? Theme.of(context).colorScheme.error : null;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSizes.spaceS),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ExcludeSemantics(child: Icon(icon, color: color)),
-          const SizedBox(width: AppSizes.spaceS),
-          Expanded(
-            child: Text(text, style: TextStyle(color: color)),
-          ),
-        ],
-      ),
+    // No space below: _Counts puts the gaps between lines, so a line shown
+    // on its own (the counts cannot be read yet) has none.
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ExcludeSemantics(child: Icon(icon, color: color)),
+        const SizedBox(width: AppSizes.spaceS),
+        Expanded(
+          child: Text(text, style: TextStyle(color: color)),
+        ),
+      ],
     );
   }
 }
@@ -123,38 +124,48 @@ class _Counts extends StatelessWidget {
   const _Counts(this.counts);
   final AsyncValue<StepCounts> counts;
 
+  static const double lineGap = AppSizes.spaceM;
+
   @override
   Widget build(BuildContext context) {
     // While the counts are read again after a send, the old ones stay.
     if (counts.hasValue) {
       final c = counts.requireValue;
+      final lines = <Widget>[
+        _Line(
+          c.waiting > 0 ? Icons.phone_android : Icons.check_circle,
+          c.waiting > 0
+              ? AppText.waitingOnPhone(c.waiting)
+              : AppText.nothingWaiting,
+        ),
+        _Line(Icons.cloud_done, AppText.countSentToServer(c.sentToServer)),
+        // Indented: part of the line above, not more records.
+        Padding(
+          padding: const EdgeInsetsDirectional.only(start: AppSizes.spaceL),
+          child: _Line(
+            Icons.policy,
+            AppText.countOfWhichUnderReview(c.underReview),
+          ),
+        ),
+        _Line(
+          Icons.report_problem,
+          AppText.countNeedsAttention(c.needsAttention),
+          error: c.needsAttention > 0,
+        ),
+        if (c.stuck > 0)
+          const _Line(Icons.schedule, AppText.stuckDeferred, error: true),
+      ];
       return Semantics(
         liveRegion: true,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Line(
-              c.waiting > 0 ? Icons.phone_android : Icons.check_circle,
-              c.waiting > 0
-                  ? AppText.waitingOnPhone(c.waiting)
-                  : AppText.nothingWaiting,
-            ),
-            _Line(Icons.cloud_done, AppText.countSentToServer(c.sentToServer)),
-            // Indented: part of the line above, not more records.
-            Padding(
-              padding: const EdgeInsetsDirectional.only(start: AppSizes.spaceL),
-              child: _Line(
-                Icons.policy,
-                AppText.countOfWhichUnderReview(c.underReview),
-              ),
-            ),
-            _Line(
-              Icons.report_problem,
-              AppText.countNeedsAttention(c.needsAttention),
-              error: c.needsAttention > 0,
-            ),
-            if (c.stuck > 0)
-              const _Line(Icons.schedule, AppText.stuckDeferred, error: true),
+            for (var i = 0; i < lines.length; i++) ...[
+              // 16 dp between lines, so each count reads as its own line
+              // on the phone (Mobile (36), T9; it was 8 dp).
+              if (i > 0) const SizedBox(height: lineGap),
+              lines[i],
+            ],
           ],
         ),
       );

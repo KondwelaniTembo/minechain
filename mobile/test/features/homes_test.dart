@@ -20,6 +20,7 @@ import 'package:minechain/features/officer/presentation/officer_home_screen.dart
 import 'package:minechain/features/transporter/presentation/transporter_home_screen.dart';
 
 import '../fakes/fake_controllers.dart';
+import '../fakes/word_breaks.dart';
 
 /// Each home: its role, screen, title and tiles (the main tile first).
 final homes = <(Role, Widget, String, List<String>)>[
@@ -180,6 +181,31 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text(AppText.passwordPromptExplanation), findsOneWidget);
       });
+
+      // T9.b (Mobile (36), Q6): no tile label of this home is broken inside a
+      // word, the old "My consig / nments".
+      for (final (name, size) in [
+        ('portrait', const Size(360, 640)),
+        ('landscape', const Size(640, 360)),
+      ]) {
+        testWidgets('text 2.0, $name: every tile label wraps only between '
+            'words', (tester) async {
+          await pumpHome(
+            tester,
+            screen,
+            signedInAs(role),
+            size: size,
+            textScale: 2.0,
+          );
+          expect(tester.takeException(), isNull);
+
+          for (final label in labels) {
+            await tester.ensureVisible(tile(label));
+            await tester.pumpAndSettle();
+            expect(lineEndsInsideWords(tester, find.text(label)), isEmpty);
+          }
+        });
+      }
 
       // Item 12 of Mobile (36): at the largest text the name used to vanish
       // from the admin's app bar. It now lives with the logo below the tiles.

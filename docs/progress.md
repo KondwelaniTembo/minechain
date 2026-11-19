@@ -4,7 +4,7 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 19 Nov 2026, after Design integration T8.
+Last updated: 19 Nov 2026, after Design integration T9.
 
 ## (a) Whole project
 
@@ -75,11 +75,11 @@ Last updated: 19 Nov 2026, after Design integration T8.
 ## (b) Today, Wed 18 Nov
 
 1. ✅ Workflow setup
-2. ⬜ Design integration (T1–T8 done; T9 next)
+2. ⬜ Design integration (T1–T9 done; T10 next)
 3. ~~Bottom navigation~~ (dropped)
 4. ⬜ Hardening
 
-## (c) Current feature: Design integration — 8/11
+## (c) Current feature: Design integration — 9/11
 
 Plan: `docs/plans/design-integration-plan.md`, approved 19 Nov (Q1: scale the role down;
 Q2: 3:1 for the icon; Q3: the `app_theme.dart` comment is fixed in T3).
@@ -95,11 +95,18 @@ Q2: 3:1 for the icon; Q3: the `app_theme.dart` comment is fixed in T3).
 - ✅ T6 Logo and brand block under the tiles; name out of the app bar; splash and login
 - ✅ T7 Adaptive launcher icon from the same geometry (phone check of the icon in T11)
 - ✅ T8 Copper fields (underline kept), sand cards with a copper outline, outlined chips at 56 dp
-- ⬜ T9 Stronger tile shadows, no mid-word breaks, spacing on "Send my work"
+- ✅ T9 Stronger tile shadows (5 and 8), no mid-word breaks (fewer columns first, then a
+  smaller label), 16 dp between the "Send my work" lines
 - ⬜ T10 Docs: Mobile (36) completed
 - ⬜ T11 Phone check on the A57
 
 T5–T11 approved 19 Nov (Q4–Q7 as proposed; Q8: server notices in copper too).
+
+For T10, T9's choices to record in Mobile (36): the "Send my work" gap is 16 dp, not the
+plan's 8 dp (the lines already had 8 dp; the developer chose 16 on 19 Nov), and the 32 dp
+above "Send now" is kept; columns drop one at a time (3, then 2, then 1), so landscape with
+large text keeps two columns when the words fit; a label too wide even for one column is
+drawn at a smaller font size and still wraps between words (not a one-line FittedBox).
 
 **Schedule (19 Nov): behind by about one day.**
 - Still open from Wed 18: Design integration (T5–T11, about 5 h 20 min of Claude Code time),
