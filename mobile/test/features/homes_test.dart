@@ -9,6 +9,7 @@ import 'package:minechain/core/text/app_text.dart';
 import 'package:minechain/core/theme/app_theme.dart';
 import 'package:minechain/core/theme/sizes.dart';
 import 'package:minechain/core/widgets/action_tile.dart';
+import 'package:minechain/core/widgets/mine_chain_logo.dart';
 import 'package:minechain/core/widgets/pill_button.dart';
 import 'package:minechain/features/admin/presentation/admin_home_screen.dart';
 import 'package:minechain/features/auth/domain/auth_state.dart';
@@ -179,6 +180,38 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text(AppText.passwordPromptExplanation), findsOneWidget);
       });
+
+      // Item 12 of Mobile (36): at the largest text the name used to vanish
+      // from the admin's app bar. It now lives with the logo below the tiles.
+      for (final (name, size) in [
+        ('portrait', const Size(360, 640)),
+        ('landscape', const Size(640, 360)),
+      ]) {
+        testWidgets('text 2.0, $name: the logo and "MineChain" are on the '
+            'home, below the tiles', (tester) async {
+          await pumpHome(
+            tester,
+            screen,
+            signedInAs(role),
+            size: size,
+            textScale: 2.0,
+          );
+
+          final brand = find.byType(BrandBlock);
+          await tester.ensureVisible(brand);
+          await tester.pump();
+          expect(tester.takeException(), isNull);
+          expect(find.byType(MineChainLogo), findsOneWidget);
+          expect(
+            find.descendant(of: brand, matching: find.text(AppText.appTitle)),
+            findsOneWidget,
+          );
+          expect(
+            tester.getRect(brand).top,
+            greaterThan(tester.getRect(tile(labels.last)).bottom),
+          );
+        });
+      }
 
       // Wide enough that the test font's wide letters fit; the narrow cases
       // are in home_scaffold_test.dart.

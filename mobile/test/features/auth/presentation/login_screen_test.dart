@@ -11,6 +11,7 @@ import 'package:minechain/core/errors/app_failure.dart';
 import 'package:minechain/core/riverpod/no_retry.dart';
 import 'package:minechain/core/text/app_text.dart';
 import 'package:minechain/core/theme/app_theme.dart';
+import 'package:minechain/core/widgets/mine_chain_logo.dart';
 import 'package:minechain/features/auth/domain/auth_state.dart';
 import 'package:minechain/features/auth/presentation/auth_controller.dart';
 import 'package:minechain/features/auth/presentation/login_screen.dart';
@@ -66,6 +67,18 @@ void main() {
   testWidgets('checks the server when it opens', (tester) async {
     await pumpLogin(tester);
     expect(server.checks, 1);
+  });
+
+  // Mobile (36): the logo above the name, and the form still fits.
+  testWidgets('the logo and the name are above the fields', (tester) async {
+    await pumpLogin(tester);
+
+    final brand = find.byType(BrandBlock);
+    expect(find.byType(MineChainLogo), findsOneWidget);
+    expect(
+      tester.getRect(brand).bottom,
+      lessThanOrEqualTo(tester.getRect(usernameField).top),
+    );
   });
 
   testWidgets('empty fields: nothing is sent, both fields say what is missing',

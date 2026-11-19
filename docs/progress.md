@@ -4,7 +4,7 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 19 Nov 2026, after Design integration T5.
+Last updated: 19 Nov 2026, after Design integration T6.
 
 ## (a) Whole project
 
@@ -75,11 +75,11 @@ Last updated: 19 Nov 2026, after Design integration T5.
 ## (b) Today, Wed 18 Nov
 
 1. ✅ Workflow setup
-2. ⬜ Design integration (T1–T5 done; T6 next)
+2. ⬜ Design integration (T1–T6 done; T7 next)
 3. ~~Bottom navigation~~ (dropped)
 4. ⬜ Hardening
 
-## (c) Current feature: Design integration — 5/11
+## (c) Current feature: Design integration — 6/11
 
 Plan: `docs/plans/design-integration-plan.md`, approved 19 Nov (Q1: scale the role down;
 Q2: 3:1 for the icon; Q3: the `app_theme.dart` comment is fixed in T3).
@@ -92,7 +92,7 @@ Q2: 3:1 for the icon; Q3: the `app_theme.dart` comment is fixed in T3).
   requested, recorded as Mobile (36))
 - ✅ T5 Home header: copper password and server notices with a pill button; role pill with
   the username
-- ⬜ T6 Logo and brand block under the tiles; name out of the app bar; splash and login
+- ✅ T6 Logo and brand block under the tiles; name out of the app bar; splash and login
 - ⬜ T7 Adaptive launcher icon from the same geometry
 - ⬜ T8 Copper login fields, sand cards with a copper outline, outlined chips
 - ⬜ T9 Stronger tile shadows, no mid-word breaks, spacing on "Send my work"

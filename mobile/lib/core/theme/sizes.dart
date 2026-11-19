@@ -31,6 +31,11 @@ abstract final class AppSizes {
   static const double statusIcon = 28;
   static const double appBarIcon = 32;
 
+  /// The MineChain logo below a home's tiles. The login and splash screens
+  /// use [logoLarge].
+  static const double logo = 72;
+  static const double logoLarge = 96;
+
   // ---- Spacing ----
   // One small scale, so gaps line up across screens instead of being chosen
   // one by one.

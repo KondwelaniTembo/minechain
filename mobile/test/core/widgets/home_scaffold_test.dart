@@ -10,6 +10,7 @@ import 'package:minechain/core/theme/app_theme.dart';
 import 'package:minechain/core/theme/sizes.dart';
 import 'package:minechain/core/widgets/action_tile.dart';
 import 'package:minechain/core/widgets/home_scaffold.dart';
+import 'package:minechain/core/widgets/mine_chain_logo.dart';
 
 const portrait = Size(360, 640);
 const landscape = Size(640, 360);
@@ -35,7 +36,9 @@ Future<void> pumpHome(
   WidgetTester tester, {
   required Size size,
   double textScale = 1.0,
-  String title = 'MineChain',
+  // Not "MineChain": that name now belongs to the brand block below the
+  // tiles, and a role with the same text would confuse the finders.
+  String title = 'Miner',
   String? username,
 }) async {
   // The test screen is set in physical pixels; 3 pixels per dp is typical of
@@ -64,6 +67,9 @@ Finder tileNamed(String label) =>
     find.ancestor(of: find.text(label), matching: find.byType(ActionTile));
 
 Finder get accountButton => find.widgetWithIcon(IconButton, Icons.person);
+
+Finder get nameInAppBar =>
+    find.descendant(of: find.byType(AppBar), matching: find.text('MineChain'));
 
 /// Whether the text found by [finder] is drawn whole: its full one-line width
 /// fits inside the width it was given, so nothing was cut or replaced by "…".
@@ -148,15 +154,18 @@ void main() {
   });
 
   // The test font draws every letter as a square as wide as the font size, so
-  // words are much wider here than in Roboto on a phone. "MineChain" is often
-  // left out at 360 dp in these tests; they check the rule, and the phone check
-  // shows the real look.
+  // words are much wider here than in Roboto on a phone. The tests check the
+  // rule; the phone check shows the real look.
+  //
+  // Since Mobile (36), "MineChain" is no longer in the app bar at all: it sits
+  // with the logo below the tiles. These tests used to allow it in the bar
+  // when it fitted whole; they now require it to be absent from the bar.
   group('app bar title', () {
     // The two longest role words (AppText.transporterTitle, adminTitle).
     for (final role in ['Transporter', 'Administrator']) {
       for (final textScale in [1.0, 2.0]) {
         testWidgets('$role at 360 x 640, text scale $textScale: the role is '
-            'whole, "MineChain" is whole or absent', (tester) async {
+            'whole, and "MineChain" is not in the app bar', (tester) async {
           await pumpHome(
             tester,
             size: portrait,
@@ -167,15 +176,7 @@ void main() {
 
           expect(find.text(role), findsOneWidget);
           expect(isWhole(tester, find.text(role)), isTrue);
-
-          final name = find.text('MineChain');
-          if (name.evaluate().isNotEmpty) {
-            expect(isWhole(tester, name), isTrue);
-            expect(
-              tester.getRect(name).right,
-              lessThanOrEqualTo(tester.getRect(find.text(role)).left),
-            );
-          }
+          expect(nameInAppBar, findsNothing);
 
           // Whole, and also inside the bar: not under the account button and
           // not past the screen's edge.
@@ -189,8 +190,8 @@ void main() {
       }
     }
 
-    testWidgets('with room to spare, both "MineChain" and the role are shown '
-        'whole', (tester) async {
+    testWidgets('even with room to spare, the app bar shows only the role; '
+        '"MineChain" is below the tiles', (tester) async {
       await pumpHome(
         tester,
         size: const Size(900, 640),
@@ -198,10 +199,55 @@ void main() {
       );
       expect(tester.takeException(), isNull);
 
-      expect(find.text('MineChain'), findsOneWidget);
-      expect(isWhole(tester, find.text('MineChain')), isTrue);
       expect(isWhole(tester, find.text('Administrator')), isTrue);
+      expect(nameInAppBar, findsNothing);
+      expect(
+        find.descendant(
+          of: find.byType(BrandBlock),
+          matching: find.text('MineChain'),
+        ),
+        findsOneWidget,
+      );
     });
+  });
+
+  // The logo and the name below the tiles (Mobile (36), items 7 and 12).
+  group('brand block', () {
+    for (final (name, size) in [
+      ('portrait', portrait),
+      ('landscape', landscape),
+    ]) {
+      for (final textScale in [1.0, 2.0]) {
+        testWidgets('$name, text $textScale: below the last tile, reachable, '
+            'whole', (tester) async {
+          await pumpHome(tester, size: size, textScale: textScale);
+
+          final brand = find.byType(BrandBlock);
+          await tester.ensureVisible(brand);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+
+          expect(
+            find.descendant(of: brand, matching: find.byType(MineChainLogo)),
+            findsOneWidget,
+          );
+          final brandName = find.descendant(
+            of: brand,
+            matching: find.text('MineChain'),
+          );
+          expect(isWhole(tester, brandName), isTrue);
+
+          final rect = tester.getRect(brand);
+          expect(rect.left, greaterThanOrEqualTo(0));
+          expect(rect.right, lessThanOrEqualTo(size.width));
+          expect(rect.bottom, lessThanOrEqualTo(size.height));
+          expect(
+            rect.top,
+            greaterThan(tester.getRect(tileNamed('Reports')).bottom),
+          );
+        });
+      }
+    }
   });
 
   // The pill shows "role · username" (Mobile (36)). The role keeps every rule

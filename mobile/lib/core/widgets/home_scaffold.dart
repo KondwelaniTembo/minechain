@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../text/app_text.dart';
 import '../theme/sizes.dart';
 import 'action_tile.dart';
+import 'mine_chain_logo.dart';
 
 /// One tile on a home screen, described as data. The home screen lists its
 /// actions; HomeScaffold decides how to lay them out.
@@ -64,8 +65,8 @@ class HomeScaffold extends StatelessWidget {
     // body for the rest.
     return Scaffold(
       appBar: AppBar(
-        // The app's name first, then the role and username as a small label,
-        // so the user always sees which account type and whose account this is.
+        // The role and username as a small label, so the user always sees
+        // which account type and whose account this is.
         title: _AppBarTitle(role: title, username: username),
         // `actions` here are AppBar's buttons on the right (not our tiles).
         actions: [
@@ -116,7 +117,15 @@ class HomeScaffold extends StatelessWidget {
                 // with nothing to say), and an empty header must not leave a
                 // gap. A header that shows something adds its own spacing.
                 // `?header` adds it only if it is not null.
-                children: [?header, ..._withGaps(children)],
+                children: [
+                  ?header,
+                  ..._withGaps(children),
+                  // The logo and the name, directly under the tiles (Mobile
+                  // (36), Q7). Inside the scrolling column, so at large text
+                  // it scrolls with the tiles and is never cut or pinned.
+                  const SizedBox(height: AppSizes.spaceXl),
+                  const Center(child: BrandBlock()),
+                ],
               ),
             );
           },
@@ -152,8 +161,10 @@ Widget _tileFor(HomeAction action) => ActionTile(
   primary: action.primary,
 );
 
-/// "MineChain" in bold, then a small rounded pill with the role and the
-/// username: "Miner · mutale_banda".
+/// A small rounded pill with the role and the username: "Miner · mutale_banda".
+///
+/// "MineChain" is not here: it sits with the logo below the tiles (decision
+/// Mobile (36)), where it is never squeezed out by a large text size.
 ///
 /// One line, not two stacked: an app bar has a fixed height, and two lines
 /// would overflow it at the largest text size.
@@ -164,9 +175,7 @@ Widget _tileFor(HomeAction action) => ActionTile(
 ///    account they are in;
 /// 2. the username shrinks and ends in "…", and is left out when fewer than
 ///    [_minUsernameChars] characters would show (never "m…");
-/// 3. "MineChain" is shown only if it fits whole beside the full pill, never
-///    as "Mine…";
-/// 4. if even the role alone is too wide, it is scaled down to fit rather than
+/// 3. if even the role alone is too wide, it is scaled down to fit rather than
 ///    cut. The phone's text size is never clamped anywhere else.
 class _AppBarTitle extends StatelessWidget {
   const _AppBarTitle({required this.role, this.username});
@@ -186,10 +195,6 @@ class _AppBarTitle extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
 
-    final nameStyle = text.titleLarge?.copyWith(
-      fontWeight: FontWeight.w800,
-      color: scheme.primary,
-    );
     final roleStyle = text.labelLarge?.copyWith(
       color: scheme.onPrimaryContainer,
       fontWeight: FontWeight.w600,
@@ -227,11 +232,7 @@ class _AppBarTitle extends StatelessWidget {
             : roleOnly +
                   width(AppText.pillSeparator, userStyle) +
                   width(user, userStyle);
-        final nameWidth = width(AppText.appTitle, nameStyle);
-        final showName =
-            nameWidth + AppSizes.spaceS + withUser <= constraints.maxWidth;
-        final room =
-            constraints.maxWidth - (showName ? nameWidth + AppSizes.spaceS : 0);
+        final room = constraints.maxWidth;
 
         // The narrowest pill that still shows some of the username: the role,
         // the separator and the first few characters with "…".
@@ -250,15 +251,6 @@ class _AppBarTitle extends StatelessWidget {
         return Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (showName) ...[
-              Text(
-                AppText.appTitle,
-                style: nameStyle,
-                maxLines: 1,
-                softWrap: false,
-              ),
-              const SizedBox(width: AppSizes.spaceS),
-            ],
             if (showUser)
               // Flexible hands the pill the width that is left; inside it,
               // only the username is Flexible, so it is the part that ends

@@ -11,6 +11,7 @@ import 'package:minechain/core/riverpod/no_retry.dart';
 import 'package:minechain/core/router/app_router.dart';
 import 'package:minechain/core/router/routes.dart';
 import 'package:minechain/core/text/app_text.dart';
+import 'package:minechain/core/widgets/mine_chain_logo.dart';
 import 'package:minechain/features/auth/domain/auth_state.dart';
 import 'package:minechain/features/auth/domain/user.dart';
 import 'package:minechain/main.dart';
@@ -108,5 +109,7 @@ void main() {
     await tester.pump();
     expect(find.byType(CircularProgressIndicator), findsOneWidget);
     expect(find.text(AppText.appTitle), findsOneWidget);
+    // Mobile (36): the logo above the name.
+    expect(find.byType(MineChainLogo), findsOneWidget);
   });
 }

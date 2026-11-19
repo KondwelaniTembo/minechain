@@ -36,8 +36,25 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 18 Nov 2026. Read this first in a new session, then `docs/progress.md` (the day
+Updated 19 Nov 2026. Read this first in a new session, then `docs/progress.md` (the day
 plan and the current feature's subtasks), then `docs/decisions.md`.
+
+- **Now: Design integration on `design/mapalo-theme`** (`docs/plans/design-integration-plan.md`).
+  - T1–T6 are done (T1–T5 committed and pushed; T6 waiting for the developer's commit).
+  - Next: T7, the adaptive launcher icon written from `core/brand/logo_geometry.dart`.
+    It needs no package, and approving the plan approved only three new resource files
+    under `mobile/android`.
+  - Then T8 (cards, fields, chips), T9 (tiles, no mid-word breaks, spacing), T10 (docs),
+    and T11, the developer's phone check. After that, the PR.
+  - Bottom navigation was dropped on 19 Nov. The schedule is about one day behind; see
+    `docs/progress.md`.
+  - Rules learned in this feature:
+    - run `dart format` only on files you changed, never the whole of `lib/`;
+    - a test whose behaviour changed by decision says so in a comment and in
+      `docs/testing-log.md`;
+    - drafted commit messages have no Co-Authored-By line;
+    - give the developer ready-to-run `git add` / `git commit -m` commands with the commit
+      message.
 
 - **Mobile app, miner module built** (`docs/plans/miner-registration-plan.md`) on
   `feature/miner-registration`. Mobile foundation (login, homes, pinned TLS 1.3, secure

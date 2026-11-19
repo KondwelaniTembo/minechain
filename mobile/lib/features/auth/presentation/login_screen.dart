@@ -23,6 +23,7 @@ import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/sizes.dart';
 import '../../../core/widgets/form_message.dart';
+import '../../../core/widgets/mine_chain_logo.dart';
 import '../../../core/widgets/server_status_banner.dart';
 import '../domain/auth_state.dart';
 import 'auth_controller.dart';
@@ -163,15 +164,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      AppText.appTitle,
-                      textAlign: TextAlign.center,
-                      // The name is the only branding the screen has, so it is
-                      // large, heavy and copper.
-                      style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
+                    // The logo and the name are the screen's only branding, so
+                    // they are large, heavy and copper (Mobile (36)).
+                    BrandBlock(
+                      logoSize: AppSizes.logoLarge,
+                      nameStyle: Theme.of(context).textTheme.headlineLarge,
                     ),
                     const SizedBox(height: AppSizes.spaceL),
                     const ServerStatusBanner(),
