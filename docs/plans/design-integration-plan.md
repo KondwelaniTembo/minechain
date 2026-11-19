@@ -540,3 +540,7 @@ Q9–Q13 were answered on 19 Nov: all as proposed.
   purpose so the bar stays smaller than the page. The other way: replace Flutter's
   destinations with our own widgets that follow the full size (about 45 min more, and a much
   taller bar at the largest text).
+
+Q14 was answered on 19 Nov: keep Flutter's 1.3× cap, for the bar only. T13 records it in
+Mobile (37) as a known limitation. The developer checked T10–T12 on the A57 the same day:
+fine.

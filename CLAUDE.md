@@ -40,8 +40,9 @@ Updated 19 Nov 2026. Read this first in a new session, then `docs/progress.md` (
 plan and the current feature's subtasks), then `docs/decisions.md`.
 
 - **Now: Design integration on `design/mapalo-theme`** (`docs/plans/design-integration-plan.md`).
-  - T1–T11 are done, committed and pushed (T9 `4936a1b`, T10 `04bb56e`, T11 `fefff94`;
-    tests 1400 passed, 1 skipped).
+  - T1–T12 are done, committed and pushed (T9 `4936a1b`, T10 `04bb56e`, T11 `fefff94`,
+    T12 `63b41a9`; tests 1430 passed, 1 skipped). The developer checked T10–T12 on the A57
+    on 19 Nov: fine.
     - T7: the launcher icon is written by `mobile/tool/make_launcher_icon.dart`
       (`dart run tool/make_launcher_icon.dart` from `mobile/`). `launcher_icon_test.dart`
       fails if the committed XML drifts from `logo_geometry.dart`. The developer has
@@ -60,12 +61,22 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
       Account branch = `/account`); task pages stay top-level, so they cover the bar; the
       plain bar is `core/widgets/app_navigation.dart`; the homes' account button uses
       `go`, not `push`.
-  - Next: T12 (plan section T12): `NavigationRail` in landscape (height under 480 dp); the
-    bar grows with large text; Android back on Account goes Home (`PopScope`); no back arrow
-    on "My account" (Q10, `account_screen_test.dart` changes by decision); TalkBack tab
-    names; 360×640 at text 2.0 tests.
-  - Then T13 (docs: Mobile (36) completed, Mobile (37) the bar) and T14 (the developer's
-    phone check), then the PR.
+    - T12: `NavigationRail` when the height is under 480 dp (`AppSizes.compactHeight`),
+      as wide as its widest word up to 144 dp, past which its words shrink just enough;
+      Android back on Account goes Home (`PopScope` in the shell), on Home it closes the app;
+      no back arrow on "My account" (Q10); `test/fakes/android_back.dart` presses back
+      the way the system does. Flutter's `NavigationBar` caps its words at 1.3×
+      (`_kMaxLabelTextScaleFactor`); the bar is measured at that cap, and **Q14 (19 Nov):
+      keep the cap**, for the bar only.
+  - Next: T13 (plan section T13), docs only:
+    - complete Mobile (36) with T5–T9 (colours, contrasts, Q4–Q8) and mark Mobile (35)'s
+      title rule part 2 replaced;
+    - add a row on the launcher icon approach;
+    - add Mobile (37), the navigation bar: credited to Mapalo's suggestion, Q9–Q14, the
+      contrasts from T10 (plan Part 3, "As built"), and the 1.3× cap as a known limitation;
+      take it off the future improvements list; set
+      `docs/plans/bottom-navigation-suggestion.md`'s status to "built".
+  - Then T14 (the developer's full phone check, including the bar), then the PR.
   - T13 must also record T9's choices (in `docs/progress.md`) and T8's choices in Mobile (36):
     - the fields keep their underline shape, now in copper (no outlined box);
     - the admin "Account requests" cards take the new card style too (it is set in the
