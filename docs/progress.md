@@ -37,7 +37,7 @@ Last updated: 19 Nov 2026, after the "My account" back arrow (Mobile (39)), on
 
 ### Thu 19 Nov
 
-- ⬜ Consignment check (2/7, plan approved 19 Nov): scan and verify, with the provenance
+- ⬜ Consignment check (3/7, plan approved 19 Nov): scan and verify, with the provenance
   view (FR-04, Scope (9)), shared by transporter, buyer and officer
 - ⬜ Transporter handoff: scan, weigh, GPS, sign, cache, sync (FR-01, FR-02, FR-07)
 
@@ -82,7 +82,7 @@ Last updated: 19 Nov 2026, after the "My account" back arrow (Mobile (39)), on
 5. ✅ "My account" back arrow (Mobile (39), `fix/account-back-arrow`): tested, A57 fine;
    PR left
 
-## (c) Current feature: Consignment check — 2/7
+## (c) Current feature: Consignment check — 3/7
 
 Plan: `docs/plans/consignment-check-plan.md`, approved 19 Nov (Q1–Q5, Q7 as proposed; Q6
 before T6). Branch
@@ -92,7 +92,8 @@ before T6). Branch
   worst first; 55 new tests
 - ✅ T2 Data: `ConsignmentCheckApi.byQr` and the repository; refusals pass through unchanged,
   an unreadable 200 is `BadResponse`, no retry; 13 new tests
-- ⬜ T3 Scan step, three paths, the home tiles wired
+- ✅ T3 Scan step, three paths, the home tiles wired; one request per scan, the failure
+  sentences and buttons; 26 new tests
 - ⬜ T4 Result page: banner, consignment, step cards
 - ⬜ T5 Role differences: blind transporter, officer extras, owning buyer
 - ⬜ T6 Phone check on the A57 (the developer)

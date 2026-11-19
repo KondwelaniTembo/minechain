@@ -81,7 +81,7 @@ class FakeCheckServer {
 
   /// The answer to each request. Replace it to test a refusal or a
   /// different consignment.
-  late CheckAnswer answer = _knownOnly;
+  late CheckAnswer answer = knownOnly;
 
   /// When set, every answer waits for it.
   Completer<void>? hold;
@@ -96,7 +96,8 @@ class FakeCheckServer {
   /// The code the app asked for, decoded from the last path segment.
   String get lastQrCode => requests.last.url.pathSegments.last;
 
-  static http.Response _knownOnly(http.Request request) {
+  /// The default answer: the known consignment, 404 for any other code.
+  static http.Response knownOnly(http.Request request) {
     final segments = request.url.pathSegments;
     if (segments.length == 3 &&
         segments[0] == 'consignments' &&

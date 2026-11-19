@@ -27,6 +27,7 @@ import '../../features/officer/presentation/officer_home_screen.dart';
 import '../../features/registration/presentation/register_consignment_screen.dart';
 import '../../features/sync/presentation/send_work_screen.dart';
 import '../../features/transporter/presentation/transporter_home_screen.dart';
+import '../../features/verification/presentation/consignment_check_screen.dart';
 import '../widgets/app_navigation.dart';
 import 'redirect.dart';
 import 'routes.dart';
@@ -145,6 +146,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.minerConsignments,
         builder: (context, state) => const MyConsignmentsScreen(),
       ),
+      // One screen under three homes (consignment check plan, Q3), so redirect
+      // rule 4 keeps each path for its own role. The homes open it with
+      // push(), so the back arrow returns there.
+      for (final path in [
+        AppRoutes.transporterCheck,
+        AppRoutes.buyerCheck,
+        AppRoutes.officerCheck,
+      ])
+        GoRoute(
+          path: path,
+          builder: (context, state) => const ConsignmentCheckScreen(),
+        ),
       // Under /admin, so redirect rule 4 sends every other role home. The
       // admin home opens it with push(), so the back arrow returns there.
       GoRoute(

@@ -549,6 +549,28 @@ abstract final class AppText {
       'The server is running but not ready. Try again in a minute.';
   static const String tryAgain = 'Try again';
 
+  // ---- Check a consignment (consignment check plan) ----
+  static const String checkScanHint =
+      "Hold the QR code on the bag's custody record inside the camera view.";
+  static String checkingRecord(String code) =>
+      'Checking $code against the blockchain…';
+  static const String checkingTakesTime =
+      'This can take a few seconds on a slow network.';
+  static const String scanAgain = 'Scan again';
+  static const String checkNeedsPassword =
+      'Your session has ended. Enter your password to check this consignment.';
+
+  /// A 429's Retry-After, rounded up to whole minutes.
+  static String tryAgainIn(Duration wait) {
+    final minutes = (wait.inSeconds / 60).ceil().clamp(1, 1440);
+    return minutes == 1
+        ? 'You can scan again in about 1 minute.'
+        : 'You can scan again in about $minutes minutes.';
+  }
+
+  /// Until the result page is built (T4): which record was checked.
+  static String checkedRecord(String code) => 'Custody record $code checked.';
+
   // ---- Problems with the server's answer (core/errors/failure_text.dart) ----
 
   static const String invalidCredentials = 'Wrong username or password.';

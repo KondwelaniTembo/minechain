@@ -1,7 +1,7 @@
 # Consignment check plan
 
 Status: **approved 19 Nov 2026, Q1–Q5 and Q7 as proposed; Q6 (demo accounts) asked again
-before T6.** T1–T2 done.
+before T6.** T1–T3 done.
 
 Branch: `feature/consignment-check`, created by the developer from `main` after PR #14.
 
@@ -107,11 +107,15 @@ check in words. Shown only when the answer has it:
   `ApiClient.get(['consignments', 'by-qr', code])` (path segments, so any `/` is sent as
   `%2F`, as api.md requires); provider wiring. Tests with the fake HTTP client: 200, 404,
   429 with `Retry-After`, 403, a malformed body, and that the token is sent.
-- ⬜ **T3 Scan step and routes** (about 60 min). `/transporter/check`, `/buyer/check`,
+- ✅ **T3 Scan step and routes** (about 60 min). `/transporter/check`, `/buyer/check`,
   `/officer/check`; the three home tiles go there (no "Coming soon"); the scanner with the
   custody record ID rule, one request per scan (a second read of the same code while busy is
   ignored), busy state, the error sentences of §4, "Scan again"; Q1's typed entry if chosen.
   Widget tests with the fake scanner; router tests that a miner or admin cannot open the paths.
+  As built: "Try again" only where the same code can get a different answer (no network,
+  a timeout, a 5xx, an unreadable answer), never after a 4xx; a 429's `Retry-After` is shown
+  in whole minutes, rounded up. Until T4, a finished check says only which record was
+  checked.
 - ⬜ **T4 Result page** (about 60 min). Banner, consignment block and step cards (§4) for
   the common view (any buyer in transit, a transporter who has handed off). Widget tests per
   verdict; text 2.0 in portrait and landscape; light and dark contrast of the banner colours.

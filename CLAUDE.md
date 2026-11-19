@@ -80,7 +80,7 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
     are all done.
   - Now: Consignment check (Thu 19) on `feature/consignment-check`,
     `docs/plans/consignment-check-plan.md` (approved; Q6 demo accounts asked before T6).
-    T1 domain, T2 data done (1506 tests passed). Next: T3 scan step and routes.
+    T1 domain, T2 data, T3 scan step done (1532 tests passed). Next: T4 result page.
 
 - **Design integration merged as PR #11** (`d86e33c`, 19 Nov;
   `docs/plans/design-integration-plan.md`, T1–T14). Mapalo Maseko's copper theme, the home

@@ -38,6 +38,13 @@ abstract final class AppRoutes {
   /// "My consignments" (plan M7). Under /miner like the screens above.
   static const String minerConsignments = '/miner/consignments';
 
+  /// "Check a consignment" (consignment check plan, Q3: one screen, three
+  /// paths). Each is under its role's home, so the redirect's role rule
+  /// keeps miners and administrators out with no new rule.
+  static const String transporterCheck = '/transporter/check';
+  static const String buyerCheck = '/buyer/check';
+  static const String officerCheck = '/officer/check';
+
   /// The administrator's list of pending account requests. Under /admin, so
   /// the redirect's role rule keeps it for administrators only.
   static const String adminRequests = '/admin/requests';
