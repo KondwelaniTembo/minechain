@@ -5,6 +5,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:minechain/core/theme/app_theme.dart';
 
@@ -208,6 +209,146 @@ void main() {
           expect(chip.shadowColor, AppTheme.shadow);
         },
       );
+    });
+
+    // T10 (Mobile (37)): the navigation bar and rail, Home and Account.
+    group('$name theme, navigation', () {
+      final s = theme.colorScheme;
+      const none = <WidgetState>{};
+      const selected = {WidgetState.selected};
+      final bar = theme.navigationBarTheme;
+      final rail = theme.navigationRailTheme;
+
+      // The word sits under the pill, on the bar's colour (the screen's).
+      test('words: chosen and not chosen, at least 4.5:1', () {
+        expect(contrast(s.primary, s.surface), greaterThanOrEqualTo(aa));
+        expect(
+          contrast(s.onSurfaceVariant, s.surface),
+          greaterThanOrEqualTo(aa),
+        );
+      });
+
+      test('icons and the pill outline, at least 3:1', () {
+        expect(
+          contrast(s.onPrimaryContainer, s.primaryContainer),
+          greaterThanOrEqualTo(nonText),
+        );
+        expect(
+          contrast(s.onSurfaceVariant, s.surface),
+          greaterThanOrEqualTo(nonText),
+        );
+        // The outline is what marks the peach pill on the light screen.
+        expect(contrast(s.primary, s.surface), greaterThanOrEqualTo(nonText));
+      });
+
+      test('bar: the screen colour, raised, a copper-outlined pill', () {
+        expect(bar.backgroundColor, s.surface);
+        expect(bar.elevation, 3);
+        expect(bar.shadowColor, AppTheme.shadow);
+        expect(bar.surfaceTintColor, Colors.transparent);
+        expect(bar.indicatorColor, s.primaryContainer);
+        final pill = bar.indicatorShape! as StadiumBorder;
+        expect(pill.side.color, s.primary);
+      });
+
+      test('bar: words always shown, the chosen one bold copper', () {
+        expect(
+          bar.labelBehavior,
+          NavigationDestinationLabelBehavior.alwaysShow,
+        );
+        final on = bar.labelTextStyle!.resolve(selected)!;
+        final off = bar.labelTextStyle!.resolve(none)!;
+        expect(on.color, s.primary);
+        expect(on.fontWeight, FontWeight.w700);
+        expect(off.color, s.onSurfaceVariant);
+        expect(off.fontWeight, FontWeight.w500);
+        expect(on.fontSize, 14);
+        expect(off.fontSize, 14);
+        expect(bar.iconTheme!.resolve(selected)!.color, s.onPrimaryContainer);
+        expect(bar.iconTheme!.resolve(none)!.color, s.onSurfaceVariant);
+      });
+
+      test('rail: the same colours, words always shown', () {
+        expect(rail.backgroundColor, s.surface);
+        expect(rail.labelType, NavigationRailLabelType.all);
+        expect(rail.useIndicator, isTrue);
+        expect(rail.indicatorColor, s.primaryContainer);
+        expect((rail.indicatorShape! as StadiumBorder).side.color, s.primary);
+        expect(rail.selectedIconTheme!.color, s.onPrimaryContainer);
+        expect(rail.unselectedIconTheme!.color, s.onSurfaceVariant);
+        expect(
+          rail.selectedLabelTextStyle,
+          bar.labelTextStyle!.resolve(selected),
+        );
+        expect(
+          rail.unselectedLabelTextStyle,
+          bar.labelTextStyle!.resolve(none),
+        );
+      });
+
+      // The settings above only matter if Flutter's widgets use them: drawn
+      // with this theme, both words show and take the theme's colours.
+      testWidgets('drawn: a bar and a rail show both words in the theme', (
+        tester,
+      ) async {
+        Color? colourOf(String word) => tester
+            .renderObject<RenderParagraph>(find.text(word))
+            .text
+            .style
+            ?.color;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: Scaffold(
+              bottomNavigationBar: NavigationBar(
+                selectedIndex: 0,
+                destinations: const [
+                  NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
+                  NavigationDestination(
+                    icon: Icon(Icons.person),
+                    label: 'Account',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+        // The pill and the words animate in; the second pump ends that.
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('Home'), findsOneWidget);
+        expect(find.text('Account'), findsOneWidget);
+        expect(colourOf('Home'), s.primary);
+        expect(colourOf('Account'), s.onSurfaceVariant);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: Scaffold(
+              body: NavigationRail(
+                selectedIndex: 1,
+                destinations: const [
+                  NavigationRailDestination(
+                    icon: Icon(Icons.home),
+                    label: Text('Home'),
+                  ),
+                  NavigationRailDestination(
+                    icon: Icon(Icons.person),
+                    label: Text('Account'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(find.text('Home'), findsOneWidget);
+        expect(find.text('Account'), findsOneWidget);
+        expect(colourOf('Account'), s.primary);
+        expect(colourOf('Home'), s.onSurfaceVariant);
+      });
     });
   }
 }

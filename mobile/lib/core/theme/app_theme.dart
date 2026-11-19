@@ -171,6 +171,44 @@ abstract final class AppTheme {
         selectedShadowColor: shadow,
         surfaceTintColor: Colors.transparent,
       ),
+      // The navigation bar (portrait) and rail (landscape), Home and Account
+      // (Mobile (37), Mapalo's suggestion). On the screen's colour like the top
+      // bar, raised by the same soft warm shadow. The place you are in sits in
+      // a peach pill like the role pill, with a copper outline: peach and the
+      // screen are only about 1.2:1 apart, so the outline (6:1) marks the pill,
+      // and the word is bold copper. The icon also changes from outlined to
+      // filled (app_navigation.dart), so "you are here" never rests on colour
+      // alone. Words are always shown, never an icon alone (plan section 7).
+      navigationBarTheme: NavigationBarThemeData(
+        backgroundColor: scheme.surface,
+        elevation: 3,
+        shadowColor: shadow,
+        surfaceTintColor: Colors.transparent,
+        indicatorColor: scheme.primaryContainer,
+        indicatorShape: _navIndicator(scheme),
+        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+        iconTheme: WidgetStateProperty.resolveWith(
+          (states) => IconThemeData(color: _navIconColour(scheme, states)),
+        ),
+        labelTextStyle: WidgetStateProperty.resolveWith(
+          (states) => _navLabel(scheme, states),
+        ),
+      ),
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: scheme.surface,
+        useIndicator: true,
+        indicatorColor: scheme.primaryContainer,
+        indicatorShape: _navIndicator(scheme),
+        labelType: NavigationRailLabelType.all,
+        selectedIconTheme: IconThemeData(
+          color: _navIconColour(scheme, const {WidgetState.selected}),
+        ),
+        unselectedIconTheme: IconThemeData(
+          color: _navIconColour(scheme, const {}),
+        ),
+        selectedLabelTextStyle: _navLabel(scheme, const {WidgetState.selected}),
+        unselectedLabelTextStyle: _navLabel(scheme, const {}),
+      ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(minimumSize: minimum),
       ),
@@ -198,6 +236,35 @@ abstract final class AppTheme {
       return BorderSide(color: scheme.error, width: focused ? 2 : 1);
     }
     return BorderSide(color: scheme.primary, width: focused ? 2 : 1);
+  }
+
+  /// The pill behind the navigation destination you are on.
+  static ShapeBorder _navIndicator(ColorScheme scheme) =>
+      StadiumBorder(side: BorderSide(color: scheme.primary));
+
+  /// A navigation icon: dark on the peach pill when chosen, otherwise the
+  /// quieter onSurfaceVariant on the screen's colour.
+  static Color _navIconColour(ColorScheme scheme, Set<WidgetState> states) =>
+      states.contains(WidgetState.selected)
+      ? scheme.onPrimaryContainer
+      : scheme.onSurfaceVariant;
+
+  /// A navigation word. It sits under (or beside) the pill, on the screen's
+  /// colour, so its pairs are with surface.
+  ///
+  /// 14 sp, the size of the role pill's text (labelLarge), a little larger
+  /// than Material's 12 sp for users with limited reading. The size is
+  /// written out because a theme's text styles only get their sizes when the
+  /// theme is built for a widget, and a style without one would fall back to
+  /// whatever the surrounding text is.
+  static TextStyle _navLabel(ColorScheme scheme, Set<WidgetState> states) {
+    final selected = states.contains(WidgetState.selected);
+    return TextStyle(
+      fontSize: 14,
+      letterSpacing: 0.1,
+      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+      color: selected ? scheme.primary : scheme.onSurfaceVariant,
+    );
   }
 
   /// A field's label, in the field or floating above it.
