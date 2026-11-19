@@ -79,8 +79,8 @@ Last updated: 19 Nov 2026, after the "My account" back arrow (Mobile (39)), on
 2. ✅ Design integration (PR #11, merged 19 Nov)
 3. ~~Bottom navigation~~ (dropped in the morning; back in the afternoon as Design integration Part 3)
 4. ✅ Hardening (T1–T5, PR #13)
-5. ⬜ "My account" back arrow (Mobile (39), `fix/account-back-arrow`): built and tested;
-   phone check and PR left
+5. ✅ "My account" back arrow (Mobile (39), `fix/account-back-arrow`): tested, A57 fine;
+   PR left
 
 ## (c) Current feature: Hardening — 5/5
 

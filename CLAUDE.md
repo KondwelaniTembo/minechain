@@ -76,7 +76,7 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
   - Merged as PR #13 (`229b65a`).
   - Then `fix/account-back-arrow`: "My account" has a back arrow that goes to the Home
     branch (`goBranch`), decision Mobile (39), reversing Q10 of Mobile (37). Tests 1438
-    passed, 0 skipped. Left: phone check, PR. Next feature: Consignment check (Thu 19).
+    passed, 0 skipped. A57 check fine. Left: PR. Next feature: Consignment check (Thu 19).
 
 - **Design integration merged as PR #11** (`d86e33c`, 19 Nov;
   `docs/plans/design-integration-plan.md`, T1–T14). Mapalo Maseko's copper theme, the home
