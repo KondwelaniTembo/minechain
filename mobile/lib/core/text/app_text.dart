@@ -27,6 +27,13 @@ abstract final class AppText {
   static const String comingSoon = 'Coming soon';
   static const String myAccount = 'My account';
 
+  // ---- Navigation bar (core/widgets/app_navigation.dart, Mobile (37)) ----
+  // One short word each: the bar has little room, and the page's own title
+  // ("My account") says the rest.
+
+  static const String navHome = 'Home';
+  static const String navAccount = 'Account';
+
   // ---- Login (features/auth/presentation/login_screen.dart) ----
 
   static const String username = 'Username';
@@ -151,6 +158,13 @@ abstract final class AppText {
   static const String buyerTitle = 'Buyer';
   static const String officerTitle = 'Officer';
   static const String adminTitle = 'Administrator';
+
+  /// Between the role and the username in the top bar's pill (Mobile (36)).
+  static const String pillSeparator = ' · ';
+
+  /// What TalkBack reads for that pill: "Miner, signed in as mutale_banda".
+  static String signedInAs(String role, String username) =>
+      '$role, signed in as $username';
 
   /// Shown on a home while the token has expired (decision Q2).
   static const String needsPasswordNotice =

@@ -7,12 +7,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../core/router/redirect.dart' show homeOf;
-import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/sizes.dart';
+import '../../../core/widgets/pill_button.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/domain/user.dart';
 import '../../auth/presentation/auth_controller.dart';
@@ -44,9 +43,11 @@ class AccountScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        // Set explicitly, so the arrow is there even if /account was opened
-        // with go() and has no home underneath it to return to.
-        leading: BackButton(onPressed: () => _back(context, user)),
+        // No back arrow (Mobile (37), Q10): "My account" is one of the
+        // navigation bar's two places, like Home, not a page on top of the
+        // home. Home is one tap away in the bar, and Android's back button
+        // goes there too (app_navigation.dart).
+        automaticallyImplyLeading: false,
         title: const Text(AppText.myAccount),
       ),
       body: SafeArea(
@@ -68,7 +69,10 @@ class AccountScreen extends ConsumerWidget {
                         ],
                         _AccountDetails(user),
                         const SizedBox(height: AppSizes.spaceL),
-                        FilledButton.icon(
+                        // Tonal, not the strong copper button: logging out is
+                        // something to find, not the screen's main action, and
+                        // the dialog asks again before anything happens.
+                        FilledButton.tonalIcon(
                           onPressed: () => _confirmLogOut(context, ref),
                           icon: const Icon(Icons.logout),
                           label: const Text(AppText.logOut),
@@ -80,16 +84,6 @@ class AccountScreen extends ConsumerWidget {
               ),
       ),
     );
-  }
-
-  /// Back to where the user came from (normally their home), or to the home
-  /// directly if there is nothing underneath.
-  void _back(BuildContext context, User? user) {
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go(user == null ? AppRoutes.login : homeOf(user.role));
-    }
   }
 
   /// Asks first, because logging out on a mine site with no signal locks the
@@ -144,8 +138,12 @@ class _NeedsPasswordCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    // The same copper notice as on the homes (decision Mobile (36)), so the
+    // same state looks the same everywhere.
     return Material(
-      color: scheme.secondaryContainer,
+      color: scheme.primary,
+      elevation: 2,
+      shadowColor: AppTheme.shadow,
       borderRadius: BorderRadius.circular(AppSizes.tileRadius),
       child: Padding(
         padding: const EdgeInsets.all(AppSizes.spaceM),
@@ -155,12 +153,12 @@ class _NeedsPasswordCard extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.key, color: scheme.onSecondaryContainer),
+                Icon(Icons.key, color: scheme.onPrimary),
                 const SizedBox(width: AppSizes.spaceM),
                 Expanded(
                   child: Text(
                     AppText.accountNeedsPassword,
-                    style: TextStyle(color: scheme.onSecondaryContainer),
+                    style: TextStyle(color: scheme.onPrimary),
                   ),
                 ),
               ],
@@ -168,9 +166,9 @@ class _NeedsPasswordCard extends StatelessWidget {
             const SizedBox(height: AppSizes.spaceM),
             // The answer is not needed: on success the state becomes SignedIn
             // and this card disappears on its own.
-            FilledButton.tonal(
+            PillButton(
+              label: AppText.enterYourPassword,
               onPressed: () => showPasswordPrompt(context),
-              child: const Text(AppText.enterYourPassword),
             ),
           ],
         ),

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Written by tool/make_launcher_icon.dart from
+     lib/core/brand/logo_geometry.dart. Do not edit by hand: change the
+     geometry and run the tool again. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFDCC6"
+        android:pathData="M67.44,27.84 L80.16,40.56 L75.92,44.81 L63.19,32.08 Z" />
+    <path
+        android:fillColor="#FFDCC6"
+        android:pathData="M68.5,35.97 L72.03,39.5 L47.99,63.55 L44.45,60.01 Z" />
+    <path
+        android:fillColor="#FFDCC6"
+        android:pathData="M46.22,56.12 L51.88,61.78 L49.05,64.61 L43.39,58.95 Z" />
+    <path
+        android:fillColor="#FFDCC6"
+        android:pathData="M39.86,54 L54,68.14 L46.93,75.21 C42.69,79.46 35.62,78.04 32.08,75.92 C29.96,72.38 28.54,65.31 32.79,61.07 Z" />
+    <path
+        android:fillColor="#FFDCC6"
+        android:pathData="M36.68,40.21 L40.21,36.68 L75.57,72.03 L72.03,75.57 Z" />
+    <path
+        android:fillColor="#FFDCC6"
+        android:pathData="M25.72,59.66 C24.3,41.27 41.27,24.3 59.66,25.72 C45.51,31.37 31.37,45.51 25.72,59.66 Z" />
+</vector>

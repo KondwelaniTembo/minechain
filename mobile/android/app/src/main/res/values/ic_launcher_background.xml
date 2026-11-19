@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Deep copper, the light theme's primary. The cream logo on it is about
+         5:1 (launcher_icon_test.dart checks the pair). -->
+    <color name="ic_launcher_background">#8F4E1E</color>
+</resources>

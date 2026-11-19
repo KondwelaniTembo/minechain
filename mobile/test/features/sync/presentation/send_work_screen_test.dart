@@ -160,9 +160,53 @@ void main() {
     expect(app.path, AppRoutes.transporter);
   });
 
+  // Mobile (37), Q11: a task covers the whole screen, navigation bar
+  // included; back on the home, the bar is there again.
+  testWidgets('no navigation bar on this page; back on the home it shows', (
+    tester,
+  ) async {
+    await open(tester);
+    expect(find.byType(NavigationBar), findsNothing);
+
+    await tester.tap(find.byType(BackButton));
+    await frames(tester);
+    expect(app.path, AppRoutes.miner);
+    expect(find.byType(NavigationBar), findsOneWidget);
+  });
+
   testWidgets('nothing waiting', (tester) async {
     await open(tester);
     expect(find.text(AppText.nothingWaiting), findsOneWidget);
+  });
+
+  // T9.c (Mobile (36)): the four count lines were too close together on the
+  // A57. The gap went from 8 to 16 dp; the 32 dp above "Send now" is kept.
+  testWidgets('at least 16 dp between the count lines, 32 dp above Send', (
+    tester,
+  ) async {
+    await queue(2);
+    await open(tester);
+
+    Rect lineOf(String text) => tester.getRect(
+      find.ancestor(of: find.text(text), matching: find.byType(Row)).first,
+    );
+    final lines = [
+      lineOf(AppText.waitingOnPhone(2)),
+      lineOf(AppText.countSentToServer(0)),
+      lineOf(AppText.countOfWhichUnderReview(0)),
+      lineOf(AppText.countNeedsAttention(0)),
+    ];
+    for (var i = 1; i < lines.length; i++) {
+      expect(
+        lines[i].top - lines[i - 1].bottom,
+        greaterThanOrEqualTo(16 - 0.01),
+        reason: 'gap above line ${i + 1}',
+      );
+    }
+    expect(
+      tester.getRect(button(AppText.sendNow)).top - lines.last.bottom,
+      closeTo(32, 0.01),
+    );
   });
 
   testWidgets('Send: progress while sending, then the result and time', (

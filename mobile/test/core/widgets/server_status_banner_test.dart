@@ -9,6 +9,8 @@ import 'package:minechain/core/network/server_status.dart';
 import 'package:minechain/core/riverpod/no_retry.dart';
 import 'package:minechain/core/text/app_text.dart';
 import 'package:minechain/core/theme/app_theme.dart';
+import 'package:minechain/core/theme/sizes.dart';
+import 'package:minechain/core/widgets/pill_button.dart';
 import 'package:minechain/core/widgets/server_status_banner.dart';
 
 /// Always in [initial]; check() only counts.
@@ -112,6 +114,47 @@ void main() {
     await pumpBanner(tester, const ServerFailed(TimedOut()));
     expect(find.text(AppText.timedOut), findsOneWidget);
     expect(tryAgain, findsOneWidget);
+  });
+
+  // Mobile (36), Q8: notices are copper like the password notice, with the
+  // pill button; problems stay red with a text button.
+  group('colours', () {
+    final scheme = AppTheme.light.colorScheme;
+    Color bannerColour(WidgetTester tester, String sentence) => tester
+        .widget<Material>(
+          find
+              .ancestor(
+                of: find.text(sentence),
+                matching: find.byType(Material),
+              )
+              .first,
+        )
+        .color!;
+
+    testWidgets('waking: copper', (tester) async {
+      await pumpBanner(tester, const ServerWaking());
+      expect(bannerColour(tester, AppText.serverWaking), scheme.primary);
+    });
+
+    testWidgets('not ready: copper, and Try again is a full-height pill that '
+        'checks again', (tester) async {
+      await pumpBanner(tester, const ServerNotReady());
+      expect(bannerColour(tester, AppText.serverNotReady), scheme.primary);
+
+      final pill = find.widgetWithText(PillButton, AppText.tryAgain);
+      expect(
+        tester.getSize(pill).height,
+        greaterThanOrEqualTo(AppSizes.tapTargetMin),
+      );
+      await tester.tap(pill);
+      expect(fake.checks, 1);
+    });
+
+    testWidgets('failed: still red, with a text button', (tester) async {
+      await pumpBanner(tester, const ServerFailed(NoConnection()));
+      expect(bannerColour(tester, AppText.noConnection), scheme.errorContainer);
+      expect(find.byType(PillButton), findsNothing);
+    });
   });
 
   group('no overflow at text scale 2.0 on 360 x 640', () {

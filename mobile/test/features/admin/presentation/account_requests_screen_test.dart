@@ -18,6 +18,7 @@ import 'package:minechain/features/auth/domain/auth_state.dart';
 import 'package:minechain/features/auth/domain/user.dart';
 import 'package:minechain/features/auth/presentation/password_prompt.dart';
 
+import '../../../fakes/android_back.dart';
 import '../../../fakes/app_harness.dart';
 import '../../../fakes/auth_fixtures.dart';
 import '../../../fakes/fake_admin_server.dart';
@@ -121,6 +122,33 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(app.path, AppRoutes.admin);
+    });
+
+    // Mobile (37), Q11: a task covers the whole screen, navigation bar
+    // included; back on the home, the bar is there again.
+    testWidgets('no navigation bar on this page; back on the home it shows', (
+      tester,
+    ) async {
+      await openRequests(tester);
+      expect(find.byType(NavigationBar), findsNothing);
+
+      await tester.tap(find.byType(BackButton));
+      await tester.pumpAndSettle();
+      expect(find.byType(NavigationBar), findsOneWidget);
+    });
+
+    // The bar's back-button rule (Account goes Home) must not reach a task
+    // page on top: back closes the task, and the app stays open.
+    testWidgets('Android back returns to the admin home, the app stays open', (
+      tester,
+    ) async {
+      final exit = AppExitWatch(tester);
+      await openRequests(tester);
+
+      await pressAndroidBack(tester);
+
+      expect(app.path, AppRoutes.admin);
+      expect(exit.exits, 0);
     });
 
     testWidgets('another role cannot open it', (tester) async {

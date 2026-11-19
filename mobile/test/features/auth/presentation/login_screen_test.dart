@@ -4,6 +4,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:minechain/core/errors/api_codes.dart';
@@ -11,6 +12,7 @@ import 'package:minechain/core/errors/app_failure.dart';
 import 'package:minechain/core/riverpod/no_retry.dart';
 import 'package:minechain/core/text/app_text.dart';
 import 'package:minechain/core/theme/app_theme.dart';
+import 'package:minechain/core/widgets/mine_chain_logo.dart';
 import 'package:minechain/features/auth/domain/auth_state.dart';
 import 'package:minechain/features/auth/presentation/auth_controller.dart';
 import 'package:minechain/features/auth/presentation/login_screen.dart';
@@ -68,17 +70,92 @@ void main() {
     expect(server.checks, 1);
   });
 
-  testWidgets('empty fields: nothing is sent, both fields say what is missing',
-      (tester) async {
+  // Mobile (36): the logo above the name, and the form still fits.
+  testWidgets('the logo and the name are above the fields', (tester) async {
     await pumpLogin(tester);
 
-    await tester.tap(logInButton);
-    await tester.pump();
-
-    expect(auth.logInCalls, isEmpty);
-    expect(find.text(AppText.enterUsername), findsOneWidget);
-    expect(find.text(AppText.enterPassword), findsOneWidget);
+    final brand = find.byType(BrandBlock);
+    expect(find.byType(MineChainLogo), findsOneWidget);
+    expect(
+      tester.getRect(brand).bottom,
+      lessThanOrEqualTo(tester.getRect(usernameField).top),
+    );
   });
+
+  // Mobile (36), T8: the fields in copper. An error keeps Material's red and,
+  // because copper and red are almost equally bright, its sentence.
+  group('copper fields', () {
+    final scheme = AppTheme.light.colorScheme;
+
+    Color? textColour(WidgetTester tester, Finder text) =>
+        tester.renderObject<RenderParagraph>(text).text.style?.color;
+
+    Color? iconColour(WidgetTester tester, IconData icon) => textColour(
+      tester,
+      find.descendant(of: find.byIcon(icon), matching: find.byType(RichText)),
+    );
+
+    Finder decorator(Finder field) =>
+        find.descendant(of: field, matching: find.byType(InputDecorator));
+
+    testWidgets('labels, icons and lines are copper', (tester) async {
+      await pumpLogin(tester);
+
+      expect(textColour(tester, find.text(AppText.username)), scheme.primary);
+      expect(textColour(tester, find.text(AppText.password)), scheme.primary);
+      expect(iconColour(tester, Icons.person), scheme.primary);
+      expect(iconColour(tester, Icons.lock), scheme.primary);
+      expect(
+        decorator(usernameField),
+        paints..line(color: scheme.primary, strokeWidth: 1),
+      );
+    });
+
+    testWidgets('the line is 2 dp while typing', (tester) async {
+      await pumpLogin(tester);
+      await tester.tap(usernameField);
+      // The first frame shows the new state and starts the line's short
+      // animation; the second lets it finish.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(
+        decorator(usernameField),
+        paints..line(color: scheme.primary, strokeWidth: 2),
+      );
+    });
+
+    testWidgets('an error: red label and line, and the sentence', (
+      tester,
+    ) async {
+      await pumpLogin(tester);
+      await tester.tap(logInButton);
+      // As above: one frame for the error, one for the colour change.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text(AppText.enterUsername), findsOneWidget);
+      expect(textColour(tester, find.text(AppText.username)), scheme.error);
+      expect(
+        decorator(usernameField),
+        paints..line(color: scheme.error, strokeWidth: 1),
+      );
+    });
+  });
+
+  testWidgets(
+    'empty fields: nothing is sent, both fields say what is missing',
+    (tester) async {
+      await pumpLogin(tester);
+
+      await tester.tap(logInButton);
+      await tester.pump();
+
+      expect(auth.logInCalls, isEmpty);
+      expect(find.text(AppText.enterUsername), findsOneWidget);
+      expect(find.text(AppText.enterPassword), findsOneWidget);
+    },
+  );
 
   testWidgets('only the password missing: nothing is sent', (tester) async {
     await pumpLogin(tester);
@@ -90,16 +167,18 @@ void main() {
     expect(find.text(AppText.enterPassword), findsOneWidget);
   });
 
-  testWidgets('success: the controller gets exactly what was typed',
-      (tester) async {
+  testWidgets('success: the controller gets exactly what was typed', (
+    tester,
+  ) async {
     await pumpLogin(tester);
     await fillAndSubmit(tester);
 
     expect(auth.logInCalls, [('mutale_banda', 'gold river kasempa')]);
   });
 
-  testWidgets('wrong password: the sentence, password cleared, username kept',
-      (tester) async {
+  testWidgets('wrong password: the sentence, password cleared, username kept', (
+    tester,
+  ) async {
     await pumpLogin(
       tester,
       answer: (_, _) async => const LoginFailed(
@@ -119,7 +198,9 @@ void main() {
     expect(fieldText(tester, usernameField), 'mutale_banda');
   });
 
-  testWidgets('VALIDATION_FAILED details go under their fields', (tester) async {
+  testWidgets('VALIDATION_FAILED details go under their fields', (
+    tester,
+  ) async {
     await pumpLogin(
       tester,
       answer: (_, _) async => const LoginFailed(
@@ -139,8 +220,9 @@ void main() {
     expect(find.text(AppText.checkTheForm), findsOneWidget);
   });
 
-  testWidgets('an unsupported account shows the update sentence',
-      (tester) async {
+  testWidgets('an unsupported account shows the update sentence', (
+    tester,
+  ) async {
     await pumpLogin(
       tester,
       answer: (_, _) async =>
@@ -173,8 +255,9 @@ void main() {
     );
   });
 
-  testWidgets('the show/hide button reveals the password and has a tooltip',
-      (tester) async {
+  testWidgets('the show/hide button reveals the password and has a tooltip', (
+    tester,
+  ) async {
     await pumpLogin(tester);
     TextField password() => tester.widget<TextField>(passwordField);
 
@@ -212,8 +295,9 @@ void main() {
       expect(auth.logInCalls, isEmpty);
     });
 
-    testWidgets('a server detail: gone on edit, back on Log in',
-        (tester) async {
+    testWidgets('a server detail: gone on edit, back on Log in', (
+      tester,
+    ) async {
       await pumpLogin(
         tester,
         answer: (_, _) async => const LoginFailed(

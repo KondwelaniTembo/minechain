@@ -4,7 +4,7 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 18 Nov 2026, after Workflow setup T1 (day plan approved by the developer).
+Last updated: 19 Nov 2026, after Design integration T14; the PR is next.
 
 ## (a) Whole project
 
@@ -24,8 +24,12 @@ Last updated: 18 Nov 2026, after Workflow setup T1 (day plan approved by the dev
 ### Wed 18 Nov
 
 - ✅ Workflow setup: autopilot working agreement, permissions, progress and testing logs
-- ⬜ Design integration: bring in Mapalo's theme from the `design/mapalo-theme` branch;
-  navigation option A is kept, bottom navigation goes to future improvements
+  (PR #12)
+- ⬜ Design integration: bring in Mapalo's theme from the `design/mapalo-theme` branch,
+  plus Mapalo's navigation bar beside the account button (Part 3, T10–T12)
+  (`docs/plans/design-integration-plan.md`)
+- ~~Bottom navigation as its own feature~~ Dropped 19 Nov in the morning, then brought back
+  by the developer the same afternoon inside Design integration (Part 3)
 - ⬜ Hardening: OWASP MASVS/MSTG review of the miner module, fix every Critical and High
   finding, replace the skipped miner case in `homes_test.dart`, 3 device checks
 
@@ -70,12 +74,46 @@ Last updated: 18 Nov 2026, after Workflow setup T1 (day plan approved by the dev
 ## (b) Today, Wed 18 Nov
 
 1. ✅ Workflow setup
-2. ⬜ Design integration (plan first, then stop for approval)
-3. ⬜ Hardening
+2. ⬜ Design integration (T1–T14 done; the PR is drafted, for the developer to open and merge)
+3. ~~Bottom navigation~~ (dropped in the morning; back in the afternoon as Design integration Part 3)
+4. ⬜ Hardening
 
-## (c) Current feature: Workflow setup — 1/1
+## (c) Current feature: Design integration — 14/14
 
-- ✅ T1 Autopilot working agreement
-  - ✅ T1.a `CLAUDE.md`: the deadline, and the working agreement in place of "manual mode"
-  - ✅ T1.b `.claude/settings.json`: allow, ask and deny rules matching the agreement
-  - ✅ T1.c `docs/progress.md` and `docs/testing-log.md`
+Plan: `docs/plans/design-integration-plan.md`, approved 19 Nov (Q1: scale the role down;
+Q2: 3:1 for the icon; Q3: the `app_theme.dart` comment is fixed in T3).
+
+- ✅ T1 App bar title: role always whole, "MineChain" only when whole; account button ≥ 56 dp
+- ✅ T2 Theme test: copper icon on `secondaryContainer`, light and dark
+- ✅ T3 Docs: Mobile (35) with Mapalo's credit, the copper vs error-red limitation, the
+  foundation plan's seed wording, the status line of the bottom navigation suggestion
+- ✅ T4 Phone check on the A57: light, dark, largest text (the T1 rule holds; twelve changes
+  requested, recorded as Mobile (36))
+- ✅ T5 Home header: copper password and server notices with a pill button; role pill with
+  the username
+- ✅ T6 Logo and brand block under the tiles; name out of the app bar; splash and login
+- ✅ T7 Adaptive launcher icon from the same geometry (phone check of the icon in T14)
+- ✅ T8 Copper fields (underline kept), sand cards with a copper outline, outlined chips at 56 dp
+- ✅ T9 Stronger tile shadows (5 and 8), no mid-word breaks (fewer columns first, then a
+  smaller label), 16 dp between the "Send my work" lines
+- ✅ T10 Navigation bar and rail look in the theme, light and dark (peach pill, copper outline)
+- ✅ T11 The shell: homes and "My account" in one frame with a plain bar; task pages outside
+  it; the account button goes to Account
+- ✅ T12 Rail when the screen is short, words whole at large text (the bar's words capped at
+  1.3× by Flutter, kept: Q14), Android back on Account goes Home, no back arrow on Account;
+  checked on the A57
+- ✅ T13 Docs: Mobile (36) completed, Mobile (35) marked, Mobile (37) navigation bar and its
+  1.3× limitation, Mobile (38) launcher icon; the suggestion file marked "built"
+- ✅ T14 Phone check on the A57, including the navigation bar (fine)
+
+T5–T11 approved 19 Nov (Q4–Q7 as proposed; Q8: server notices in copper too). Part 3
+(T10–T12) added 19 Nov at the developer's request and approved (Q9–Q13 as proposed); the
+old T10 and T11 are now T13 and T14.
+
+T9's and T8's choices, Q4–Q8 and Q9–Q14 were recorded in T13 (Mobile (36), (37), (38)).
+
+**Schedule (19 Nov): behind by about one day.**
+- Still open from Wed 18: Design integration (only the PR left: the developer opens and merges
+  it) and Hardening. The navigation bar added about 3 h; the developer accepted that on
+  19 Nov.
+- Thu 19's two features (Consignment check, Transporter handoff) have not started.

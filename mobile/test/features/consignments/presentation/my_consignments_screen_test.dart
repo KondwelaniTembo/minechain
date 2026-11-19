@@ -195,6 +195,28 @@ void main() {
     expect(find.text(AppText.savedAt(saved)), findsOneWidget);
   });
 
+  // Mobile (36), T8: each record's card in the tiles' sand, raised, with a
+  // copper outline so its edge shows on the light screen.
+  testWidgets('each card: sand, a shadow and a copper outline', (tester) async {
+    await queue(2);
+    await open(tester);
+
+    final cards = find.byType(Card);
+    expect(cards, findsNWidgets(2));
+    for (final card in [cards.at(0), cards.at(1)]) {
+      final scheme = Theme.of(tester.element(card)).colorScheme;
+      final material = tester.widget<Material>(
+        find.descendant(of: card, matching: find.byType(Material)).first,
+      );
+      expect(material.color, scheme.secondaryContainer);
+      expect(material.elevation, 3);
+      expect(
+        (material.shape! as RoundedRectangleBorder).side.color,
+        scheme.primary,
+      );
+    }
+  });
+
   testWidgets('only this miner\'s records, and no signed or secret field', (
     tester,
   ) async {

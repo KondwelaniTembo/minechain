@@ -5,11 +5,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/text/app_text.dart';
+import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/sizes.dart';
+import '../../../core/widgets/pill_button.dart';
 import '../../../core/widgets/server_status_banner.dart';
 import '../domain/auth_state.dart';
 import 'auth_controller.dart';
 import 'password_prompt.dart';
+
+/// The signed-in user's username, for the role pill in a home's top bar
+/// (decision Mobile (36)); null when nobody is signed in. Watching it rebuilds
+/// the home if the user changes.
+String? watchUsername(WidgetRef ref) => switch (ref.watch(
+  authControllerProvider,
+)) {
+  SignedIn(:final user) || SignedInNeedsPassword(:final user) => user.username,
+  _ => null,
+};
 
 /// The shared header of the five homes.
 class HomeHeader extends StatelessWidget {
@@ -41,14 +53,20 @@ class NeedsPasswordNotice extends ConsumerWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSizes.spaceM),
       child: Material(
-        color: scheme.secondaryContainer,
+        // The main tile's copper (decision Mobile (36)): the green of the
+        // first restyle clashed with the copper theme on the phone. The key
+        // icon and the sentence say what this is, so it does not rely on
+        // colour to be told apart from the main tile.
+        color: scheme.primary,
+        elevation: 2,
+        shadowColor: AppTheme.shadow,
         borderRadius: BorderRadius.circular(AppSizes.tileRadius),
         child: Padding(
           padding: const EdgeInsets.all(AppSizes.spaceM),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.key, color: scheme.onSecondaryContainer),
+              Icon(Icons.key, color: scheme.onPrimary),
               const SizedBox(width: AppSizes.spaceM),
               Expanded(
                 child: Column(
@@ -56,20 +74,14 @@ class NeedsPasswordNotice extends ConsumerWidget {
                   children: [
                     Text(
                       AppText.needsPasswordNotice,
-                      style: TextStyle(color: scheme.onSecondaryContainer),
+                      style: TextStyle(color: scheme.onPrimary),
                     ),
-                    const SizedBox(height: AppSizes.spaceXs),
-                    // A text button: lighter than the home's tiles, so it
-                    // does not compete with the role's main action, but still
-                    // a full-height tap target.
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(0, AppSizes.tapTargetMin),
-                      ),
-                      // The Future's answer is not needed here: on success
-                      // the state changes and this notice disappears.
+                    const SizedBox(height: AppSizes.spaceS),
+                    // The Future's answer is not needed here: on success the
+                    // state changes and this notice disappears.
+                    PillButton(
+                      label: AppText.enterPasswordButton,
                       onPressed: () => showPasswordPrompt(context),
-                      child: const Text(AppText.enterPasswordButton),
                     ),
                   ],
                 ),

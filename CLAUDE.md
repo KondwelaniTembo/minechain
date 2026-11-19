@@ -36,8 +36,60 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 18 Nov 2026. Read this first in a new session, then `docs/progress.md` (the day
+Updated 19 Nov 2026. Read this first in a new session, then `docs/progress.md` (the day
 plan and the current feature's subtasks), then `docs/decisions.md`.
+
+- **Now: Design integration on `design/mapalo-theme`** (`docs/plans/design-integration-plan.md`).
+  - T1–T12 are done, committed and pushed (T9 `4936a1b`, T10 `04bb56e`, T11 `fefff94`,
+    T12 `63b41a9`; tests 1430 passed, 1 skipped). The developer checked T10–T12 on the A57
+    on 19 Nov: fine.
+    - T7: the launcher icon is written by `mobile/tool/make_launcher_icon.dart`
+      (`dart run tool/make_launcher_icon.dart` from `mobile/`). `launcher_icon_test.dart`
+      fails if the committed XML drifts from `logo_geometry.dart`. The developer has
+      seen the icon on the A57.
+    - T8: copper fields, sand cards and outlined chips, all set in the theme
+      (`app_theme.dart`).
+    - T9: tile elevation 5 / 8; a home drops columns one at a time when a label's word does
+      not fit, and only a word too wide even for one column shrinks its label
+      (`ActionTile.labelRoom`, `core/text/text_width.dart`); 16 dp between the "Send my
+      work" lines (the developer chose 16; the plan said 8, which already existed).
+  - **Part 3, the navigation bar (added 19 Nov at the developer's request, Q9–Q13 approved
+    as proposed):** Mapalo's Home/Account bar AND the round account button, both.
+    - T10: bar and rail theme in `app_theme.dart` (peach pill, copper outline, bold copper
+      word, 14 sp, words always shown).
+    - T11: `StatefulShellRoute.indexedStack` in `app_router.dart` (Home branch = five homes,
+      Account branch = `/account`); task pages stay top-level, so they cover the bar; the
+      plain bar is `core/widgets/app_navigation.dart`; the homes' account button uses
+      `go`, not `push`.
+    - T12: `NavigationRail` when the height is under 480 dp (`AppSizes.compactHeight`),
+      as wide as its widest word up to 144 dp, past which its words shrink just enough;
+      Android back on Account goes Home (`PopScope` in the shell), on Home it closes the app;
+      no back arrow on "My account" (Q10); `test/fakes/android_back.dart` presses back
+      the way the system does. Flutter's `NavigationBar` caps its words at 1.3×
+      (`_kMaxLabelTextScaleFactor`); the bar is measured at that cap, and **Q14 (19 Nov):
+      keep the cap**, for the bar only.
+  - T13 (docs) done: `docs/decisions.md` has Mobile (36) completed with the built details,
+    Mobile (35) marked (title rule part 2 replaced, option A extended), Mobile (37) the
+    navigation bar with its 1.3× known limitation, and Mobile (38) the launcher icon; the
+    bar is off the future improvements list; the suggestion file says "built".
+  - T13 is `7d19b57`. T14, the developer's full phone check on the A57, was fine (19 Nov).
+    All 14 subtasks are done.
+  - Next: the developer opens the PR for `design/mapalo-theme` into `main` with the drafted
+    title and description, and merges it. It changes only `mobile/` and `docs/` (plus three
+    new Android launcher resources), so merging deploys nothing to Render. After the merge
+    the next feature is Hardening (`docs/progress.md`).
+  - Bottom navigation was dropped on the morning of 19 Nov, then brought back the same day
+    as Part 3 (above). The schedule is about one day behind plus the bar's 3 h, which the
+    developer accepted; see `docs/progress.md`.
+  - Rules learned in this feature:
+    - run `dart format` only on files you changed, never the whole of `lib/`;
+    - a test whose behaviour changed by decision says so in a comment and in
+      `docs/testing-log.md`;
+    - drafted commit messages have no Co-Authored-By line;
+    - a widget test that reads an animated colour or border pumps twice: `pump()`, then
+      `pump(300 ms)`. The first frame only starts the animation;
+    - give the developer the commit the way "Git rules", "How the developer commits", says
+      (Source Control for one commit, a whole-paste script for two or more).
 
 - **Mobile app, miner module built** (`docs/plans/miner-registration-plan.md`) on
   `feature/miner-registration`. Mobile foundation (login, homes, pinned TLS 1.3, secure
@@ -448,6 +500,19 @@ backend/src/
 - Before the developer commits, remind them to check for secrets.
 - Use Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`.
 - Suggest a commit message when a step is finished, but do not run it.
+- **How the developer commits** (asked for on 19 Nov):
+  - **One commit with every changed file:** say so, give the message, and the developer
+    uses VS Code Source Control (stage all, commit, push).
+  - **Two or more commits:** give one PowerShell script that can be pasted and run whole.
+    It names the exact files for each commit, because only Claude Code knows which files
+    belong to which subtask.
+  - The script runs each step only if the one before it worked, by checking
+    `$LASTEXITCODE` (PowerShell 5.1 has no `&&`). It ends with `git push`, then
+    `git --no-pager log --oneline -<n>` so the developer sees the result.
+  - No pager in a script: never put a bare `git diff`, `git log` or `git show` in it. Their
+    pager waits for `q`, and every later line waits too. Use `git --no-pager ...`.
+  - When a docs file holds rows for two subtasks, it goes into the later commit, and the
+    report says so.
 
 ## Platform
 

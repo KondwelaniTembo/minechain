@@ -3,8 +3,8 @@
 
 import 'package:flutter/material.dart';
 
-import '../../../core/text/app_text.dart';
 import '../../../core/theme/sizes.dart';
+import '../../../core/widgets/mine_chain_logo.dart';
 
 class SplashScreen extends StatelessWidget {
   const SplashScreen({super.key});
@@ -17,9 +17,11 @@ class SplashScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                AppText.appTitle,
-                style: Theme.of(context).textTheme.headlineMedium,
+              // The same logo and name as on the login screen, so the
+              // hand-over from splash to login does not change them.
+              BrandBlock(
+                logoSize: AppSizes.logoLarge,
+                nameStyle: Theme.of(context).textTheme.headlineLarge,
               ),
               const SizedBox(height: AppSizes.spaceL),
               const CircularProgressIndicator(),

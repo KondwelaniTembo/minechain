@@ -7,8 +7,10 @@
 import 'package:flutter/material.dart';
 
 import '../text/app_text.dart';
+import '../text/text_width.dart';
 import '../theme/sizes.dart';
 import 'action_tile.dart';
+import 'mine_chain_logo.dart';
 
 /// One tile on a home screen, described as data. The home screen lists its
 /// actions; HomeScaffold decides how to lay them out.
@@ -36,6 +38,7 @@ class HomeScaffold extends StatelessWidget {
     required this.actions,
     required this.onAccountPressed,
     this.header,
+    this.username,
   }) : assert(
          actions.where((a) => a.primary).length <= 1,
          'A home screen has at most one primary action.',
@@ -49,6 +52,10 @@ class HomeScaffold extends StatelessWidget {
   /// scrolls with the tiles, so it never pushes them off a small screen.
   final Widget? header;
 
+  /// The signed-in user's username, shown in the role pill. Optional so this
+  /// shared layout does not depend on the auth feature; the homes pass it.
+  final String? username;
+
   @override
   Widget build(BuildContext context) {
     // The primary action always goes first, whatever order it was listed in.
@@ -59,11 +66,15 @@ class HomeScaffold extends StatelessWidget {
     // body for the rest.
     return Scaffold(
       appBar: AppBar(
-        title: Text(title),
+        // The role and username as a small label, so the user always sees
+        // which account type and whose account this is.
+        title: _AppBarTitle(role: title, username: username),
         // `actions` here are AppBar's buttons on the right (not our tiles).
         actions: [
-          IconButton(
-            icon: const Icon(Icons.account_circle),
+          // filledTonal draws a round, filled button: the account button
+          // reads as a button, not as a stray icon in the corner.
+          IconButton.filledTonal(
+            icon: const Icon(Icons.person),
             iconSize: AppSizes.appBarIcon,
             // The tooltip shows on a long press, and is also what TalkBack
             // reads, so an icon-only button still has a name.
@@ -84,12 +95,20 @@ class HomeScaffold extends StatelessWidget {
         // breakpoints). It rebuilds when the phone is rotated.
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final columns = AppSizes.columnsForWidth(constraints.maxWidth);
+            final content = constraints.maxWidth - 2 * _pagePadding;
+            final columns = _columnsFor(context, others, constraints.maxWidth);
+            final rowTileWidth = _tileWidth(content, columns);
 
             final children = <Widget>[
-              for (final action in primary) _tileFor(action),
+              // The main tile spans the whole width.
+              for (final action in primary)
+                _tileFor(action, ActionTile.labelRoomFor(content)),
               for (final row in _rowsOf(others, columns))
-                _TileRow(actions: row, columns: columns),
+                _TileRow(
+                  actions: row,
+                  columns: columns,
+                  labelRoom: ActionTile.labelRoomFor(rowTileWidth),
+                ),
             ];
 
             // SingleChildScrollView lets the content scroll when it is taller
@@ -100,20 +119,65 @@ class HomeScaffold extends StatelessWidget {
             // so a label that wraps onto three lines at large text would not
             // fit and would overflow. Rows that grow with their content cannot.
             return SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSizes.spaceM),
+              padding: const EdgeInsets.all(_pagePadding),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 // The header is outside the gaps: it may be empty (a banner
                 // with nothing to say), and an empty header must not leave a
                 // gap. A header that shows something adds its own spacing.
                 // `?header` adds it only if it is not null.
-                children: [?header, ..._withGaps(children)],
+                children: [
+                  ?header,
+                  ..._withGaps(children),
+                  // The logo and the name, directly under the tiles (Mobile
+                  // (36), Q7). Inside the scrolling column, so at large text
+                  // it scrolls with the tiles and is never cut or pinned.
+                  const SizedBox(height: AppSizes.spaceXl),
+                  const Center(child: BrandBlock()),
+                ],
               ),
             );
           },
         ),
       ),
     );
+  }
+
+  /// The space around the tiles, and also the gap between two tiles.
+  static const double _pagePadding = AppSizes.spaceM;
+
+  /// How wide one tile is when [columns] tiles share [content] dp.
+  static double _tileWidth(double content, int columns) =>
+      (content - _pagePadding * (columns - 1)) / columns;
+
+  /// The number of columns for the tiles that are not the main one.
+  ///
+  /// The screen width gives the most columns ([AppSizes.columnsForWidth]).
+  /// Fewer are used when a word of some label would not fit in a tile that
+  /// narrow at the phone's text size, because Flutter would then break that
+  /// word in the middle ("My consig / nments"). One column less at a time, so
+  /// a landscape phone with large text goes from 3 to 2 before 1 (Mobile (36),
+  /// Q6): the text keeps the size the user chose.
+  static int _columnsFor(
+    BuildContext context,
+    List<HomeAction> tiles,
+    double maxWidth,
+  ) {
+    final content = maxWidth - 2 * _pagePadding;
+    final widest = tiles.fold(0.0, (most, action) {
+      final width = ActionTile.widestWord(
+        context,
+        action.label,
+        primary: false,
+      );
+      return width > most ? width : most;
+    });
+    var columns = AppSizes.columnsForWidth(maxWidth);
+    while (columns > 1 &&
+        widest > ActionTile.labelRoomFor(_tileWidth(content, columns))) {
+      columns--;
+    }
+    return columns;
   }
 
   /// Splits [items] into rows of [columns]: 5 items in 2 columns become rows of
@@ -136,19 +200,168 @@ class HomeScaffold extends StatelessWidget {
   }
 }
 
-Widget _tileFor(HomeAction action) => ActionTile(
+/// [labelRoom] lets the tile shrink a word that does not fit even one column
+/// (see [ActionTile.labelRoom]).
+Widget _tileFor(HomeAction action, double labelRoom) => ActionTile(
   icon: action.icon,
   label: action.label,
   onTap: action.onTap,
   primary: action.primary,
+  labelRoom: labelRoom,
 );
+
+/// A small rounded pill with the role and the username: "Miner · mutale_banda".
+///
+/// "MineChain" is not here: it sits with the logo below the tiles (decision
+/// Mobile (36)), where it is never squeezed out by a large text size.
+///
+/// One line, not two stacked: an app bar has a fixed height, and two lines
+/// would overflow it at the largest text size.
+///
+/// What gives way first when space is short (a 5-inch phone with the largest
+/// text), from most to least important:
+/// 1. the role is never cut to "Admini…": it tells the user which kind of
+///    account they are in;
+/// 2. the username shrinks and ends in "…", and is left out when fewer than
+///    [_minUsernameChars] characters would show (never "m…");
+/// 3. if even the role alone is too wide, it is scaled down to fit rather than
+///    cut. The phone's text size is never clamped anywhere else.
+class _AppBarTitle extends StatelessWidget {
+  const _AppBarTitle({required this.role, this.username});
+
+  final String role;
+  final String? username;
+
+  static const _minUsernameChars = 3;
+
+  static const _pillPadding = EdgeInsets.symmetric(
+    horizontal: AppSizes.spaceS + AppSizes.spaceXs,
+    vertical: AppSizes.spaceXs,
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+
+    final roleStyle = text.labelLarge?.copyWith(
+      color: scheme.onPrimaryContainer,
+      fontWeight: FontWeight.w600,
+    );
+    // Lighter than the role, so the role is read first.
+    final userStyle = roleStyle?.copyWith(fontWeight: FontWeight.w400);
+
+    // The pill is a different colour pair from the buttons on purpose: it is
+    // information about the account, not something to tap.
+    Widget pill(List<Widget> children) => DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.primaryContainer,
+        borderRadius: BorderRadius.circular(AppSizes.tileRadius),
+      ),
+      child: Padding(
+        padding: _pillPadding,
+        child: Row(mainAxisSize: MainAxisSize.min, children: children),
+      ),
+    );
+
+    final roleText = Text(role, style: roleStyle, maxLines: 1, softWrap: false);
+
+    // LayoutBuilder gives the width the app bar has left for its title (after
+    // the account button), so the choices below follow the real space: the
+    // screen width, the orientation and the phone's text size.
+    final title = LayoutBuilder(
+      builder: (context, constraints) {
+        double width(String value, TextStyle? style) =>
+            drawnTextWidth(context, value, style);
+
+        final user = username;
+        final roleOnly = width(role, roleStyle) + _pillPadding.horizontal;
+        final withUser = user == null
+            ? roleOnly
+            : roleOnly +
+                  width(AppText.pillSeparator, userStyle) +
+                  width(user, userStyle);
+        final room = constraints.maxWidth;
+
+        // The narrowest pill that still shows some of the username: the role,
+        // the separator and the first few characters with "…".
+        final showUser =
+            user != null &&
+            (user.length <= _minUsernameChars
+                ? withUser <= room
+                : roleOnly +
+                          width(AppText.pillSeparator, userStyle) +
+                          width(
+                            '${user.substring(0, _minUsernameChars)}…',
+                            userStyle,
+                          ) <=
+                      room);
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (showUser)
+              // Flexible hands the pill the width that is left; inside it,
+              // only the username is Flexible, so it is the part that ends
+              // in "…" while the role keeps its full width.
+              Flexible(
+                child: pill([
+                  roleText,
+                  Text(AppText.pillSeparator, style: userStyle),
+                  Flexible(
+                    child: Text(
+                      user,
+                      style: userStyle,
+                      maxLines: 1,
+                      softWrap: false,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ]),
+              )
+            else
+              // FittedBox lets the pill take its full natural width, then
+              // shrinks the drawing only if that width is more than there
+              // is. scaleDown never makes it bigger. Unlike "…", the role
+              // stays whole and readable.
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: pill([roleText]),
+                ),
+              ),
+          ],
+        );
+      },
+    );
+
+    // TalkBack reads the pill as one sentence, with the whole username even
+    // when the screen shows it shortened or not at all.
+    final user = username;
+    if (user == null) return title;
+    return Semantics(
+      container: true,
+      label: AppText.signedInAs(role, user),
+      excludeSemantics: true,
+      child: title,
+    );
+  }
+}
 
 /// One row of equal-width tiles, all as tall as the tallest one.
 class _TileRow extends StatelessWidget {
-  const _TileRow({required this.actions, required this.columns});
+  const _TileRow({
+    required this.actions,
+    required this.columns,
+    required this.labelRoom,
+  });
 
   final List<HomeAction> actions;
   final int columns;
+
+  /// The width each tile's label has, the same for every tile in the row.
+  final double labelRoom;
 
   @override
   Widget build(BuildContext context) {
@@ -161,13 +374,13 @@ class _TileRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (var i = 0; i < columns; i++) ...[
-            if (i > 0) const SizedBox(width: AppSizes.spaceM),
+            if (i > 0) const SizedBox(width: HomeScaffold._pagePadding),
             // Expanded shares the row's width equally. A last row with fewer
             // tiles keeps empty slots, so its tiles stay the same width as the
             // ones above instead of stretching across.
             Expanded(
               child: i < actions.length
-                  ? _tileFor(actions[i])
+                  ? _tileFor(actions[i], labelRoom)
                   : const SizedBox.shrink(),
             ),
           ],

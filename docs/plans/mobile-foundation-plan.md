@@ -67,7 +67,7 @@ mobile/
         redirect.dart                pure function: (auth state, path) -> where to go
         app_router.dart              GoRouter provider, wired to auth through refreshListenable
       theme/
-        app_theme.dart               Material 3 light and dark themes from one seed colour
+        app_theme.dart               Material 3 light and dark themes from a copper seed colour, with some pairs set by hand (Mobile (35))
         sizes.dart                   tap targets, spacing, breakpoints
       text/
         app_text.dart                every sentence the user sees, in one file (FR-15 is cut, but
@@ -429,7 +429,8 @@ Two Module 3 choices keep this easy to add:
 
 ## 7. Theme and layout
 
-- **Material 3**, light and dark themes from one seed colour, following the phone's setting.
+- **Material 3**, light and dark themes from a copper seed colour, with some colour pairs set
+  by hand (Mobile (35)), following the phone's setting.
   Strong contrast, because the app is used outdoors in bright sun.
 - **Every action is an icon with a word under it.** An icon alone is a guess for someone who
   has not seen it before; a word alone is harder for users with limited reading.

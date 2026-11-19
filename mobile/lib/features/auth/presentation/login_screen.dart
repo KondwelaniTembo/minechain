@@ -23,6 +23,7 @@ import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/sizes.dart';
 import '../../../core/widgets/form_message.dart';
+import '../../../core/widgets/mine_chain_logo.dart';
 import '../../../core/widgets/server_status_banner.dart';
 import '../domain/auth_state.dart';
 import 'auth_controller.dart';
@@ -163,10 +164,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      AppText.appTitle,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineMedium,
+                    // The logo and the name are the screen's only branding, so
+                    // they are large, heavy and copper (Mobile (36)).
+                    BrandBlock(
+                      logoSize: AppSizes.logoLarge,
+                      nameStyle: Theme.of(context).textTheme.headlineLarge,
                     ),
                     const SizedBox(height: AppSizes.spaceL),
                     const ServerStatusBanner(),
@@ -250,10 +252,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen>
                     // back arrow and Android's back button return here.
                     // Disabled while a login runs, so the screen does not
                     // change under it.
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        minimumSize: const Size(0, AppSizes.tapTargetMin),
-                      ),
+                    // Outlined: for someone without an account this is the way
+                    // in, so it must not look like fine print. The activation
+                    // code link stays plain text, because it is for the few
+                    // officers and administrators who were given a code.
+                    OutlinedButton(
                       onPressed: _sending
                           ? null
                           : () => context.push(AppRoutes.register),

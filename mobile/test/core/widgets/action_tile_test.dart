@@ -4,12 +4,15 @@ import 'package:minechain/core/theme/app_theme.dart';
 import 'package:minechain/core/theme/sizes.dart';
 import 'package:minechain/core/widgets/action_tile.dart';
 
+import '../../fakes/word_breaks.dart';
+
 void main() {
   // Puts one tile on a plain screen, 200 dp wide, the size of a grid cell.
   Future<void> pumpTile(
     WidgetTester tester, {
     required VoidCallback onTap,
     bool primary = false,
+    double? labelRoom,
   }) {
     return tester.pumpWidget(
       MaterialApp(
@@ -23,6 +26,7 @@ void main() {
                 label: 'Register consignment',
                 onTap: onTap,
                 primary: primary,
+                labelRoom: labelRoom,
               ),
             ),
           ),
@@ -78,5 +82,71 @@ void main() {
       tester.getSize(find.byType(ActionTile)).height,
       greaterThanOrEqualTo(AppSizes.primaryTileMin),
     );
+  });
+
+  // T9.a (Mobile (36)): stronger shadows than before (3 and 6), the main tile
+  // still the highest. The theme is not read, so light and dark match.
+  testWidgets('sits at elevation 5, the main tile at 8', (tester) async {
+    double elevation() => tester
+        .widget<Material>(
+          find
+              .descendant(
+                of: find.byType(ActionTile),
+                matching: find.byType(Material),
+              )
+              .first,
+        )
+        .elevation;
+
+    await pumpTile(tester, onTap: () {});
+    expect(elevation(), 5);
+
+    await pumpTile(tester, onTap: () {}, primary: true);
+    expect(elevation(), 8);
+  });
+
+  // T9.b: in the 200 dp tile the label has 168 dp. In the test font
+  // "consignment" is 11 × 16 dp = 176 dp, a little too wide.
+  group('label width', () {
+    const label = 'Register consignment';
+    // Read from the drawn tile: the theme only gets its type sizes when a
+    // widget asks for it (Theme.of), so AppTheme.light alone has none.
+    double themeSize(WidgetTester tester) =>
+        Theme.of(tester.element(find.byType(ActionTile)))
+            .textTheme
+            .titleMedium!
+            .fontSize!;
+
+    testWidgets('told its width: shrunk just enough, and wraps only between '
+        'words', (tester) async {
+      await pumpTile(
+        tester,
+        onTap: () {},
+        labelRoom: ActionTile.labelRoomFor(200),
+      );
+
+      final size = drawnFontSize(tester, find.text(label));
+      expect(size, lessThan(themeSize(tester)));
+      expect(size, greaterThan(themeSize(tester) * 0.9));
+      expect(lineEndsInsideWords(tester, find.text(label)), isEmpty);
+    });
+
+    testWidgets('not told its width: never shrunk', (tester) async {
+      await pumpTile(tester, onTap: () {});
+
+      expect(
+        drawnFontSize(tester, find.text(label)),
+        closeTo(themeSize(tester), 0.01),
+      );
+    });
+
+    testWidgets('the words fit: not shrunk', (tester) async {
+      await pumpTile(tester, onTap: () {}, labelRoom: 400);
+
+      expect(
+        drawnFontSize(tester, find.text(label)),
+        closeTo(themeSize(tester), 0.01),
+      );
+    });
   });
 }

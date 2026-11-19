@@ -7,7 +7,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:minechain/core/riverpod/no_retry.dart';
 import 'package:minechain/core/text/app_text.dart';
 import 'package:minechain/core/theme/app_theme.dart';
+import 'package:minechain/core/theme/sizes.dart';
 import 'package:minechain/core/widgets/action_tile.dart';
+import 'package:minechain/core/widgets/mine_chain_logo.dart';
+import 'package:minechain/core/widgets/pill_button.dart';
 import 'package:minechain/features/admin/presentation/admin_home_screen.dart';
 import 'package:minechain/features/auth/domain/auth_state.dart';
 import 'package:minechain/features/auth/domain/user.dart';
@@ -17,6 +20,7 @@ import 'package:minechain/features/officer/presentation/officer_home_screen.dart
 import 'package:minechain/features/transporter/presentation/transporter_home_screen.dart';
 
 import '../fakes/fake_controllers.dart';
+import '../fakes/word_breaks.dart';
 
 /// Each home: its role, screen, title and tiles (the main tile first).
 final homes = <(Role, Widget, String, List<String>)>[
@@ -146,6 +150,108 @@ void main() {
       testWidgets('token expired: the expired-password notice', (tester) async {
         await pumpHome(tester, screen, SignedInNeedsPassword(userOf(role)));
         expect(find.text(AppText.needsPasswordNotice), findsOneWidget);
+      });
+
+      // Mobile (36): the notice takes the main tile's copper, and its button
+      // looks like the role pill, at full tap height.
+      testWidgets('the expired-password notice is copper, and its pill button '
+          'opens the prompt', (tester) async {
+        await pumpHome(tester, screen, SignedInNeedsPassword(userOf(role)));
+
+        final notice = find
+            .ancestor(
+              of: find.text(AppText.needsPasswordNotice),
+              matching: find.byType(Material),
+            )
+            .first;
+        expect(
+          tester.widget<Material>(notice).color,
+          AppTheme.light.colorScheme.primary,
+        );
+
+        final button = find.widgetWithText(
+          PillButton,
+          AppText.enterPasswordButton,
+        );
+        expect(
+          tester.getSize(button).height,
+          greaterThanOrEqualTo(AppSizes.tapTargetMin),
+        );
+        await tester.tap(button);
+        await tester.pumpAndSettle();
+        expect(find.text(AppText.passwordPromptExplanation), findsOneWidget);
+      });
+
+      // T9.b (Mobile (36), Q6): no tile label of this home is broken inside a
+      // word, the old "My consig / nments".
+      for (final (name, size) in [
+        ('portrait', const Size(360, 640)),
+        ('landscape', const Size(640, 360)),
+      ]) {
+        testWidgets('text 2.0, $name: every tile label wraps only between '
+            'words', (tester) async {
+          await pumpHome(
+            tester,
+            screen,
+            signedInAs(role),
+            size: size,
+            textScale: 2.0,
+          );
+          expect(tester.takeException(), isNull);
+
+          for (final label in labels) {
+            await tester.ensureVisible(tile(label));
+            await tester.pumpAndSettle();
+            expect(lineEndsInsideWords(tester, find.text(label)), isEmpty);
+          }
+        });
+      }
+
+      // Item 12 of Mobile (36): at the largest text the name used to vanish
+      // from the admin's app bar. It now lives with the logo below the tiles.
+      for (final (name, size) in [
+        ('portrait', const Size(360, 640)),
+        ('landscape', const Size(640, 360)),
+      ]) {
+        testWidgets('text 2.0, $name: the logo and "MineChain" are on the '
+            'home, below the tiles', (tester) async {
+          await pumpHome(
+            tester,
+            screen,
+            signedInAs(role),
+            size: size,
+            textScale: 2.0,
+          );
+
+          final brand = find.byType(BrandBlock);
+          await tester.ensureVisible(brand);
+          await tester.pump();
+          expect(tester.takeException(), isNull);
+          expect(find.byType(MineChainLogo), findsOneWidget);
+          expect(
+            find.descendant(of: brand, matching: find.text(AppText.appTitle)),
+            findsOneWidget,
+          );
+          expect(
+            tester.getRect(brand).top,
+            greaterThan(tester.getRect(tile(labels.last)).bottom),
+          );
+        });
+      }
+
+      // Wide enough that the test font's wide letters fit; the narrow cases
+      // are in home_scaffold_test.dart.
+      testWidgets('the top bar shows the role and the username', (
+        tester,
+      ) async {
+        await pumpHome(
+          tester,
+          screen,
+          signedInAs(role),
+          size: const Size(900, 640),
+        );
+        expect(find.text(title), findsOneWidget);
+        expect(find.text(userOf(role).username), findsOneWidget);
       });
 
       for (final (name, size, scale) in [
