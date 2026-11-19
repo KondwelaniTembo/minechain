@@ -741,6 +741,7 @@ void main() {
 
     for (final (name, result, sentence) in <(String, SaveResult, String)>[
       ('signing failed', const SaveSigningFailed(), AppText.saveSigningFailed),
+      ('no screen lock', const SaveNoScreenLock(), AppText.saveNoScreenLock),
       ('key not usable', const SaveKeyNotUsable(), AppText.saveKeyNotUsable),
       ('storage failed', const SaveStorageFailed(), AppText.savedWorkProblem),
       ('invalid field', const SaveInvalidField('qr_code'), AppText.saveInvalid),

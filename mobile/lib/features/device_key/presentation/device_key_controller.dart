@@ -209,7 +209,13 @@ class DeviceKeyController extends Notifier<DeviceKeyState> {
         }
         if (phoneKey == null) {
           if (stillWanted()) {
-            state = const DeviceKeyFailed(AppText.deviceKeyProblem);
+            // Hardening H1: no screen lock is fixed in the phone's
+            // settings, not by an administrator, so it says so.
+            state = DeviceKeyFailed(
+              e.error == DeviceKeyError.noScreenLock
+                  ? AppText.screenLockNeeded
+                  : AppText.deviceKeyProblem,
+            );
           }
           return;
         }

@@ -278,6 +278,7 @@ String _saveProblemText(SaveResult result) => switch (result) {
   SaveKeyNotUsable() => AppText.saveKeyNotUsable,
   SaveInvalidField() => AppText.saveInvalid,
   SaveSigningFailed() => AppText.saveSigningFailed,
+  SaveNoScreenLock() => AppText.saveNoScreenLock,
   SaveDuplicateStepId() => AppText.saveFailed,
   SaveStorageFailed() => AppText.savedWorkProblem,
   SaveBusy() => AppText.saveBusy, // calm: Save again works (Mobile (26))

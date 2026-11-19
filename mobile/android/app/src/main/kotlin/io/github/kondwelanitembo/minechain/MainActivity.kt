@@ -1,16 +1,41 @@
 package io.github.kondwelanitembo.minechain
 
+import android.content.pm.ApplicationInfo
+import android.os.Bundle
+import android.view.WindowManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 
 class MainActivity : FlutterActivity() {
     private var deviceKey: DeviceKeyPlugin? = null
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        // Finding M1 (docs/security-review.md, Hardening Q1): in a release
+        // build the screen is left out of the recent-apps picture,
+        // screenshots and screen recordings, so names, licence numbers and
+        // consignments cannot be read from them. Debug builds keep them, for
+        // the thesis screenshots. "Debuggable" is Android's own flag, set by
+        // the build type, so no Gradle setting is needed.
+        val debuggable = (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        if (!debuggable) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+
+        // Finding L1 (tapjacking, Hardening Q2): a touch is dropped when
+        // another app's window covers this one where the finger lands, so a
+        // see-through overlay cannot trick a tap onto our buttons. Android
+        // 12+ already blocks most of these; this covers Android 8-11. Set on
+        // the top view, which checks every touch before Flutter sees it.
+        window.decorView.filterTouchesWhenObscured = true
+    }
+
     // Called once the Flutter engine exists: the place to connect our own
     // platform channels to it.
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        deviceKey = DeviceKeyPlugin(flutterEngine.dartExecutor.binaryMessenger)
+        deviceKey = DeviceKeyPlugin(flutterEngine.dartExecutor.binaryMessenger, this)
     }
 
     // Disconnects the channel and stops its background thread, so nothing

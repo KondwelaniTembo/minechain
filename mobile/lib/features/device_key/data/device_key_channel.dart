@@ -18,8 +18,8 @@
 
 import 'package:flutter/services.dart';
 
-/// Why a device key operation failed. The first four match the Kotlin codes
-/// exactly.
+/// Why a device key operation failed. All but [unavailable] match the Kotlin
+/// codes exactly.
 enum DeviceKeyError {
   /// The alias, or the bytes to sign, were refused (a bug in the caller).
   badArgument,
@@ -32,6 +32,10 @@ enum DeviceKeyError {
 
   /// The Keystore failed, or answered with something unexpected.
   keystoreError,
+
+  /// The phone has no screen lock (PIN, pattern or password), so Kotlin
+  /// refuses to create a key or sign (Hardening, finding H1).
+  noScreenLock,
 
   /// The channel is not there: not running on Android, or the Kotlin side
   /// was not registered.
@@ -116,6 +120,7 @@ class DeviceKeyChannel {
     'BAD_ARGUMENT' => DeviceKeyError.badArgument,
     'KEY_NOT_FOUND' => DeviceKeyError.keyNotFound,
     'KEY_EXISTS' => DeviceKeyError.keyExists,
+    'NO_SCREEN_LOCK' => DeviceKeyError.noScreenLock,
     // KEYSTORE_ERROR, and any code a future Kotlin version might add.
     _ => DeviceKeyError.keystoreError,
   };
