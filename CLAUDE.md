@@ -53,8 +53,8 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
     - a test whose behaviour changed by decision says so in a comment and in
       `docs/testing-log.md`;
     - drafted commit messages have no Co-Authored-By line;
-    - give the developer ready-to-run `git add` / `git commit -m` commands with the commit
-      message.
+    - give the developer the commit the way "Git rules", "How the developer commits", says
+      (Source Control for one commit, a whole-paste script for two or more).
 
 - **Mobile app, miner module built** (`docs/plans/miner-registration-plan.md`) on
   `feature/miner-registration`. Mobile foundation (login, homes, pinned TLS 1.3, secure
@@ -465,6 +465,19 @@ backend/src/
 - Before the developer commits, remind them to check for secrets.
 - Use Conventional Commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`.
 - Suggest a commit message when a step is finished, but do not run it.
+- **How the developer commits** (asked for on 19 Nov):
+  - **One commit with every changed file:** say so, give the message, and the developer
+    uses VS Code Source Control (stage all, commit, push).
+  - **Two or more commits:** give one PowerShell script that can be pasted and run whole.
+    It names the exact files for each commit, because only Claude Code knows which files
+    belong to which subtask.
+  - The script runs each step only if the one before it worked, by checking
+    `$LASTEXITCODE` (PowerShell 5.1 has no `&&`). It ends with `git push`, then
+    `git --no-pager log --oneline -<n>` so the developer sees the result.
+  - No pager in a script: never put a bare `git diff`, `git log` or `git show` in it. Their
+    pager waits for `q`, and every later line waits too. Use `git --no-pager ...`.
+  - When a docs file holds rows for two subtasks, it goes into the later commit, and the
+    report says so.
 
 ## Platform
 
