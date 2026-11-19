@@ -1,7 +1,7 @@
 # Consignment check plan
 
 Status: **approved 19 Nov 2026, Q1–Q5 and Q7 as proposed; Q6 (demo accounts) asked again
-before T6.** T1 done.
+before T6.** T1–T2 done.
 
 Branch: `feature/consignment-check`, created by the developer from `main` after PR #14.
 
@@ -103,7 +103,7 @@ check in words. Shown only when the answer has it:
   (§4 order). Unit tests: the api.md example; each role's field set from the disclosure
   table; absent vs `null` (`zoneName: null` is "outside every zone", `chainTxHash: null`
   is "not sent yet"); each verdict and the worst-first order.
-- ⬜ **T2 Data** (about 30 min). `ConsignmentCheckApi.byQr(code, token)` through
+- ✅ **T2 Data** (about 30 min). `ConsignmentCheckApi.byQr(code, token)` through
   `ApiClient.get(['consignments', 'by-qr', code])` (path segments, so any `/` is sent as
   `%2F`, as api.md requires); provider wiring. Tests with the fake HTTP client: 200, 404,
   429 with `Retry-After`, 403, a malformed body, and that the token is sent.
