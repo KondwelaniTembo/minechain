@@ -4,7 +4,7 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 19 Nov 2026, after Design integration T2.
+Last updated: 19 Nov 2026, after Design integration T5.
 
 ## (a) Whole project
 
@@ -28,8 +28,9 @@ Last updated: 19 Nov 2026, after Design integration T2.
 - ⬜ Design integration: bring in Mapalo's theme from the `design/mapalo-theme` branch;
   navigation option A is kept here, and bottom navigation is the next feature
   (`docs/plans/design-integration-plan.md`)
-- ⬜ Bottom navigation (Mapalo's suggestion; Home + Account; try on its own branch, merge
-  only if approved on the phone)
+- ~~Bottom navigation (Mapalo's suggestion; Home + Account; try on its own branch, merge
+  only if approved on the phone)~~ Dropped 19 Nov by the developer to recover time; kept
+  as a future improvement
 - ⬜ Hardening: OWASP MASVS/MSTG review of the miner module, fix every Critical and High
   finding, replace the skipped miner case in `homes_test.dart`, 3 device checks
 
@@ -74,17 +75,33 @@ Last updated: 19 Nov 2026, after Design integration T2.
 ## (b) Today, Wed 18 Nov
 
 1. ✅ Workflow setup
-2. ⬜ Design integration (T1, T2 done, T3 next)
-3. ⬜ Bottom navigation (own branch)
+2. ⬜ Design integration (T1–T5 done; T6 next)
+3. ~~Bottom navigation~~ (dropped)
 4. ⬜ Hardening
 
-## (c) Current feature: Design integration — 2/4
+## (c) Current feature: Design integration — 5/11
 
 Plan: `docs/plans/design-integration-plan.md`, approved 19 Nov (Q1: scale the role down;
 Q2: 3:1 for the icon; Q3: the `app_theme.dart` comment is fixed in T3).
 
 - ✅ T1 App bar title: role always whole, "MineChain" only when whole; account button ≥ 56 dp
 - ✅ T2 Theme test: copper icon on `secondaryContainer`, light and dark
-- ⬜ T3 Docs: Mobile (35) with Mapalo's credit, the copper vs error-red limitation, the
+- ✅ T3 Docs: Mobile (35) with Mapalo's credit, the copper vs error-red limitation, the
   foundation plan's seed wording, the status line of the bottom navigation suggestion
-- ⬜ T4 Phone check on the A57: light, dark, largest text
+- ✅ T4 Phone check on the A57: light, dark, largest text (the T1 rule holds; twelve changes
+  requested, recorded as Mobile (36))
+- ✅ T5 Home header: copper password and server notices with a pill button; role pill with
+  the username
+- ⬜ T6 Logo and brand block under the tiles; name out of the app bar; splash and login
+- ⬜ T7 Adaptive launcher icon from the same geometry
+- ⬜ T8 Copper login fields, sand cards with a copper outline, outlined chips
+- ⬜ T9 Stronger tile shadows, no mid-word breaks, spacing on "Send my work"
+- ⬜ T10 Docs: Mobile (36) completed
+- ⬜ T11 Phone check on the A57
+
+T5–T11 approved 19 Nov (Q4–Q7 as proposed; Q8: server notices in copper too).
+
+**Schedule (19 Nov): behind by about one day.**
+- Still open from Wed 18: Design integration (T5–T11, about 5 h 20 min of Claude Code time),
+  Bottom navigation and Hardening.
+- Thu 19's two features (Consignment check, Transporter handoff) have not started.

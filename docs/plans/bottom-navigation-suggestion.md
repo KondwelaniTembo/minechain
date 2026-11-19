@@ -1,8 +1,9 @@
 # Suggestion: a bottom navigation bar (Home and Account)
 
-**Status: a suggestion only. Nothing here has been built or tested.** It was left out of
-the copper restyle on purpose, because it changes routing, and the restyle was meant to
-touch looks only. The developer decides whether to build it.
+**Status: dropped on 19 Nov 2026 to recover time before submission; kept as a future
+improvement.** Nothing here has been built. It was left out of the copper restyle on
+purpose, because it changes routing, and the restyle was meant to touch looks only. The
+top bar's account button stays (decisions Mobile (35) and (36)).
 
 ## Why consider it
 

@@ -1,5 +1,6 @@
 // The app's look: colours, text styles and button sizes, for light and dark
-// mode, built from one seed colour.
+// mode, built from a copper seed colour with some pairs set by hand (decision
+// Mobile (35); the design is by Mapalo Maseko).
 //
 // Why a seed: Material 3 can build a whole matching set of colours (a
 // ColorScheme) from one colour. Each colour "role" (primary, surface, the text

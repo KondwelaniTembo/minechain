@@ -135,15 +135,231 @@ decides):
 - `design-account-dark.png`;
 - `design-admin-home-largest-text.png` (if step 4 was done).
 
-After T4 comes the PR for `design/mapalo-theme`, with Mapalo credited in the description.
+**T4 result (19 Nov, A57).** The T1 rule holds on the phone:
+- at default text, both words show ("MineChain" and "Administrator");
+- at the largest text, the role stays whole and "MineChain" is left out.
+
+The developer then asked for twelve UI changes, which became T5–T11 below. The PR comes
+after T11.
+
+## Part 2: the developer's UI changes after the phone check (T5–T11)
+
+Recorded as decision Mobile (36). They build on Mapalo's theme (Mobile (35), whose credit
+stays), and every existing rule still applies:
+- contrast in light and dark: text at least 4.5:1, icons and edges at least 3:1;
+- tap targets at least 56 dp;
+- a state is never shown by colour alone;
+- no missed taps in tests (`warnIfMissed` stays on);
+- a test for every change, failing on the old code where possible;
+- 360×640 dp at text size 2.0, portrait and landscape.
+
+All the contrast figures below were computed with the WCAG formula from the theme's
+hand-set colours, and each new pair is asserted in `app_theme_test.dart` or in the screen's
+own test.
+
+### T5. Home header: the password notice and the role pill with the username (items 1, 6)
+
+- **T5.a** The "Enter your password" notice (`home_header.dart`, `NeedsPasswordNotice`) moves
+  from patina green to the colours of the main tile:
+  - the notice: `primary` background with `onPrimary` text and key icon: 6.41:1 in light,
+    7.68:1 in dark;
+  - the "Enter password" button looks like the role pill: `primaryContainer` with
+    `onPrimaryContainer` text (12.26:1 light, 7.48:1 dark), a rounded `tileRadius` shape and
+    at least 56 dp tall;
+  - the pill's edge against the notice: 4.98:1 light, 5.36:1 dark, so it reads as a separate
+    button;
+  - the key icon and the sentence stay, so the state is not shown by colour alone.
+  - The same notice on "My account" (`_NeedsPasswordCard`) changes too (Q4), and so do the
+    server's "waking up" and "not ready" notices (Q8).
+- **T5.b** The role pill shows the role and the username, for example "Miner · Clement".
+  - `HomeScaffold` takes an optional `username`. The five homes read it from the
+    signed-in user (`SignedIn` and `SignedInNeedsPassword` both carry `user.username`).
+  - The rule:
+    1. the role is never cut (T1);
+    2. the username takes the space that is left and ends in "…" when it runs out;
+    3. when fewer than 3 characters of the username would show, it is left out, never
+       "C…";
+    4. if the role alone is too wide, the T1 scale-down still applies.
+  - TalkBack reads "Miner, signed in as Clement".
+- **Tests:**
+  - Widget tests at 360×640 dp, text 1.0 and 2.0, for Transporter and Administrator with a
+    short and a long username: the role is whole; the username is whole, ends in "…" or is
+    absent; the pill stays left of the account button; there is no overflow.
+  - The notice's button: at least 56 dp tall, tapped without a miss, opens the prompt.
+  - A contrast test for the pill's edge on the notice (at least 3:1).
+- **Fails on the old code:** there is no username, and the notice uses `tertiaryContainer`.
+- **Estimate:** 60 min.
+
+### T6. The MineChain logo and name: in the app and below the tiles (items 7, 8 in-app, 12)
+
+- **T6.a** An original logo: a pick and a shovel crossed in an X. It is drawn with a
+  `CustomPainter` (`core/widgets/mine_chain_logo.dart`), which needs no package.
+  - The shapes are kept in one place (`core/brand/logo_geometry.dart`) on a 108-unit grid as
+    plain path commands (move, line, curve, close), so T7 builds the launcher icon from the
+    same drawing.
+  - It is drawn in `primary` (light copper on dark, deep copper on light: 6.1:1 and
+    10.29:1 against the screen, both above 3:1).
+  - The logo is decorative to TalkBack; the name next to it is read once.
+- **T6.b** A "brand block" (the logo, about 72 dp, above "MineChain" in copper) sits
+  directly under the tiles on every home, 32 dp below the last tile, inside the scrolling
+  column. It is never pinned or cut, and at large text it scrolls with the tiles.
+- **T6.c** "MineChain" leaves the app bar, which now holds only the role pill and the
+  account button.
+  - This replaces part 2 of the T1 rule ("MineChain only when whole"), by decision
+    Mobile (36).
+  - The T1 tests that check "MineChain" in the app bar change with it: they now check that
+    the app bar has no "MineChain" and the brand block has one. The role-whole assertions
+    stay as they are.
+  - This is a planned change of behaviour, not a weaker test.
+- **T6.d** The splash and login screens show the logo above the name. Splash keeps its
+  progress indicator.
+- **Tests:**
+  - For each of the five homes in `homes_test.dart`, at 360×640 dp and text 2.0: the logo
+    and "MineChain" can be reached by scrolling, are on screen, cause no overflow, and are
+    whole.
+  - Splash and login show the logo.
+  - A painter test: the logo paints in the theme's `primary` in both themes.
+- **Fails on the old code:** there is no logo and no brand block.
+- **Estimate:** 75 min.
+
+### T7. Android launcher icon from the same drawing (item 8, launcher)
+
+No package is needed. The app's minimum is Android 8.0 (API 26, `minSdk = 26`), which
+supports adaptive icons on every phone the app can run on.
+- **T7.a** A small Dart script (`tool/make_launcher_icon.dart`, run by hand) writes
+  `res/drawable/ic_launcher_foreground.xml` as an Android vector drawable from
+  `logo_geometry.dart`.
+- **T7.b** `res/mipmap-anydpi-v26/ic_launcher.xml` declares the adaptive icon:
+  - the background is deep copper `#8F4E1E` (`res/values/ic_launcher_background.xml`);
+  - the foreground is the logo in cream `#FFDCC6`, 4.98:1 against the copper;
+  - a monochrome layer is added for Android 13 themed icons.
+- **T7.c** The logo is drawn inside the central 66 dp circle of the 108 dp canvas, Android's
+  safe zone, so a round mask never cuts it.
+  - The old `mipmap-*/ic_launcher.png` files stay. Android 8+ always uses the anydpi-v26
+    icon, so they are never shown, and removing them is not worth the risk.
+- **Tests:** a drift test that runs the generator in memory and compares its output with the
+  committed XML, like the backend's ABI drift test, so the app logo and the launcher icon
+  cannot drift apart. A test that every point of the geometry lies inside the 66 dp circle.
+- **Phone check:** the icon on the A57's home screen and in the app drawer.
+- **This touches `mobile/android/**`,** which is on the ask-first list. Approving this plan
+  approves only the three new resource files above: no manifest, Gradle or signing change.
+- **Estimate:** 45 min.
+
+### T8. Login fields, cards and mineral chips (items 2, 3, 4, 9)
+
+- **T8.a** Login fields in copper: the label, prefix icon, border and focused border use
+  `primary`, with a 2 dp focused border.
+  - 6.1:1 on the light screen, 10.29:1 on dark.
+  - Done as an `inputDecorationTheme` in `app_theme.dart`, so the weight field on "Register
+    consignment" matches (Q5).
+  - The error state keeps Material's red border and its sentence under the field. Copper
+    and red are only 1.01:1 apart (the Mobile (35) limitation), so the sentence is what
+    marks an error, and a test checks it is shown.
+- **T8.b** Cards on "My account" and "My consignments", proposed through `cardTheme`:
+  - **Colour:** `secondaryContainer`, the tiles' sand (`#F3E0D2` light, `#4B392D` dark),
+    with `onSecondaryContainer` text (12.92:1 light, 8.53:1 dark).
+  - **Copper icons on it:** 5.01:1 light, 6.07:1 dark.
+  - **Shadow:** elevation 3 with the warm shadow, like the tiles.
+  - **Edge:** a 1 dp `primary` outline, 6.1:1 against the light screen, so the edge is
+    clear even where the shadow is weak. The fill alone is only 1.22:1 from the light
+    screen, which is why the outline is needed.
+  - **Why not a darker sand:** I measured `#EAD3C2`. It is 1.37:1 from the screen, but
+    copper text on it falls to 4.45:1 and the error red to 4.49:1, both below 4.5:1, so it
+    is rejected.
+  - The error lines in "My consignments" were checked on the new card: red `#BA1A1A` is
+    about 5.4:1 light, and `#FFB4AB` is 6.43:1 dark.
+- **T8.c** Mineral chips (`register_consignment_screen.dart`, through `chipTheme`):
+  - **Unselected:** the screen colour with a 1.5 dp `primary` outline (6.1:1 light,
+    10.29:1 dark) and elevation 2.
+  - **Selected:** `primary` fill with `onPrimary` text (6.41:1, 7.68:1), elevation 4, and
+    the existing tick, so the choice is not shown by colour alone.
+  - Tap height stays at least 56 dp (the test asserts it).
+- **Tests:**
+  - Contrast tests for every new pair.
+  - Widget tests: the login field borders and labels use `primary`; an error still shows its
+    sentence; both cards use the new colour and outline; the chips' outline, elevation and
+    tap height.
+  - The register screen's existing 360×640 / text 2.0 portrait and landscape tests run
+    unchanged.
+- **Fails on the old code:** the default borders, the card colour and the chips are all
+  different.
+- **Estimate:** 60 min.
+
+### T9. Tiles: stronger shadows, no word broken in the middle, more space on "Send my work" (items 10, 11, 5)
+
+- **T9.a** Tile elevation goes from 3 to 5 for the other tiles and from 6 to 8 for the main
+  tile, with the same warm shadow colour. The same values apply in light and dark.
+- **T9.b** "My consig / nments": Flutter breaks a single word that is wider than its line.
+  The proposal (Q6):
+  - the home uses **one column** when the longest word of any tile's label does not fit in
+    a two-column tile at the current text size, so the text keeps the size the user chose;
+  - only if a word does not fit even the full width is that one label scaled down
+    (`FittedBox`-style, measured like T1).
+- **T9.c** "Send my work": an 8 dp gap between the four status lines above "Send now"
+  (`send_work_screen.dart`, `_Counts`).
+- **Tests:**
+  - At 360×640 and text 2.0, portrait and landscape, every line of every tile label ends at a
+    space or at the end of the label, never inside a word. This is checked from the
+    paragraph's line metrics, and it fails on the old code ("My consig|nments").
+  - The tile elevations.
+  - The gap between the count lines is at least 8 dp.
+  - The existing "no overflow, every tile reachable" tests stay.
+- **Estimate:** 60 min.
+
+### T10. Docs
+
+- Complete Mobile (36) in `docs/decisions.md` with what was built (colours, rules, the
+  measured contrasts) and with the answers to Q4–Q6.
+- Mark Mobile (35)'s title rule part 2 as replaced by Mobile (36); Mapalo's credit is
+  unchanged.
+- Add a row on the launcher icon approach.
+- **Estimate:** 20 min.
+
+### T11. Phone check on the A57 (the developer)
+
+- **Light and dark, default and largest text:**
+  - homes: the pill with the username, the brand block below the tiles, the stronger tile
+    shadows, and no broken words;
+  - the password notice: log in, wait for the token to expire or use the test path, check
+    its colours and that the button is easy to tap;
+  - login: the copper fields and the logo; splash;
+  - "My account" and "My consignments": the cards;
+  - "Register consignment": the chips;
+  - "Send my work": the spacing.
+- **Launcher icon:** on the home screen and in the app drawer, with the round mask.
+- **Screenshots:**
+  - `ui2-miner-home-light.png`, `ui2-miner-home-dark.png`
+  - `ui2-admin-home-largest-text.png`
+  - `ui2-password-notice.png`
+  - `ui2-login-light.png`
+  - `ui2-account-light.png`
+  - `ui2-consignments-light.png`
+  - `ui2-chips-light.png`
+  - `ui2-send-work.png`
+  - `ui2-launcher-icon.png`
+- **Estimate:** 30 min (the developer).
+
+After T11 comes the PR for `design/mapalo-theme`, crediting Mapalo for the theme and noting
+that Mobile (36) holds the developer's changes.
 
 ## Checklist
 
-- ⬜ T1 App bar title: role always whole, "MineChain" only when whole; account button ≥ 56 dp
-- ⬜ T2 Theme test: copper icon on `secondaryContainer`, light and dark
-- ⬜ T3 Docs: Mobile (35) with Mapalo's credit, the copper vs error-red limitation, the
+- ✅ T1 App bar title: role always whole, "MineChain" only when whole; account button ≥ 56 dp
+- ✅ T2 Theme test: copper icon on `secondaryContainer`, light and dark
+- ✅ T3 Docs: Mobile (35) with Mapalo's credit, the copper vs error-red limitation, the
   foundation plan's seed wording, the status line of the bottom navigation suggestion
-- ⬜ T4 Phone check on the A57: light, dark, largest text
+- ✅ T4 Phone check on the A57: light, dark, largest text (the T1 rule holds; twelve changes
+  requested)
+- ⬜ T5 Home header: copper password notice with a pill button; role pill with the username (60 min)
+- ⬜ T6 Logo (CustomPainter) and brand block under the tiles; name out of the app bar; splash
+  and login (75 min)
+- ⬜ T7 Adaptive launcher icon from the same geometry, no package (45 min)
+- ⬜ T8 Copper login fields, sand cards with a copper outline, outlined chips (60 min)
+- ⬜ T9 Stronger tile shadows, no mid-word breaks, spacing on "Send my work" (60 min)
+- ⬜ T10 Docs: Mobile (36) completed, Mobile (35) title rule marked replaced (20 min)
+- ⬜ T11 Phone check on the A57 (30 min, the developer)
+
+Claude Code's time is about 5 h 20 min, plus the developer's phone check and the commits.
 
 ## Open questions
 
@@ -155,3 +371,28 @@ After T4 comes the PR for `design/mapalo-theme`, with Mapalo credited in the des
   4.5:1 would also pass, but it is stricter than the standard asks.
 - **Q3.** T3.c also changes a comment in `app_theme.dart`. Comment only, no behaviour. Is
   that fine inside a docs subtask?
+
+Q1–Q3 were answered on 19 Nov: scale down, 3:1, yes.
+
+- **Q4.** Should the password notice on "My account" (`_NeedsPasswordCard`) get the same
+  copper colours as the one on the homes? The proposal is yes, so the same state looks the
+  same everywhere.
+- **Q5.** Should the copper field style apply to every text field (the proposal: through
+  the theme, so the login and weight fields match) or only to the login screen?
+- **Q6.** For long words at large text, should the home switch to one column (the proposal:
+  the text keeps its size), or should the word be scaled down a little in two columns? Down
+  to the size needed, "consignments" at text 2.0 on a 360 dp phone would be drawn at about
+  1.3×.
+- **Q7.** Where should the brand block sit: directly under the tiles (the proposal), or
+  pushed to the bottom of the screen when there is room? Under the tiles is simpler and
+  never moves with the screen height.
+- **Q8.** The green server notices ("server waking up") keep patina green, since only the
+  password notice was asked about. Is that right?
+
+Answered on 19 Nov:
+- Q4–Q7 as proposed;
+- **Q8: no.** The server's "waking up" and "not ready" notices take the same copper as the
+  password notice, and their "Try again" becomes the same pill button. This is added to
+  T5. Server problems keep the red error colours: a pill on red would hardly show
+  (`primaryContainer` and `errorContainer` are nearly the same pink).
+- The Bottom navigation feature is dropped. The top bar's account button stays.
