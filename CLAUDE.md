@@ -39,7 +39,7 @@ Rules that shape the design:
 Updated 19 Nov 2026. Read this first in a new session, then `docs/progress.md` (the day
 plan and the current feature's subtasks), then `docs/decisions.md`.
 
-- **Now: Hardening** (`docs/plans/hardening-plan.md`, on a new branch the developer creates
+- **Done: Hardening** (`docs/plans/hardening-plan.md`, on a new branch the developer creates
   from `main`, suggested `chore/hardening`). An OWASP MASVS/MSTG review of the app as built
   (foundation, miner module, design), fixing every Critical and High finding, replacing the
   skipped miner case in `homes_test.dart`, and three device checks. Plan approved 19 Nov
@@ -73,8 +73,10 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
   - T5 done: `decisions.md` Hardening (1)–(5) plus five known limitations (L6 `run-as`,
     M2, L4, L5, untested Kotlin); `security-review.md` marked with T2/T4 results and a new
     Low L6 (re-check in the final OWASP review); PR description drafted. Hardening 5/5.
-  - Next: the small extra, a back arrow on "My account" (the developer chose option B, on
-    this branch; reverses Q10 of Mobile (37)), then the PR for `chore/hardening`.
+  - Merged as PR #13 (`229b65a`).
+  - Then `fix/account-back-arrow`: "My account" has a back arrow that goes to the Home
+    branch (`goBranch`), decision Mobile (39), reversing Q10 of Mobile (37). Tests 1438
+    passed, 0 skipped. A57 check fine. Left: PR. Next feature: Consignment check (Thu 19).
 
 - **Design integration merged as PR #11** (`d86e33c`, 19 Nov;
   `docs/plans/design-integration-plan.md`, T1–T14). Mapalo Maseko's copper theme, the home
