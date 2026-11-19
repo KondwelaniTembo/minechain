@@ -39,48 +39,20 @@ Rules that shape the design:
 Updated 19 Nov 2026. Read this first in a new session, then `docs/progress.md` (the day
 plan and the current feature's subtasks), then `docs/decisions.md`.
 
-- **Now: Design integration on `design/mapalo-theme`** (`docs/plans/design-integration-plan.md`).
-  - T1–T12 are done, committed and pushed (T9 `4936a1b`, T10 `04bb56e`, T11 `fefff94`,
-    T12 `63b41a9`; tests 1430 passed, 1 skipped). The developer checked T10–T12 on the A57
-    on 19 Nov: fine.
-    - T7: the launcher icon is written by `mobile/tool/make_launcher_icon.dart`
-      (`dart run tool/make_launcher_icon.dart` from `mobile/`). `launcher_icon_test.dart`
-      fails if the committed XML drifts from `logo_geometry.dart`. The developer has
-      seen the icon on the A57.
-    - T8: copper fields, sand cards and outlined chips, all set in the theme
-      (`app_theme.dart`).
-    - T9: tile elevation 5 / 8; a home drops columns one at a time when a label's word does
-      not fit, and only a word too wide even for one column shrinks its label
-      (`ActionTile.labelRoom`, `core/text/text_width.dart`); 16 dp between the "Send my
-      work" lines (the developer chose 16; the plan said 8, which already existed).
-  - **Part 3, the navigation bar (added 19 Nov at the developer's request, Q9–Q13 approved
-    as proposed):** Mapalo's Home/Account bar AND the round account button, both.
-    - T10: bar and rail theme in `app_theme.dart` (peach pill, copper outline, bold copper
-      word, 14 sp, words always shown).
-    - T11: `StatefulShellRoute.indexedStack` in `app_router.dart` (Home branch = five homes,
-      Account branch = `/account`); task pages stay top-level, so they cover the bar; the
-      plain bar is `core/widgets/app_navigation.dart`; the homes' account button uses
-      `go`, not `push`.
-    - T12: `NavigationRail` when the height is under 480 dp (`AppSizes.compactHeight`),
-      as wide as its widest word up to 144 dp, past which its words shrink just enough;
-      Android back on Account goes Home (`PopScope` in the shell), on Home it closes the app;
-      no back arrow on "My account" (Q10); `test/fakes/android_back.dart` presses back
-      the way the system does. Flutter's `NavigationBar` caps its words at 1.3×
-      (`_kMaxLabelTextScaleFactor`); the bar is measured at that cap, and **Q14 (19 Nov):
-      keep the cap**, for the bar only.
-  - T13 (docs) done: `docs/decisions.md` has Mobile (36) completed with the built details,
-    Mobile (35) marked (title rule part 2 replaced, option A extended), Mobile (37) the
-    navigation bar with its 1.3× known limitation, and Mobile (38) the launcher icon; the
-    bar is off the future improvements list; the suggestion file says "built".
-  - T13 is `7d19b57`. T14, the developer's full phone check on the A57, was fine (19 Nov).
-    All 14 subtasks are done.
-  - Next: the developer opens the PR for `design/mapalo-theme` into `main` with the drafted
-    title and description, and merges it. It changes only `mobile/` and `docs/` (plus three
-    new Android launcher resources), so merging deploys nothing to Render. After the merge
-    the next feature is Hardening (`docs/progress.md`).
-  - Bottom navigation was dropped on the morning of 19 Nov, then brought back the same day
-    as Part 3 (above). The schedule is about one day behind plus the bar's 3 h, which the
-    developer accepted; see `docs/progress.md`.
+- **Now: Hardening** (`docs/plans/hardening-plan.md`, on a new branch the developer creates
+  from `main`, suggested `chore/hardening`). An OWASP MASVS/MSTG review of the app as built
+  (foundation, miner module, design), fixing every Critical and High finding, replacing the
+  skipped miner case in `homes_test.dart`, and three device checks. Plan written 19 Nov,
+  waiting for approval.
+
+- **Design integration merged as PR #11** (`d86e33c`, 19 Nov;
+  `docs/plans/design-integration-plan.md`, T1–T14). Mapalo Maseko's copper theme, the home
+  header and brand block, the launcher icon (`mobile/tool/make_launcher_icon.dart`), and the
+  Home/Account navigation bar (rail under 480 dp height, Android back on Account goes Home,
+  the bar's 1.3× word cap kept, Q14). Decisions Mobile (35)–(38). Tests 1430 passed,
+  1 skipped. Only `mobile/` and `docs/` changed, so nothing was deployed to Render.
+  - The schedule is about one day behind plus the bar's 3 h, which the developer accepted;
+    see `docs/progress.md`.
   - Rules learned in this feature:
     - run `dart format` only on files you changed, never the whole of `lib/`;
     - a test whose behaviour changed by decision says so in a comment and in
