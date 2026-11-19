@@ -9,6 +9,13 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    // Hardening T4: BuildConfig.DEBUG tells MainActivity at BUILD time
+    // whether this is a debug build, for FLAG_SECURE. Asking Android at run
+    // time (ApplicationInfo.FLAG_DEBUGGABLE) was not reliable on the A57.
+    buildFeatures {
+        buildConfig = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

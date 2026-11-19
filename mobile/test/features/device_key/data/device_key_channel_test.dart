@@ -169,6 +169,24 @@ void main() {
       );
     });
 
+    // Hardening H1: Kotlin refuses createKey and sign on a phone with no
+    // screen lock.
+    test(
+      'NO_SCREEN_LOCK becomes noScreenLock, for createKey and sign',
+      () async {
+        kotlinFails('NO_SCREEN_LOCK');
+
+        await expectLater(
+          DeviceKeyChannel().createKey(alias),
+          failsWith(DeviceKeyError.noScreenLock),
+        );
+        await expectLater(
+          DeviceKeyChannel().sign(alias, Uint8List(1)),
+          failsWith(DeviceKeyError.noScreenLock),
+        );
+      },
+    );
+
     test('KEYSTORE_ERROR becomes keystoreError', () async {
       kotlinFails('KEYSTORE_ERROR');
 

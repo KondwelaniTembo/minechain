@@ -29,10 +29,14 @@ class SigningChannel extends FakeDeviceKeyChannel {
 
   final List<Uint8List> signed = [];
   bool failSign = false;
+  bool noScreenLock = false;
 
   @override
   Future<Uint8List> sign(String alias, Uint8List bytes) async {
     if (failSign) throw const DeviceKeyException(DeviceKeyError.keystoreError);
+    if (noScreenLock) {
+      throw const DeviceKeyException(DeviceKeyError.noScreenLock);
+    }
     signed.add(Uint8List.fromList(bytes));
     return Uint8List.fromList([0x30, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x02]);
   }
@@ -275,6 +279,15 @@ void main() {
     channel.failSign = true;
 
     expect(await saveWith(useCase()), isA<SaveSigningFailed>());
+    expect(await saved(), isEmpty);
+  });
+
+  // Hardening H1: a key made before the screen lock was removed is refused
+  // at signing, and the save says why.
+  test('no screen lock at signing: its own result, nothing stored', () async {
+    channel.noScreenLock = true;
+
+    expect(await saveWith(useCase()), isA<SaveNoScreenLock>());
     expect(await saved(), isEmpty);
   });
 

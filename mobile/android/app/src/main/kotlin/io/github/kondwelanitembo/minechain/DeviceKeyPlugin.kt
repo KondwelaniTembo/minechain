@@ -20,7 +20,15 @@ package io.github.kondwelanitembo.minechain
 // Errors go back as fixed codes only. An exception's own text can contain
 // details of the device or the key, so it is never sent to Dart and never
 // logged. Nothing in this file writes to the log.
+//
+// A screen lock is required (Hardening T2, finding H1 in
+// docs/security-review.md): createKey and sign refuse with NO_SCREEN_LOCK
+// when the phone has no PIN, pattern or password, so a phone picked up
+// with no lock cannot sign as its owner.
 
+import android.app.KeyguardManager
+import android.content.Context
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.security.keystore.KeyGenParameterSpec
@@ -37,17 +45,21 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 
-class DeviceKeyPlugin(messenger: BinaryMessenger) : MethodChannel.MethodCallHandler {
+class DeviceKeyPlugin(
+    messenger: BinaryMessenger,
+    context: Context,
+) : MethodChannel.MethodCallHandler {
 
     companion object {
         const val CHANNEL = "minechain/device_key"
 
         // The fixed error codes. The Dart side (device_key_channel.dart)
-        // knows exactly these four.
+        // knows exactly these five.
         const val BAD_ARGUMENT = "BAD_ARGUMENT"
         const val KEY_NOT_FOUND = "KEY_NOT_FOUND"
         const val KEY_EXISTS = "KEY_EXISTS"
         const val KEYSTORE_ERROR = "KEYSTORE_ERROR"
+        const val NO_SCREEN_LOCK = "NO_SCREEN_LOCK"
 
         private const val KEYSTORE = "AndroidKeyStore"
 
@@ -70,6 +82,11 @@ class DeviceKeyPlugin(messenger: BinaryMessenger) : MethodChannel.MethodCallHand
     }
 
     private val channel = MethodChannel(messenger, CHANNEL)
+
+    // The application context, never an activity: this object can outlive
+    // a single activity, and holding one would leak it.
+    private val keyguard =
+        context.applicationContext.getSystemService(KeyguardManager::class.java)
 
     // Keystore calls can take tens or hundreds of milliseconds (key
     // generation is the slowest), and Flutter calls this handler on the
@@ -166,7 +183,18 @@ class DeviceKeyPlugin(messenger: BinaryMessenger) : MethodChannel.MethodCallHand
         return checkedSpki(certificate.publicKey.encoded)
     }
 
+    /**
+     * Refuses unless the phone has a secure screen lock (a PIN, pattern or
+     * password; a swipe does not count). Checked before every key creation
+     * AND every signature: a key made while the phone had a lock is refused
+     * too if the lock is later removed.
+     */
+    private fun requireScreenLock() {
+        if (keyguard?.isDeviceSecure != true) throw KeyError(NO_SCREEN_LOCK)
+    }
+
     private fun createKey(alias: String): ByteArray {
+        requireScreenLock()
         val store = keyStore()
         // Never overwrite: generating a key under an existing alias would
         // silently replace it, and every step signed with the old key would
@@ -180,12 +208,20 @@ class DeviceKeyPlugin(messenger: BinaryMessenger) : MethodChannel.MethodCallHand
             // No PIN or fingerprint before each signature. Asking at every
             // registration would break the three-tap target (NFR-06), and a
             // miner at a mine site may be wearing gloves or have wet hands.
-            // KNOWN LIMIT: anyone holding the unlocked phone can sign as its
-            // owner (decision Mobile (11)). Requiring a device screen lock
-            // before the key is made is listed as a future improvement.
+            // The phone must have a screen lock instead (requireScreenLock).
+            // KNOWN LIMIT: anyone holding the UNLOCKED phone can still sign
+            // as its owner (decision Mobile (11)).
             // (false is also Android's default; it is written out so the
             // choice is visible.)
             .setUserAuthenticationRequired(false)
+            .apply {
+                // Android 9+: the Keystore itself refuses to use the key
+                // while the phone is locked, whatever the app does. On
+                // Android 8 only requireScreenLock() applies.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    setUnlockedDeviceRequired(true)
+                }
+            }
             .build()
 
         val generator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, KEYSTORE)
@@ -196,6 +232,7 @@ class DeviceKeyPlugin(messenger: BinaryMessenger) : MethodChannel.MethodCallHand
     }
 
     private fun sign(alias: String, bytes: ByteArray): ByteArray {
+        requireScreenLock()
         // This is a handle to the key inside the Keystore, not its bytes.
         val key = keyStore().getKey(alias, null) as? PrivateKey ?: throw KeyError(KEY_NOT_FOUND)
         // SHA256withECDSA hashes the bytes itself, so the payload is passed

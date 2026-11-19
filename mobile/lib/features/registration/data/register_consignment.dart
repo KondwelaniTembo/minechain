@@ -65,6 +65,13 @@ final class SaveSigningFailed extends SaveResult {
   const SaveSigningFailed();
 }
 
+/// The phone has no screen lock, so the Keystore side refused to sign
+/// (Hardening, finding H1). Nothing stored; Save works again once a lock
+/// is set.
+final class SaveNoScreenLock extends SaveResult {
+  const SaveNoScreenLock();
+}
+
 /// A step with this id is already saved. Each save makes a fresh id, so this
 /// means a bug; the earlier row is kept as it was.
 final class SaveDuplicateStepId extends SaveResult {
@@ -179,7 +186,10 @@ class RegisterConsignment {
         alias,
         Uint8List.fromList(ascii.encode(payload)),
       );
-    } on DeviceKeyException {
+    } on DeviceKeyException catch (e) {
+      if (e.error == DeviceKeyError.noScreenLock) {
+        return const SaveNoScreenLock();
+      }
       return const SaveSigningFailed();
     }
 

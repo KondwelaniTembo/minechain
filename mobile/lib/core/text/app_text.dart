@@ -283,6 +283,10 @@ abstract final class AppText {
       'Something in this record is not valid. Scan the custody record again.';
   static const String saveSigningFailed =
       'The phone could not sign the record. Nothing was saved. Try again.';
+  static const String saveNoScreenLock =
+      'Nothing was saved: this phone needs a screen lock before it can sign. '
+      "Set a PIN, pattern or password in the phone's Settings, under Lock "
+      'screen, then save again.';
   static const String saveFailed =
       'Something went wrong. Nothing was saved. Try again.';
 
@@ -471,6 +475,13 @@ abstract final class AppText {
   static const String deviceKeyProblem =
       'This phone could not set up its device key. Close the app and open '
       'it again. If it keeps happening, ask an administrator.';
+
+  /// Hardening H1: the key is made and used only on a phone with a screen
+  /// lock. Plain steps, because the fix is in the phone's own settings.
+  static const String screenLockNeeded =
+      'This phone needs a screen lock before it can sign your records. Set '
+      "a PIN, pattern or password in the phone's Settings, under Lock "
+      'screen, then open MineChain again.';
 
   // ---- Account requests (features/admin/presentation/
   //      account_requests_screen.dart) ----

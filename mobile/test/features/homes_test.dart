@@ -4,7 +4,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:minechain/core/riverpod/no_retry.dart';
+import 'package:minechain/core/router/routes.dart';
 import 'package:minechain/core/text/app_text.dart';
 import 'package:minechain/core/theme/app_theme.dart';
 import 'package:minechain/core/theme/sizes.dart';
@@ -29,7 +31,7 @@ final homes = <(Role, Widget, String, List<String>)>[
     const MinerHomeScreen(),
     AppText.minerTitle,
     // In screen order. Every miner tile opens its screen since M7, so the
-    // miner has no "Coming soon" tile (see below).
+    // miner has no "Coming soon" tile; its own test checks where each goes.
     [AppText.registerConsignment, AppText.myConsignments, AppText.sendMyWork],
   ),
   (
@@ -127,20 +129,20 @@ void main() {
       // The last tile, because a home's main tile opens its real screen
       // once its module is built (the admin's "Account requests", plan A1),
       // and that needs the router, which this test leaves out.
-      testWidgets(
-        'a tile says "Coming soon"',
-        (tester) async {
+      //
+      // Not for the miner: all three of its tiles are built (M7), so it has
+      // no "Coming soon" tile. Hardening T3 replaced the skipped miner case
+      // with the router test after this loop.
+      if (role != Role.miner) {
+        testWidgets('a tile says "Coming soon"', (tester) async {
           await pumpHome(tester, screen, signedInAs(role));
           await tester.ensureVisible(tile(labels.last));
           await tester.pump();
           await tester.tap(tile(labels.last));
           await tester.pump();
           expect(find.text(AppText.comingSoon), findsOneWidget);
-        },
-        // The miner's tiles are all built (M7); the miner's tests in
-        // my_consignments_screen_test.dart open "My consignments".
-        skip: role == Role.miner,
-      );
+        });
+      }
 
       testWidgets('signed in: no expired-password notice', (tester) async {
         await pumpHome(tester, screen, signedInAs(role));
@@ -278,4 +280,64 @@ void main() {
       }
     });
   }
+  // Hardening T3, in place of the skipped miner case above: every miner tile
+  // opens its own screen, and none says "Coming soon". The home sits in a
+  // small router whose task paths show a stand-in page with the path's name,
+  // so this checks the home's wiring without the screens' own databases,
+  // camera and location (their tests are in features/registration,
+  // features/consignments and features/sync).
+  group('miner tiles', () {
+    for (final (label, path) in [
+      (AppText.registerConsignment, AppRoutes.minerRegister),
+      (AppText.myConsignments, AppRoutes.minerConsignments),
+      (AppText.sendMyWork, AppRoutes.minerSync),
+    ]) {
+      testWidgets('"$label" opens $path, never "Coming soon"', (tester) async {
+        final router = GoRouter(
+          initialLocation: AppRoutes.miner,
+          routes: [
+            GoRoute(
+              path: AppRoutes.miner,
+              builder: (_, _) => const MinerHomeScreen(),
+            ),
+            for (final page in [
+              AppRoutes.minerRegister,
+              AppRoutes.minerConsignments,
+              AppRoutes.minerSync,
+            ])
+              GoRoute(
+                path: page,
+                builder: (_, _) => Scaffold(body: Text('page $page')),
+              ),
+          ],
+        );
+        addTearDown(router.dispose);
+        tester.view.devicePixelRatio = 3.0;
+        tester.view.physicalSize = const Size(360, 640) * 3.0;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          ProviderScope(
+            retry: noRetry,
+            overrides: fakeOverrides(
+              FakeAuthController(signedInAs(Role.miner)),
+            ),
+            child: MaterialApp.router(
+              theme: AppTheme.light,
+              routerConfig: router,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(tile(label));
+        await tester.pump();
+        await tester.tap(tile(label));
+        await tester.pumpAndSettle();
+
+        expect(find.text('page $path'), findsOneWidget);
+        expect(router.state.uri.path, path);
+        expect(find.text(AppText.comingSoon), findsNothing);
+      });
+    }
+  });
 }

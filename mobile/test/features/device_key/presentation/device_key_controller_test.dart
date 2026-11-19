@@ -440,6 +440,21 @@ void main() {
       expect(state, isA<DeviceKeyFailed>());
       expect(server.puts, isEmpty);
     });
+
+    // Hardening H1: the fix is the phone's own setting, so the message
+    // says that instead of "ask an administrator".
+    test('no screen lock: failed with the screen lock sentence, nothing '
+        'sent', () async {
+      channel.failCreate = DeviceKeyError.noScreenLock;
+      final user = userWith();
+      start(sessionFor(user));
+
+      await controller.check(user);
+
+      expect((state as DeviceKeyFailed).message, AppText.screenLockNeeded);
+      expect(state.maySign, isFalse);
+      expect(server.puts, isEmpty);
+    });
   });
 
   group('sign-ins and sign-outs', () {

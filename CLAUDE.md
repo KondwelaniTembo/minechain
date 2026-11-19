@@ -42,8 +42,39 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
 - **Now: Hardening** (`docs/plans/hardening-plan.md`, on a new branch the developer creates
   from `main`, suggested `chore/hardening`). An OWASP MASVS/MSTG review of the app as built
   (foundation, miner module, design), fixing every Critical and High finding, replacing the
-  skipped miner case in `homes_test.dart`, and three device checks. Plan written 19 Nov,
-  waiting for approval.
+  skipped miner case in `homes_test.dart`, and three device checks. Plan approved 19 Nov
+  (Q1–Q5 as proposed).
+  - T1 done: `docs/security-review.md` (MASVS v2, control by control). No Critical; one High
+    (H1, the signing key worked on a phone with no screen lock); M1 no `FLAG_SECURE`, M2 root
+    can read the database key (accepted); L1 tapjacking, L2/L3 no release build run yet,
+    L4 root-CA pinning (accepted), L5 ML Kit's Google statistics library (accepted).
+  - T2 done (Q6: option A), tests 1434 passed, 1 skipped. `DeviceKeyPlugin.kt` refuses
+    `createKey` and `sign` with `NO_SCREEN_LOCK` unless `KeyguardManager.isDeviceSecure`;
+    new keys get `setUnlockedDeviceRequired(true)` on API 28+; Dart maps it to
+    `DeviceKeyError.noScreenLock`, `AppText.screenLockNeeded` (key check) and
+    `SaveNoScreenLock` / `AppText.saveNoScreenLock` (save). `MainActivity.kt`: `FLAG_SECURE`
+    when the app is not debuggable, `filterTouchesWhenObscured` on the decor view. The
+    Kotlin was not compiled here (Gradle too slow on this laptop); the developer's
+    `flutter run` in the T2 phone check compiles it.
+  - T2 phone check fine (19 Nov): emulator refused Mutale's existing key without a PIN and
+    signed with one; the A57 (Clement, lock set) registered as before. Keys made before T2
+    keep working; no new key or registration.
+  - T3 done: the skipped miner case in `homes_test.dart` is now three "miner tiles" router
+    tests; tests 1437 passed, 0 skipped.
+  - T4 done (19 Nov, A57): the obfuscated release build (`flutter build apk --release
+    --obfuscate --split-debug-info=build/symbols`, then `adb install -r`, never
+    `flutter install`) works; logcat holds no token, payload, QR code or password (the
+    `Bearer` lines are Samsung network services); database header random; no
+    `ALLOW_BACKUP`. `FLAG_SECURE` first failed (window flags had no 0x2000): the runtime
+    `FLAG_DEBUGGABLE` check was replaced by `BuildConfig.DEBUG` (`buildFeatures.buildConfig
+    = true` in `build.gradle.kts`); then recent-apps blank and screenshots blocked.
+    `run-as` worked on the release build on normal firmware (`user`, `ro.debuggable=0`):
+    record as a Low finding. The build warned about unobfuscated DWARF info (`--strip`).
+  - T5 done: `decisions.md` Hardening (1)–(5) plus five known limitations (L6 `run-as`,
+    M2, L4, L5, untested Kotlin); `security-review.md` marked with T2/T4 results and a new
+    Low L6 (re-check in the final OWASP review); PR description drafted. Hardening 5/5.
+  - Next: the small extra, a back arrow on "My account" (the developer chose option B, on
+    this branch; reverses Q10 of Mobile (37)), then the PR for `chore/hardening`.
 
 - **Design integration merged as PR #11** (`d86e33c`, 19 Nov;
   `docs/plans/design-integration-plan.md`, T1–T14). Mapalo Maseko's copper theme, the home
