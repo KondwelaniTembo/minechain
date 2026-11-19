@@ -1,6 +1,6 @@
 # Hardening plan
 
-Status: **draft, waiting for approval** (19 Nov 2026).
+Status: **approved 19 Nov 2026, Q1–Q5 as proposed.** T1–T3 done (Q6: option A).
 
 Branch: `chore/hardening`, created by the developer from `main` after PR #11.
 
@@ -48,17 +48,17 @@ phone the database key can be read from secure storage.
 
 ## 3. Subtasks
 
-- ⬜ **T1 The review** (about 60 min). New `docs/security-review.md`: the rating scale
+- ✅ **T1 The review** (about 60 min). New `docs/security-review.md`: the rating scale
   (§4), then MASVS v2 one group at a time (STORAGE, CRYPTO, AUTH, NETWORK, PLATFORM, CODE,
   RESILIENCE, PRIVACY). Each control gets what the app does, the evidence (file and line, or
   a test), the MASTG test it follows, and a rating. Includes P4 (merged manifest, needs a
   release build, Q3) and P5 (advisories, Q4). Output: the findings list. **STOP** so the
   developer can see the list before anything is fixed.
-- ⬜ **T2 Fixes** (30–45 min). Every Critical and High from T1, plus the Mediums the
+- ✅ **T2 Fixes** (30–45 min). Every Critical and High from T1, plus the Mediums the
   developer approves. Expected now: P1 and P2 in `MainActivity.kt` (Q1, Q2). Kotlin cannot
   be reached by `flutter test`, so these are checked on the phone in T4. If T1 finds a
   Critical or High in Dart code, it gets a test that fails before the fix.
-- ⬜ **T3 The skipped test** (about 30 min). Replace the skipped miner case in
+- ✅ **T3 The skipped test** (about 30 min). Replace the skipped miner case in
   `homes_test.dart` (`skip: role == Role.miner`) with a real one: in the app harness with
   the router, each of the miner's three tiles opens its own screen, and "Coming soon" never
   appears. The other four roles keep their "Coming soon" case. Test count: 1 skipped → 0.

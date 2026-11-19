@@ -4,8 +4,7 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 19 Nov 2026, Design integration merged (PR #11); the Hardening plan is written
-and waiting for approval.
+Last updated: 19 Nov 2026, after Hardening T3 (no skipped test left); T4 device checks next.
 
 ## (a) Whole project
 
@@ -78,18 +77,22 @@ and waiting for approval.
 1. ✅ Workflow setup
 2. ✅ Design integration (PR #11, merged 19 Nov)
 3. ~~Bottom navigation~~ (dropped in the morning; back in the afternoon as Design integration Part 3)
-4. ⬜ Hardening (plan written, waiting for approval)
+4. ⬜ Hardening (T1–T3 done; T4 device checks next)
 
-## (c) Current feature: Hardening — 0/5
+## (c) Current feature: Hardening — 3/5
 
-Plan: `docs/plans/hardening-plan.md`, written 19 Nov, waiting for approval (Q1–Q5). Branch
+Plan: `docs/plans/hardening-plan.md`, approved 19 Nov (Q1–Q5 as proposed). Branch
 `chore/hardening`, created by the developer from `main`.
 
-- ⬜ T1 The review: `docs/security-review.md`, MASVS v2 group by group, with evidence and a
-  rating per control; STOP with the findings list
-- ⬜ T2 Fixes: every Critical and High, and the approved Mediums (expected: `FLAG_SECURE`
-  and the tapjacking guard in `MainActivity.kt`)
-- ⬜ T3 Replace the skipped miner case in `homes_test.dart` with a real test
+- ✅ T1 The review: `docs/security-review.md`, MASVS v2 group by group, with evidence and a
+  rating per control. No Critical; one High (H1, the signing key works on a phone with no
+  screen lock); Mediums M1 and M2; Lows L1–L5
+- ✅ T2 Fixes (Q6: A): H1, a screen lock is required before a key is made and before every
+  signature (`NO_SCREEN_LOCK`), and new keys are unusable while the phone is locked
+  (Android 9+); M1, `FLAG_SECURE` when not debuggable; L1, touches through an overlay
+  dropped. Checked on the emulator (no PIN: refused; PIN: saved) and the A57 (fine)
+- ✅ T3 The skipped miner case in `homes_test.dart` replaced by three router tests, one per
+  miner tile; tests 1437 passed, 0 skipped
 - ⬜ T4 Three device checks on the A57: release build works, nothing sensitive in the log,
   nothing readable outside the app
 - ⬜ T5 Docs: Hardening decisions, the review marked, testing log, PR description
