@@ -1,5 +1,6 @@
 // Measuring text before it is drawn, for layouts that must choose by the real
-// width of a word: the app bar's role pill and the home tiles' labels.
+// size of a word: the app bar's role pill, the home tiles' labels and the
+// navigation bar's words.
 
 import 'package:flutter/widgets.dart';
 
@@ -18,6 +19,16 @@ double drawnTextWidth(
   String value,
   TextStyle? style, {
   TextScaler? textScaler,
+}) => drawnTextSize(context, value, style, textScaler: textScaler).width;
+
+/// The width and height of [value] drawn on one line, measured like
+/// [drawnTextWidth]. The height is one line's, for a layout that must grow
+/// with the phone's text size (the navigation bar).
+Size drawnTextSize(
+  BuildContext context,
+  String value,
+  TextStyle? style, {
+  TextScaler? textScaler,
 }) {
   var effective = DefaultTextStyle.of(context).style.merge(style);
   if (MediaQuery.boldTextOf(context)) {
@@ -29,8 +40,8 @@ double drawnTextWidth(
     textScaler: textScaler ?? MediaQuery.textScalerOf(context),
     maxLines: 1,
   )..layout();
-  final width = painter.width;
+  final size = painter.size;
   // A TextPainter holds native resources until disposed.
   painter.dispose();
-  return width;
+  return size;
 }

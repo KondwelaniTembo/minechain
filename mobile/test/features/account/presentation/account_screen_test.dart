@@ -23,6 +23,7 @@ import 'package:minechain/features/auth/presentation/auth_controller.dart';
 import 'package:minechain/features/auth/presentation/password_prompt.dart';
 import 'package:minechain/main.dart';
 
+import '../../../fakes/android_back.dart';
 import '../../../fakes/app_harness.dart' show tapVisible;
 import '../../../fakes/auth_fixtures.dart';
 import '../../../fakes/fake_controllers.dart';
@@ -177,11 +178,32 @@ void main() {
       expect(find.text(AppText.licenceNumber), findsNothing);
     });
 
-    testWidgets('the back arrow returns to the home', (tester) async {
+    // Changed by decision (Mobile (37), Q10). Until T12 this test tapped the
+    // back arrow. "My account" is now one of the navigation bar's two
+    // places, so it has no back arrow; Home in the bar and Android's back
+    // button take the user home instead.
+    testWidgets('no back arrow; Home in the bar returns to the home', (
+      tester,
+    ) async {
+      await pumpAccount(tester, signedInAs(Role.transporter));
+      expect(find.byType(BackButton), findsNothing);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(NavigationBar),
+          matching: find.text(AppText.navHome),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(path, AppRoutes.transporter);
+      expect(find.text(AppText.takeCustody), findsOneWidget);
+    });
+
+    testWidgets('Android\'s back button returns to the home', (tester) async {
       await pumpAccount(tester, signedInAs(Role.transporter));
 
-      await tester.tap(find.byType(BackButton));
-      await tester.pumpAndSettle();
+      await pressAndroidBack(tester);
 
       expect(path, AppRoutes.transporter);
       expect(find.text(AppText.takeCustody), findsOneWidget);

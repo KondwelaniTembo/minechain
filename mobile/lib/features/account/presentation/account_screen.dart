@@ -7,10 +7,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
-import '../../../core/router/redirect.dart' show homeOf;
-import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/theme/sizes.dart';
@@ -46,9 +43,11 @@ class AccountScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        // Set explicitly, so the arrow is there even if /account was opened
-        // with go() and has no home underneath it to return to.
-        leading: BackButton(onPressed: () => _back(context, user)),
+        // No back arrow (Mobile (37), Q10): "My account" is one of the
+        // navigation bar's two places, like Home, not a page on top of the
+        // home. Home is one tap away in the bar, and Android's back button
+        // goes there too (app_navigation.dart).
+        automaticallyImplyLeading: false,
         title: const Text(AppText.myAccount),
       ),
       body: SafeArea(
@@ -85,16 +84,6 @@ class AccountScreen extends ConsumerWidget {
               ),
       ),
     );
-  }
-
-  /// Back to where the user came from (normally their home), or to the home
-  /// directly if there is nothing underneath.
-  void _back(BuildContext context, User? user) {
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go(user == null ? AppRoutes.login : homeOf(user.role));
-    }
   }
 
   /// Asks first, because logging out on a mine site with no signal locks the

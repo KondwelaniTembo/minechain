@@ -61,6 +61,12 @@ abstract final class AppSizes {
   static const double mediumWidth = 600;
   static const double expandedWidth = 840;
 
+  /// Below this height the navigation bar moves to a rail on the side
+  /// (Mobile (37), Q12). Material 3 calls a window under 480 dp high
+  /// "compact height": a phone turned on its side. There an 80 dp bar would
+  /// take almost a quarter of a 360 dp screen.
+  static const double compactHeight = 480;
+
   /// How many tile columns fit in [width] dp.
   static int columnsForWidth(double width) {
     if (width >= expandedWidth) return 4;

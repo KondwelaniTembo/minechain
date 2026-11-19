@@ -40,23 +40,33 @@ Updated 19 Nov 2026. Read this first in a new session, then `docs/progress.md` (
 plan and the current feature's subtasks), then `docs/decisions.md`.
 
 - **Now: Design integration on `design/mapalo-theme`** (`docs/plans/design-integration-plan.md`).
-  - T1–T8 are done, committed and pushed (T7 `548d7d8`, T8 `ee5f20c`; tests 1351 passed,
-    1 skipped).
+  - T1–T11 are done, committed and pushed (T9 `4936a1b`, T10 `04bb56e`, T11 `fefff94`;
+    tests 1400 passed, 1 skipped).
     - T7: the launcher icon is written by `mobile/tool/make_launcher_icon.dart`
       (`dart run tool/make_launcher_icon.dart` from `mobile/`). `launcher_icon_test.dart`
       fails if the committed XML drifts from `logo_geometry.dart`. The developer has
       seen the icon on the A57.
     - T8: copper fields, sand cards and outlined chips, all set in the theme
       (`app_theme.dart`).
-  - Next: T9 (plan section T9):
-    - T9.a: tile elevation 3 → 5, and 6 → 8 for the main tile (`action_tile.dart`);
-    - T9.b: a home switches to one column when a tile's longest word does not fit two
-      columns at the current text size; only a word too wide even for the full width is
-      scaled down (Q6);
-    - T9.c: an 8 dp gap between the four status lines on "Send my work" (`_Counts` in
-      `send_work_screen.dart`).
-  - Then T10 (docs) and T11 (the developer's phone check), then the PR.
-  - T10 must also record T8's choices in Mobile (36):
+    - T9: tile elevation 5 / 8; a home drops columns one at a time when a label's word does
+      not fit, and only a word too wide even for one column shrinks its label
+      (`ActionTile.labelRoom`, `core/text/text_width.dart`); 16 dp between the "Send my
+      work" lines (the developer chose 16; the plan said 8, which already existed).
+  - **Part 3, the navigation bar (added 19 Nov at the developer's request, Q9–Q13 approved
+    as proposed):** Mapalo's Home/Account bar AND the round account button, both.
+    - T10: bar and rail theme in `app_theme.dart` (peach pill, copper outline, bold copper
+      word, 14 sp, words always shown).
+    - T11: `StatefulShellRoute.indexedStack` in `app_router.dart` (Home branch = five homes,
+      Account branch = `/account`); task pages stay top-level, so they cover the bar; the
+      plain bar is `core/widgets/app_navigation.dart`; the homes' account button uses
+      `go`, not `push`.
+  - Next: T12 (plan section T12): `NavigationRail` in landscape (height under 480 dp); the
+    bar grows with large text; Android back on Account goes Home (`PopScope`); no back arrow
+    on "My account" (Q10, `account_screen_test.dart` changes by decision); TalkBack tab
+    names; 360×640 at text 2.0 tests.
+  - Then T13 (docs: Mobile (36) completed, Mobile (37) the bar) and T14 (the developer's
+    phone check), then the PR.
+  - T13 must also record T9's choices (in `docs/progress.md`) and T8's choices in Mobile (36):
     - the fields keep their underline shape, now in copper (no outlined box);
     - the admin "Account requests" cards take the new card style too (it is set in the
       theme);
@@ -64,8 +74,9 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
     - the chips' label colour and raised selected chip are set on the chip, because a
       theme `labelStyle` replaces the chip's text style;
     - chips reach 56 dp through a `minHeight` box.
-  - Bottom navigation was dropped on 19 Nov. The schedule is about one day behind; see
-    `docs/progress.md`.
+  - Bottom navigation was dropped on the morning of 19 Nov, then brought back the same day
+    as Part 3 (above). The schedule is about one day behind plus the bar's 3 h, which the
+    developer accepted; see `docs/progress.md`.
   - Rules learned in this feature:
     - run `dart format` only on files you changed, never the whole of `lib/`;
     - a test whose behaviour changed by decision says so in a comment and in

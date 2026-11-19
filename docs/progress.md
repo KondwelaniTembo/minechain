@@ -4,7 +4,7 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 19 Nov 2026, after Design integration T11.
+Last updated: 19 Nov 2026, after Design integration T12.
 
 ## (a) Whole project
 
@@ -74,11 +74,11 @@ Last updated: 19 Nov 2026, after Design integration T11.
 ## (b) Today, Wed 18 Nov
 
 1. ✅ Workflow setup
-2. ⬜ Design integration (T1–T11 done; T12 next)
+2. ⬜ Design integration (T1–T12 done; Q14 open; T13 next)
 3. ~~Bottom navigation~~ (dropped in the morning; back in the afternoon as Design integration Part 3)
 4. ⬜ Hardening
 
-## (c) Current feature: Design integration — 11/14
+## (c) Current feature: Design integration — 12/14
 
 Plan: `docs/plans/design-integration-plan.md`, approved 19 Nov (Q1: scale the role down;
 Q2: 3:1 for the icon; Q3: the `app_theme.dart` comment is fixed in T3).
@@ -99,7 +99,8 @@ Q2: 3:1 for the icon; Q3: the `app_theme.dart` comment is fixed in T3).
 - ✅ T10 Navigation bar and rail look in the theme, light and dark (peach pill, copper outline)
 - ✅ T11 The shell: homes and "My account" in one frame with a plain bar; task pages outside
   it; the account button goes to Account
-- ⬜ T12 The bar (rail in landscape), the account button to Account, the back button
+- ✅ T12 Rail when the screen is short, words whole at large text (the bar's words capped at
+  1.3× by Flutter, Q14 open), Android back on Account goes Home, no back arrow on Account
 - ⬜ T13 Docs: Mobile (36) completed, Mobile (37) navigation bar
 - ⬜ T14 Phone check on the A57, including the navigation bar
 

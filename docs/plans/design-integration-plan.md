@@ -389,6 +389,12 @@ morning's "dropped" note.
   `push`), so the bar shows Account as selected (Q9).
 - `AccountScreen`: no back arrow, because it is a destination now, not a page on top
   (Q10). Android back on Account goes to Home (`PopScope`).
+- **As built (T12):** Flutter's `NavigationBar` draws its words at most 1.3× their size
+  (`_kMaxLabelTextScaleFactor`), whatever the phone's setting; the rail follows the phone.
+  The bar's height and word fit are measured at that 1.3× limit, so at text 2.0 the bar
+  grows only a little. The rail is as wide as its widest word, up to 144 dp for a word; past
+  that the rail's words shrink just enough to stay whole. A test records both behaviours, so
+  a Flutter upgrade that changes them shows up. Whether to keep the 1.3× limit is Q14.
 - **Tests:**
   - 360×640 and text 2.0, portrait (bar) and landscape (rail), on each home and on
     Account: no overflow, both words whole, every tile still reachable;
@@ -526,3 +532,11 @@ Part 3 (the navigation bar), open:
   check and PR).
 
 Q9–Q13 were answered on 19 Nov: all as proposed.
+
+- **Q14 (found in T12).** Flutter's bar caps its words at 1.3× the normal size, which goes
+  against plan section 7's "the phone's text size is never clamped". The proposal: keep
+  Flutter's cap for the bar only. The words stay whole, the page titles and tiles keep the
+  full size, the account button reaches the same page, and Material caps the words on
+  purpose so the bar stays smaller than the page. The other way: replace Flutter's
+  destinations with our own widgets that follow the full size (about 45 min more, and a much
+  taller bar at the largest text).
