@@ -617,6 +617,27 @@ abstract final class AppText {
   static const String blockchainTransaction = 'Blockchain transaction:';
   static const String notSentYet = 'Not sent to the blockchain yet';
 
+  // Role differences (T5).
+  static const String weighFirst =
+      'Weigh it before you take custody: the weight is hidden until you '
+      'record yours.';
+  static String locationLine(String latitude, String longitude) =>
+      'Location: $latitude, $longitude';
+
+  /// Officers, on a mismatch: field NAMES only, as the server sends them.
+  static String whatDiffers(String names) => 'What differs: $names';
+  static String mismatchReason(String code) => 'Reason: $code';
+  static const String reviewPassed = 'Passed the automatic checks';
+  static const String reviewCleared = 'Cleared by an officer';
+  static const String reviewFlagged = 'Flagged: waiting for an officer';
+  static const String reviewRejected =
+      'Rejected: an officer confirmed the problem';
+  static String alertsLine(int total, int open) {
+    if (total == 0) return 'No alerts';
+    final count = total == 1 ? '1 alert' : '$total alerts';
+    return '$count, $open open';
+  }
+
   // ---- Problems with the server's answer (core/errors/failure_text.dart) ----
 
   static const String invalidCredentials = 'Wrong username or password.';

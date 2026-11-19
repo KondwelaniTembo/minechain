@@ -1,7 +1,7 @@
 # Consignment check plan
 
 Status: **approved 19 Nov 2026, Q1–Q5 and Q7 as proposed; Q6 (demo accounts) asked again
-before T6.** T1–T4 done.
+before T6.** T1–T5 done.
 
 Branch: `feature/consignment-check`, created by the developer from `main` after PR #14.
 
@@ -125,10 +125,16 @@ check in words. Shown only when the answer has it:
   for verified; each with an icon and words, and a TalkBack live region. A field absent from
   the answer is not drawn at all (an absent hash is never "not sent yet"). "Scan again" is
   the last thing on the page. To record in T7 as Verification app decisions.
-- ⬜ **T5 Role differences** (about 45 min). Blind transporter (no weights, no hash, the
+- ✅ **T5 Role differences** (about 45 min). Blind transporter (no weights, no hash, the
   "weigh first" line), officer extras (review status, alerts, mismatch fields, flagged and
   rejected steps listed), owning buyer (location). Widget tests from fixtures that follow the
   disclosure table exactly.
+  As built: every role line follows from a field in the answer, never from the app's idea
+  of the role (`weightsHidden`, `location`, `reviewStatus`, `alerts`, `check.fields` and
+  `check.reason`). Mismatch fields are shown as the server's names (`weight_mg`,
+  `event.weightMilligrams`), joined; alerts as "2 alerts, 1 open". "Rejected" reads "an
+  officer confirmed the problem" (database-schema: any reviewed alert makes a step
+  rejected). The fixtures cut the officer's step down per column (`check_page_helpers.dart`).
 - ⬜ **T6 Phone check on the A57** (the developer, about 20 min). Exact commands in the T5
   report. Scan a real custody record (Clement's or Mutale's) as a transporter and as an
   officer (Q6), with and without the network; screenshots for the thesis.

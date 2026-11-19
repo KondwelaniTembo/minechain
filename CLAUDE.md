@@ -36,7 +36,7 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 19 Nov 2026. Read this first in a new session, then `docs/progress.md` (the day
+Updated 20 Nov 2026, 00:40. Read this first in a new session, then `docs/progress.md` (the day
 plan and the current feature's subtasks), then `docs/decisions.md`.
 
 - **Done: Hardening** (`docs/plans/hardening-plan.md`, on a new branch the developer creates
@@ -80,8 +80,12 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
     are all done.
   - Now: Consignment check (Thu 19) on `feature/consignment-check`,
     `docs/plans/consignment-check-plan.md` (approved; Q6 demo accounts asked before T6).
-    T1 domain, T2 data, T3 scan step, T4 result page done (1568 tests passed). Next:
-    T5 role differences.
+    T1 domain, T2 data, T3 scan step, T4 result page, T5 role differences done (1584
+    tests passed). T6 partly done on the A57 (20 Nov, 00:20, transporter Patsani): next
+    session (20 Nov, 11:30) first makes two result-page fixes (held with no steps listed:
+    say the steps are hidden while under review; hide "weigh it first" while held), then
+    the rest of T6 (offline, a verified result), T7 and the PR, then Transporter handoff.
+    The officer phone check waits for the admin's "Create account" screen (Sat 21).
 
 - **Design integration merged as PR #11** (`d86e33c`, 19 Nov;
   `docs/plans/design-integration-plan.md`, T1–T14). Mapalo Maseko's copper theme, the home

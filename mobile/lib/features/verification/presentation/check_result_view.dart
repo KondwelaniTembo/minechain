@@ -5,8 +5,10 @@
 // The page draws only what the answer holds. The server already cut the
 // answer down for the viewer's role, so a field that is absent (a blind
 // transporter's weights, a buyer's coordinates) is simply not drawn; the page
-// never guesses at it. Role-specific lines (the "weigh it first" line, the
-// officer's review details) come in T5.
+// never guesses at it. The role differences (T5) follow from that too: the
+// "weigh it first" line comes from `weightsHidden`, the location from
+// `location`, and the officer's review details from `reviewStatus`,
+// `alerts` and `check.fields`, never from the viewer's role in the app.
 //
 // Status is never shown by colour alone (decision Mobile (35)): each banner
 // and each step's check has an icon and words as well.
@@ -162,6 +164,17 @@ class _ConsignmentBlock extends StatelessWidget {
         Text(view.qrCode, style: Theme.of(context).textTheme.titleLarge),
         Text(mineralName(view.mineral)),
         Text(AppText.stageLine(_stageWord(view.stage))),
+        // A transporter who has not weighed yet sees no weight and no hash
+        // (the hash leads to the on-chain weight), so they measure without
+        // knowing the expected figure and the 10% rule cannot be gamed.
+        if (view.weightsHidden) ...[
+          const SizedBox(height: AppSizes.spaceS),
+          _IconLine(
+            Icons.scale,
+            AppText.weighFirst,
+            style: Theme.of(context).textTheme.bodyLarge,
+          ),
+        ],
       ],
     );
   }
@@ -181,7 +194,12 @@ class _StepCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final weight = step.weightMg;
+    final location = step.location;
     final hash = step.chainTxHash;
+    final review = step.reviewStatus;
+    final alerts = step.alerts;
+    final fields = step.mismatchFields;
+    final reason = step.mismatchReason;
     return Card(
       key: ValueKey(step.id),
       margin: const EdgeInsets.only(bottom: AppSizes.spaceS),
@@ -201,9 +219,30 @@ class _StepCard extends StatelessWidget {
                   ? AppText.outsideEveryZone
                   : AppText.zoneLine(step.zoneName!),
             ),
+            // Officers and the owning buyer only.
+            if (location != null)
+              Text(AppText.locationLine(location.latitude, location.longitude)),
             Text(AppText.recordedAt(step.capturedAt.toLocal())),
             const SizedBox(height: AppSizes.spaceS),
             _CheckLine(step.check),
+            // Officers only, on a mismatch: what differs, by name. The
+            // server never sends the values, and neither does this page.
+            if (fields != null && fields.isNotEmpty)
+              Text(AppText.whatDiffers(fields.join(', '))),
+            if (reason != null) Text(AppText.mismatchReason(reason)),
+            // Officers only. A flagged or rejected step is listed for them
+            // too, so its review status is the first thing they read here.
+            if (review != null) ...[
+              const SizedBox(height: AppSizes.spaceS),
+              _ReviewLine(review),
+            ],
+            if (alerts != null)
+              Text(
+                AppText.alertsLine(
+                  alerts.length,
+                  alerts.where((a) => a.status == 'open').length,
+                ),
+              ),
             // The hash only when the answer has the key (a blind transporter
             // does not get it); null there means nothing was sent yet.
             if (step.chainTxHashShown) ...[
@@ -252,6 +291,61 @@ String stepHeadline(CheckedStep step) {
   };
 }
 
+class _ReviewLine extends StatelessWidget {
+  const _ReviewLine(this.review);
+  final ReviewStatus review;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final (icon, text, colour) = switch (review) {
+      ReviewStatus.passed => (
+        Icons.rule,
+        AppText.reviewPassed,
+        scheme.onSurface,
+      ),
+      ReviewStatus.cleared => (
+        Icons.task_alt,
+        AppText.reviewCleared,
+        scheme.onSurface,
+      ),
+      ReviewStatus.flagged => (Icons.flag, AppText.reviewFlagged, scheme.error),
+      ReviewStatus.rejected => (
+        Icons.block,
+        AppText.reviewRejected,
+        scheme.error,
+      ),
+    };
+    return _IconLine(icon, text, colour: colour);
+  }
+}
+
+/// An icon and a sentence, never colour alone.
+class _IconLine extends StatelessWidget {
+  const _IconLine(this.icon, this.text, {this.colour, this.style});
+  final IconData icon;
+  final String text;
+  final Color? colour;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ExcludeSemantics(child: Icon(icon, color: colour)),
+        const SizedBox(width: AppSizes.spaceS),
+        Expanded(
+          child: Text(
+            text,
+            style: (style ?? const TextStyle()).copyWith(color: colour),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _CheckLine extends StatelessWidget {
   const _CheckLine(this.result);
   final CheckResult result;
@@ -281,15 +375,6 @@ class _CheckLine extends StatelessWidget {
         scheme.onSurface,
       ),
     };
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ExcludeSemantics(child: Icon(icon, color: colour)),
-        const SizedBox(width: AppSizes.spaceS),
-        Expanded(
-          child: Text(text, style: TextStyle(color: colour)),
-        ),
-      ],
-    );
+    return _IconLine(icon, text, colour: colour);
   }
 }

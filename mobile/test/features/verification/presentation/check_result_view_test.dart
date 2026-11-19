@@ -1,7 +1,8 @@
 // "Check a consignment", T4: the result page (plan §4). The banner for each
 // verdict, the consignment, and the step cards for the common view (every
 // field a buyer in transit or a transporter after their handoff sees).
-// Role differences (blind transporter, officer extras) are T5.
+// Role differences (blind transporter, officer extras) are in
+// check_result_roles_test.dart (T5).
 //
 // The whole app runs with the real router, a fake camera and a fake server
 // whose answer each test sets, so the page is reached exactly as a user
@@ -12,45 +13,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:minechain/core/text/app_text.dart';
 import 'package:minechain/core/theme/app_theme.dart';
 import 'package:minechain/features/auth/domain/user.dart';
-import 'package:minechain/features/registration/presentation/qr_scanner_view.dart';
 import 'package:minechain/features/verification/domain/verdict.dart';
 import 'package:minechain/features/verification/presentation/check_result_view.dart';
 
 import '../../../core/theme/app_theme_test.dart' show contrast;
 import '../../../fakes/app_harness.dart';
-import '../../../fakes/fake_admin_server.dart' show json200;
 import '../../../fakes/fake_check_server.dart';
-import '../../../fakes/fake_controllers.dart';
 import '../../../fakes/fake_registration.dart' show FakeQrScanner;
-
-late FakeCheckServer server;
-late FakeQrScanner camera;
-
-/// Signs in as [role], opens the check, scans the known code and lets the
-/// fake server answer with [answer].
-Future<AppHarness> showAnswer(
-  WidgetTester tester,
-  Map<String, Object?> answer, {
-  Role role = Role.buyer,
-  Size size = const Size(360, 640),
-  double textScale = 1.0,
-}) async {
-  server.answer = (_) => json200(answer);
-  final app = await AppHarness.pump(
-    tester,
-    FakeAuthController(signedInAs(role)),
-    size: size,
-    textScale: textScale,
-    overrides: [
-      ...server.overrides(),
-      qrScannerBuilderProvider.overrideWithValue(camera.builder),
-    ],
-  );
-  await tapVisible(tester, find.text(AppText.checkConsignment));
-  camera.scan(knownQrCode);
-  await tester.pumpAndSettle();
-  return app;
-}
+import 'check_page_helpers.dart';
 
 /// A step as a buyer in transit sees it: no coordinates and no officer
 /// fields (api.md, "What each viewer sees").

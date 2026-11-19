@@ -4,8 +4,9 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 19 Nov 2026, after the "My account" back arrow (Mobile (39)), on
-`fix/account-back-arrow`. Hardening merged as PR #13. Next: Thu 19's Consignment check.
+Last updated: 20 Nov 2026, 00:40, end of the Thu 19 session, on `feature/consignment-check`
+(T1–T5 done). Next session starts 20 Nov, 11:30: the two result-page fixes, the rest of T6,
+T7 and the PR, then Transporter handoff.
 
 ## (a) Whole project
 
@@ -37,7 +38,7 @@ Last updated: 19 Nov 2026, after the "My account" back arrow (Mobile (39)), on
 
 ### Thu 19 Nov
 
-- ⬜ Consignment check (4/7, plan approved 19 Nov): scan and verify, with the provenance
+- ⬜ Consignment check (5/7, plan approved 19 Nov): scan and verify, with the provenance
   view (FR-04, Scope (9)), shared by transporter, buyer and officer
 - ⬜ Transporter handoff: scan, weigh, GPS, sign, cache, sync (FR-01, FR-02, FR-07)
 
@@ -73,16 +74,20 @@ Last updated: 19 Nov 2026, after the "My account" back arrow (Mobile (39)), on
 - ✅ Scope (4): FR-14 kept (17 Nov); FR-16 is decided on Sat 21 Nov.
 - ✅ Day plan: approved by the developer on 18 Nov.
 
-## (b) Today, Wed 18 Nov
+## (b) Today, Fri 20 Nov (from 11:30)
 
-1. ✅ Workflow setup
-2. ✅ Design integration (PR #11, merged 19 Nov)
-3. ~~Bottom navigation~~ (dropped in the morning; back in the afternoon as Design integration Part 3)
-4. ✅ Hardening (T1–T5, PR #13)
-5. ✅ "My account" back arrow (Mobile (39), `fix/account-back-arrow`): tested, A57 fine;
-   PR left
+1. ⬜ Consignment check, carried over from Thu 19: two result-page fixes (held with no
+   steps listed: say the steps are hidden while under review; no "weigh it first" while
+   held), the rest of T6 (offline, a verified result), T7 docs, PR (about 1 h 15)
+2. ⬜ Transporter handoff, carried over from Thu 19 (about 4–5 h)
+3. ⬜ Buyer purchase and "My purchases" (about 3–4 h)
+4. ⬜ If time is left: Full chain on devices; Officer alerts. Otherwise both move to Sat 21,
+   and FR-14 (dashboard) is the first cut there
 
-## (c) Current feature: Consignment check — 4/7
+Done on Thu 19 (session ended 20 Nov, 00:40): Hardening (PR #13), "My account" back arrow
+(PR #14), Consignment check T1–T5 (1584 tests passed, 0 skipped).
+
+## (c) Current feature: Consignment check — 5/7
 
 Plan: `docs/plans/consignment-check-plan.md`, approved 19 Nov (Q1–Q5, Q7 as proposed; Q6
 before T6). Branch
@@ -96,14 +101,21 @@ before T6). Branch
   sentences and buttons; 26 new tests
 - ✅ T4 Result page: verdict banner first, the consignment, one card per step in the
   server's order; only fields in the answer are drawn; 36 new tests
-- ⬜ T5 Role differences: blind transporter, officer extras, owning buyer
-- ⬜ T6 Phone check on the A57 (the developer)
+- ✅ T5 Role differences: "weigh it first", location, the officer's review status, alert
+  counts and mismatch field names, each drawn from what the answer holds; 16 new tests
+- ⬜ T6 Phone check on the A57 (the developer). Part done 20 Nov, 00:20, as transporter
+  Patsani (new account): MC-2026-LSK-0001 showed "Under review", no steps listed (the
+  registration is not accepted, so a transporter is sent none) and "weigh it first". Found
+  two fixes (see (b) item 1). Left: offline and "Try again"; a verified result on a fresh
+  registration made inside the demo zone. Officer check moved to Sat 21, after the admin's
+  "Create account" screen (no officer account can be made in the app yet)
 - ⬜ T7 Docs and PR
 
 Hardening (5/5, PR #13) and the "My account" back arrow (PR #14) are finished; their
 subtasks are in `docs/plans/hardening-plan.md` and `docs/decisions.md` Mobile (39).
 
-**Schedule (19 Nov): behind by about one day.**
-- Still open from Wed 18: Hardening (Design integration merged as PR #11). The navigation
-  bar added about 3 h; the developer accepted that on 19 Nov.
-- Thu 19's two features (Consignment check, Transporter handoff) have not started.
+**Schedule (20 Nov, 00:40): behind by about one day.**
+- Thu 19 finished Wednesday's Hardening and the back arrow, and Consignment check T1–T5.
+- Carried to Fri 20: the end of Consignment check and all of Transporter handoff.
+- Likely carried to Sat 21: Full chain on devices and Officer alerts. FR-14 is the first
+  feature to cut if Saturday runs short.
