@@ -4,8 +4,9 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 20 Nov 2026, 21:30, after Buyer purchase T5, on `feature/buyer-purchase` (5/5).
-Next: the developer commits (two commits), opens and merges the PR; then Officer alerts (Sat 21).
+Last updated: 21 Nov 2026, after Officer alerts T6, on `feature/officer-alerts` (7/7).
+Next: the developer commits (two commits, script in chat), pushes with `--set-upstream`,
+opens and merges the PR; then Admin accounts.
 
 ## (a) Whole project
 
@@ -44,18 +45,16 @@ Next: the developer commits (two commits), opens and merges the PR; then Officer
 
 ### Fri 20 Nov
 
-- ✅ Buyer purchase and "My purchases" (Scope (8)), 5/5; PR to be opened by the developer
+- ✅ Buyer purchase and "My purchases" (Scope (8)), 5/5; merged as PR #17
 - ✅ Full chain on devices: miner → transporter → buyer, synced and anchored (MC-2026-LSK-0007
   "Verified", three steps on the chain, 20 Nov; buyer purchase T4, Q5)
 - ➡️ Officer alerts: moved to Sat 21
 
 ### Sat 21 Nov
 
-- ⬜ Officer alerts (from Fri 20): list, detail, "Confirm problem" and "Clear, no problem"
-  (FR-08, Scope (2), (5)). Test case ready: MC-2026-LSK-0008's handoff is under review
-  (more than 10% off); clearing it should let the buyer's waiting purchase in, and that
-  purchase (1.6 kg against a 2 kg registration) is itself more than 10% off, so expect a
-  second alert
+- ✅ Officer alerts (from Fri 20, 7/7): list, detail, "Confirm problem" and "Clear, no
+  problem" (FR-08, Scope (2), (5)); phone check on MC-2026-LSK-0008: handoff cleared and on
+  the chain, purchase flagged and confirmed (rejected). PR to open
 - ⬜ Admin accounts: list, create with activation code, edit name, suspend and reactivate,
   delete, reset a device key and a password (FR-10, FR-12, Scope (3), (6)); includes
   resetting the demo accounts' device key (Fred) and password (Mutale)
@@ -85,14 +84,67 @@ Next: the developer commits (two commits), opens and merges the PR; then Officer
    fixes (1587 tests passed); ✅ the rest of T6 (offline, a verified result); ✅ T7 docs
 2. ✅ Transporter handoff, carried over from Thu 19: 8/8 (T5b added); merged as PR #16
 3. ✅ Buyer purchase and "My purchases": 5/5; its phone check also covered
-   "Full chain on devices" (Q5). Commits and PR by the developer
+   "Full chain on devices" (Q5). Merged as PR #17
 4. ✅ Full chain on devices (inside Buyer purchase T4); ➡️ Officer alerts moved to Sat 21,
    where FR-14 (dashboard) is the first cut
 
 Done on Thu 19 (session ended 20 Nov, 00:40): Hardening (PR #13), "My account" back arrow
 (PR #14), Consignment check T1–T5 (1584 tests passed, 0 skipped).
 
-## (c) Current feature: Buyer purchase — 5/5
+## (c) Current feature: Officer alerts — 7/7
+
+Plan: `docs/plans/officer-alerts-plan.md`, approved 20 Nov (Q1–Q6 as proposed). Branch
+`feature/officer-alerts`, created by the developer from `main` after PR #17. App only
+(`mobile/`, `docs/`); nothing deploys to Render.
+
+- ✅ T1 Alerts data and words: `Alert` and its parts, the words per alert type, the API and
+  repository, `ALERT_NOT_FOUND`'s sentence; 97 new, 1903 passed
+- ✅ T2 Alerts list: `/officer/alerts`, the tile wired, Q1's "Open", "Confirmed", "Cleared";
+  33 new (30 + 3 in `homes_test.dart`)
+- ✅ T3 Alert detail: `/officer/alerts/:id`, every section, Q2's "only confirm"; 19 new
+- ✅ T4 The two decisions: the dialog, the message from the answer, every refusal, Q3 never
+  queued; 24 new, 1979 passed
+- T1–T4 ran without stopping, as agreed, so none is committed. Files by subtask:
+  - T1 only: `mobile/lib/features/alerts/domain/alert.dart`,
+    `mobile/lib/features/alerts/presentation/alert_words.dart`,
+    `mobile/lib/features/alerts/data/alerts_api.dart`,
+    `mobile/lib/features/alerts/data/alerts_repository.dart`,
+    `mobile/lib/core/errors/failure_text.dart`, `mobile/test/fakes/fake_alerts_server.dart`,
+    `mobile/test/features/alerts/domain/alert_test.dart`,
+    `mobile/test/features/alerts/presentation/alert_words_test.dart`,
+    `mobile/test/features/alerts/data/alerts_repository_test.dart`,
+    `mobile/test/core/errors/failure_text_test.dart`;
+  - T2 only: `alerts_list_controller.dart`, `alerts_screen.dart`, `alert_widgets.dart`
+    (also used by T3) in `mobile/lib/features/alerts/presentation/`,
+    `mobile/lib/features/officer/presentation/officer_home_screen.dart`,
+    `mobile/test/features/alerts/presentation/alerts_screen_test.dart`,
+    `mobile/test/features/homes_test.dart`;
+  - T3 and T4: `alert_detail_controller.dart`, `alert_detail_screen.dart` (one page, the
+    dialog inside it), and the tests `alert_detail_screen_test.dart`,
+    `alert_decision_test.dart`, `alert_page_helpers.dart`;
+  - all four: `mobile/lib/core/text/app_text.dart` (T1's words are there too, by the
+    one-file rule for sentences), `mobile/lib/core/router/routes.dart`,
+    `mobile/lib/core/router/app_router.dart`. So T1 alone would not build either, and
+    T1–T4 go in one code commit (the plan had T1 alone);
+  - docs: `docs/plans/officer-alerts-plan.md`, `docs/progress.md`, `docs/testing-log.md`,
+    `CLAUDE.md`: the docs commit after T5.
+- ✅ T5 Phone check (20 Nov 23:46 – 21 Nov 00:27, A57 as `officer_demo`, emulator as buyer):
+  all eight steps as planned (results in the plan); two misleading lines found
+- ✅ T5b Fixes: "Holds this consignment" only on open alerts; a rejected step "Never put
+  on the blockchain" on the Check page and left out of its verdict; 9 new, 1988 passed.
+  Files: `mobile/lib/features/alerts/presentation/alert_widgets.dart`,
+  `mobile/lib/core/text/app_text.dart`,
+  `mobile/lib/features/verification/domain/verdict.dart`,
+  `mobile/lib/features/verification/presentation/check_result_view.dart`,
+  `mobile/test/features/alerts/presentation/alerts_screen_test.dart`,
+  `mobile/test/features/verification/domain/verdict_test.dart`,
+  `mobile/test/features/verification/presentation/check_result_roles_test.dart`. Nothing
+  is committed yet, so they join the T1–T4 code commit. A57 re-check passed (21 Nov)
+- ✅ T6 Docs and PR: decisions Officer alerts app (1)–(9), Verification app (11), two known
+  limitations, one future improvement; the PR text in chat
+- Commits: (1) code, T1–T4 and T5b; (2) docs, every docs file and `CLAUDE.md`
+
+### Buyer purchase — 5/5, merged as PR #17 (`93c1a94`)
 
 Plan: `docs/plans/buyer-purchase-plan.md`, approved 20 Nov (Q1–Q5 as proposed). Branch
 `feature/buyer-purchase`, created by the developer from `main` after PR #16. App only

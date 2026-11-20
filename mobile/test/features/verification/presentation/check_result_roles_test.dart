@@ -284,6 +284,55 @@ void main() {
       expect(find.text(AppText.alertsLine(1, 1)), findsOneWidget);
       expect(find.text(AppText.alertsLine(2, 0)), findsOneWidget);
       expect(find.text(AppText.alertsLine(1, 0)), findsOneWidget);
+      // A flagged step may still go on the blockchain; a rejected one never.
+      expect(find.text(AppText.stepNotAnchoredYet), findsOneWidget);
+      expect(find.text(AppText.stepRejectedNeverAnchored), findsOneWidget);
+      expect(find.text(AppText.notSentYet), findsOneWidget);
+    });
+
+    // T5b, found on the A57 (MC-2026-LSK-0008): the rejected purchase said
+    // "Not on the blockchain yet" and "Not sent to the blockchain yet", and
+    // the verdict stayed "not on the blockchain yet". It never goes.
+    testWidgets('a rejected step says it is never put on the blockchain, '
+        'and the rest is verified', (tester) async {
+      final cleared =
+          checkedStepJson(type: 'handoff', role: 'transporter', n: 2)
+            ..['reviewStatus'] = 'cleared'
+            ..['alerts'] = [alert(1, 'dismissed')];
+      final rejected =
+          checkedStepJson(
+              type: 'purchase',
+              role: 'buyer',
+              n: 3,
+              check: 'not_anchored_yet',
+            )
+            ..['anchor'] = {'status': 'pending', 'chainTxHash': null}
+            ..['reviewStatus'] = 'rejected'
+            ..['alerts'] = [alert(2, 'reviewed')];
+
+      await showAnswer(
+        tester,
+        answerFor(Viewer.officer, [registration, cleared, rejected]),
+        role: Viewer.officer.role,
+      );
+
+      expect(find.text(verdictText(Verdict.verified)), findsOneWidget);
+      expect(find.text(verdictText(Verdict.notAnchoredYet)), findsNothing);
+      final purchaseCard = find.ancestor(
+        of: find.text(AppText.reviewRejected),
+        matching: find.byType(Card),
+      );
+      Finder inPurchase(Finder f) =>
+          find.descendant(of: purchaseCard, matching: f);
+      expect(
+        inPurchase(find.text(AppText.stepRejectedNeverAnchored)),
+        findsOneWidget,
+      );
+      expect(find.text(AppText.stepNotAnchoredYet), findsNothing);
+      expect(find.text(AppText.notSentYet), findsNothing);
+      // The two accepted steps keep their check and their hash.
+      expect(find.text(AppText.stepMatches), findsNWidgets(2));
+      expect(find.text(AppText.blockchainTransaction), findsNWidgets(2));
     });
 
     testWidgets('a mismatch: the names of what differs and the reason, '

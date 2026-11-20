@@ -27,23 +27,35 @@ enum Verdict {
   notAnchoredYet,
 
   /// No step is listed for this viewer (every step is flagged or rejected,
-  /// and the viewer is not an officer), and nothing holds it.
+  /// and the viewer is not an officer, or every step listed for an officer
+  /// is rejected), and nothing holds it.
   nothingToCheck,
 
-  /// Every listed step matches the blockchain.
+  /// Every listed step that is not rejected matches the blockchain.
   verified,
 }
 
 Verdict verdictFor(ConsignmentView view) {
-  final results = {for (final step in view.steps) step.check};
-  if (results.contains(CheckResult.mismatch)) return Verdict.mismatch;
+  // A mismatch on any listed step counts, a rejected one included: a stored
+  // record that no longer matches its signature is tampering either way.
+  if (view.steps.any((s) => s.check == CheckResult.mismatch)) {
+    return Verdict.mismatch;
+  }
   if (view.held) return Verdict.underReview;
+  // A rejected step (listed for officers only) is never sent to the
+  // blockchain, so counting it would leave "not on the blockchain yet" on
+  // the page for ever. Without it, an officer gets the same verdict as
+  // everyone else, who is never shown the step (T5 on the A57, 0008).
+  final accepted = view.steps.where(
+    (s) => s.reviewStatus != ReviewStatus.rejected,
+  );
+  final results = {for (final step in accepted) step.check};
   if (results.contains(CheckResult.chainUnavailable)) {
     return Verdict.chainUnavailable;
   }
   if (results.contains(CheckResult.notAnchoredYet)) {
     return Verdict.notAnchoredYet;
   }
-  if (view.steps.isEmpty) return Verdict.nothingToCheck;
+  if (accepted.isEmpty) return Verdict.nothingToCheck;
   return Verdict.verified;
 }

@@ -6,8 +6,8 @@ import 'package:minechain/features/registration/domain/mineral.dart';
 import 'package:minechain/features/verification/domain/consignment_view.dart';
 import 'package:minechain/features/verification/domain/verdict.dart';
 
-CheckedStep step(CheckResult check) => CheckedStep(
-  id: 's-${check.name}',
+CheckedStep step(CheckResult check, {ReviewStatus? review}) => CheckedStep(
+  id: 's-${check.name}-${review?.name}',
   type: StepType.registration,
   byYou: false,
   actor: const StepActor(role: Role.miner, username: null),
@@ -22,7 +22,7 @@ CheckedStep step(CheckResult check) => CheckedStep(
   check: check,
   mismatchFields: null,
   mismatchReason: null,
-  reviewStatus: null,
+  reviewStatus: review,
   alerts: null,
 );
 
@@ -94,6 +94,90 @@ void main() {
     };
     cases.forEach((name, c) {
       test(name, () => expect(verdictFor(view(c.$1, held: c.$2)), c.$3));
+    });
+  });
+
+  // T5b, found on the A57 (MC-2026-LSK-0008): an officer's check said "not
+  // on the blockchain yet" for good, because of a rejected purchase. A
+  // rejected step (listed for officers only) never goes on the blockchain.
+  group('a rejected step', () {
+    ConsignmentView officerView(List<CheckedStep> steps, {bool held = false}) =>
+        ConsignmentView(
+          id: 'c1',
+          qrCode: 'MC-2026-LSK-0008',
+          mineral: Mineral.copper,
+          stage: ConsignmentStage.inTransit,
+          held: held,
+          weightsHidden: false,
+          steps: steps,
+        );
+    final rejectedPending = step(n, review: ReviewStatus.rejected);
+
+    test('not anchored: left out, so the rest is verified', () {
+      expect(
+        verdictFor(
+          officerView([
+            step(m, review: ReviewStatus.passed),
+            step(m, review: ReviewStatus.cleared),
+            rejectedPending,
+          ]),
+        ),
+        Verdict.verified,
+      );
+    });
+
+    test('the same verdict as a viewer who is never shown it', () {
+      expect(
+        verdictFor(officerView([step(m), rejectedPending])),
+        verdictFor(officerView([step(m)])),
+      );
+    });
+
+    test('chain unavailable on it: left out too', () {
+      expect(
+        verdictFor(
+          officerView([step(m), step(u, review: ReviewStatus.rejected)]),
+        ),
+        Verdict.verified,
+      );
+    });
+
+    test('a mismatch on it still counts: tampering either way', () {
+      expect(
+        verdictFor(
+          officerView([step(m), step(x, review: ReviewStatus.rejected)]),
+        ),
+        Verdict.mismatch,
+      );
+    });
+
+    test('only rejected steps: nothing to check', () {
+      expect(
+        verdictFor(officerView([rejectedPending])),
+        Verdict.nothingToCheck,
+      );
+    });
+
+    test('held still wins', () {
+      expect(
+        verdictFor(officerView([step(m), rejectedPending], held: true)),
+        Verdict.underReview,
+      );
+    });
+
+    test('a step not rejected still counts when not anchored yet', () {
+      for (final review in [
+        null,
+        ReviewStatus.passed,
+        ReviewStatus.cleared,
+        ReviewStatus.flagged,
+      ]) {
+        expect(
+          verdictFor(officerView([step(m), step(n, review: review)])),
+          Verdict.notAnchoredYet,
+          reason: '$review',
+        );
+      }
     });
   });
 }

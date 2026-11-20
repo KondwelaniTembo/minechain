@@ -65,6 +65,14 @@ abstract final class AppRoutes {
   static const String buyerPurchases = '/buyer/purchases';
   static const String buyerSync = '/buyer/sync';
 
+  /// The officer's alerts list (officer alerts plan, T2), and one alert
+  /// (T3). Under /officer, so the redirect's role rule keeps every other
+  /// role out, administrators included (Scope (5)).
+  static const String officerAlerts = '/officer/alerts';
+  static const String officerAlertPattern = '/officer/alerts/:id';
+  static String officerAlert(String id) =>
+      '/officer/alerts/${Uri.encodeComponent(id)}';
+
   /// The administrator's list of pending account requests. Under /admin, so
   /// the redirect's role rule keeps it for administrators only.
   static const String adminRequests = '/admin/requests';
