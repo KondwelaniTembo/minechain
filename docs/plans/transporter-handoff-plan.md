@@ -101,7 +101,7 @@ NFR-06 counts taps after the scan: weight (typing), Save. The mineral chip only 
   key not usable, phone busy). Widget tests: the whole flow online and offline, a 1.5 kg
   copper bag signs `weight_mg=1500000`, nothing saved on any refusal, text 2.0 in portrait
   and landscape.
-- ⬜ **T5 My handoffs and Send my work** (about 45 min). `/transporter/handoffs`: the
+- ✅ **T5 My handoffs and Send my work** (about 45 min). `/transporter/handoffs`: the
   "My consignments" list generalised by step type (handoffs say "Took custody of …"); the
   weight shown in the unit of the stored mineral hint. `/transporter/sync`: the existing
   screen, with its one miner-only link made role-aware. Both tiles wired; router tests that

@@ -1,7 +1,6 @@
-// The transporter's home (plan section 4.2). Placeholder tiles for now: each
-// says "Coming soon" until its module is built.
-// "Check a consignment" is built (consignment check plan), and "Take
-// custody" (transporter handoff plan).
+// The transporter's home (plan section 4.2). Every tile is built: "Take
+// custody", "My handoffs" and "Send my work" (transporter handoff plan),
+// and "Check a consignment" (consignment check plan).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,7 +8,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
-import '../../../core/widgets/coming_soon.dart';
 import '../../../core/widgets/home_scaffold.dart';
 import '../../auth/presentation/home_header.dart';
 
@@ -18,8 +16,6 @@ class TransporterHomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    void soon() => showComingSoon(context);
-
     return HomeScaffold(
       title: AppText.transporterTitle,
       username: watchUsername(ref),
@@ -46,12 +42,12 @@ class TransporterHomeScreen extends ConsumerWidget {
         HomeAction(
           icon: Icons.list_alt,
           label: AppText.myHandoffs,
-          onTap: soon,
+          onTap: () => context.push(AppRoutes.transporterHandoffs),
         ),
         HomeAction(
           icon: Icons.cloud_upload,
           label: AppText.sendMyWork,
-          onTap: soon,
+          onTap: () => context.push(AppRoutes.transporterSync),
         ),
       ],
     );

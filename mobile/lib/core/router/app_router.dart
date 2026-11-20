@@ -165,6 +165,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.transporterCustody,
         builder: (context, state) => const TakeCustodyScreen(),
       ),
+      // The same list and sync screens as the miner's (T5); the list shows
+      // handoffs, and the sync sends whatever this account has waiting.
+      GoRoute(
+        path: AppRoutes.transporterHandoffs,
+        builder: (context, state) =>
+            const MyConsignmentsScreen(kind: StepListKind.handoffs),
+      ),
+      GoRoute(
+        path: AppRoutes.transporterSync,
+        builder: (context, state) => const SendWorkScreen(),
+      ),
       // Under /admin, so redirect rule 4 sends every other role home. The
       // admin home opens it with push(), so the back arrow returns there.
       GoRoute(

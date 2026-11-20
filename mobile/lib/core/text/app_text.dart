@@ -408,6 +408,14 @@ abstract final class AppText {
       'The phone was busy and could not show your consignments. Your work '
       'is safe on this phone.';
 
+  // "My handoffs" (transporter handoff plan, T5).
+  static String tookCustodyOf(String code) => 'Took custody of $code';
+  static const String noHandoffsYet =
+      'You have not recorded taking custody of any consignment yet.';
+  static const String handoffsPhoneBusy =
+      'The phone was busy and could not show your handoffs. Your work is '
+      'safe on this phone.';
+
   // Why a send stopped. Every one says the work is still on the phone,
   // because it is: a stop never changes a saved record.
   static const String notSentOffline =

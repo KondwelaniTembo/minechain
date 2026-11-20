@@ -49,6 +49,12 @@ abstract final class AppRoutes {
   /// redirect's role rule keeps it for transporters only.
   static const String transporterCustody = '/transporter/custody';
 
+  /// "My handoffs" and the transporter's "Send my work" (transporter handoff
+  /// T5): the miner's two screens again, under /transporter for the same
+  /// role rule.
+  static const String transporterHandoffs = '/transporter/handoffs';
+  static const String transporterSync = '/transporter/sync';
+
   /// The administrator's list of pending account requests. Under /admin, so
   /// the redirect's role rule keeps it for administrators only.
   static const String adminRequests = '/admin/requests';

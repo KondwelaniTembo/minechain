@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/database/database_failure.dart';
 import '../../../core/errors/api_codes.dart';
+import '../../../core/router/redirect.dart';
 import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/sizes.dart';
@@ -34,7 +35,7 @@ class SendWorkScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        leading: BackButton(onPressed: () => _back(context)),
+        leading: BackButton(onPressed: () => _back(context, ref)),
         title: const Text(AppText.sendMyWork),
       ),
       body: SafeArea(
@@ -74,12 +75,19 @@ class SendWorkScreen extends ConsumerWidget {
   }
 }
 
-void _back(BuildContext context) {
+/// Back to the screen below, or to the signed-in user's own home when there
+/// is none: the screen serves miners and transporters (T5).
+void _back(BuildContext context, WidgetRef ref) {
   if (context.canPop()) {
     context.pop();
-  } else {
-    context.go(AppRoutes.miner);
+    return;
   }
+  final home = switch (ref.read(authControllerProvider)) {
+    SignedIn(:final user) ||
+    SignedInNeedsPassword(:final user) => homeOf(user.role),
+    _ => AppRoutes.login,
+  };
+  context.go(home);
 }
 
 /// A tap on Send: ask for the password first if the session needs it

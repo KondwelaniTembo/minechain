@@ -1,11 +1,14 @@
 // "My consignments" (plan M7): the miner's own registrations on this phone,
 // newest first, each with its state in words and an icon, never colour
-// alone (decision Mobile (34)).
+// alone (decision Mobile (34)). Since Transporter handoff T5 the same
+// screen is the transporter's "My handoffs": [StepListKind] holds what
+// differs (the step type, the words, the home and the way to add one).
 //
 // Shown per record: the QR code, the mineral and weight, when it was saved,
-// and the state in the words of "Send my work". Never shown: the payload,
-// signature, key fingerprint, coordinates or ids; the query does not even
-// read them.
+// and the state in the words of "Send my work". A handoff's mineral is the
+// unsigned hint the save used, so its weight shows in the unit the
+// transporter typed. Never shown: the payload, signature, key fingerprint,
+// coordinates or ids; the query does not even read them.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,22 +26,82 @@ import '../../registration/presentation/mineral_text.dart';
 import '../../steps/domain/consignment_list_item.dart';
 import 'my_consignments_provider.dart';
 
+/// Which list the screen shows.
+enum StepListKind {
+  registrations(
+    type: 'registration',
+    title: AppText.myConsignments,
+    empty: AppText.noConsignmentsYet,
+    busy: AppText.consignmentsPhoneBusy,
+    addLabel: AppText.registerConsignment,
+    addPath: AppRoutes.minerRegister,
+    addIcon: Icons.qr_code_scanner,
+    homePath: AppRoutes.miner,
+  ),
+  handoffs(
+    type: 'handoff',
+    title: AppText.myHandoffs,
+    empty: AppText.noHandoffsYet,
+    busy: AppText.handoffsPhoneBusy,
+    addLabel: AppText.takeCustody,
+    addPath: AppRoutes.transporterCustody,
+    addIcon: Icons.local_shipping,
+    homePath: AppRoutes.transporter,
+  );
+
+  const StepListKind({
+    required this.type,
+    required this.title,
+    required this.empty,
+    required this.busy,
+    required this.addLabel,
+    required this.addPath,
+    required this.addIcon,
+    required this.homePath,
+  });
+
+  /// The local step type listed.
+  final String type;
+  final String title;
+  final String empty;
+  final String busy;
+
+  /// The empty list's button: the screen that saves this kind of step.
+  final String addLabel;
+  final String addPath;
+  final IconData addIcon;
+
+  /// Where the back arrow goes when there is no screen below.
+  final String homePath;
+
+  /// Each card's heading.
+  String heading(String qrCode) => switch (this) {
+    registrations => qrCode,
+    handoffs => AppText.tookCustodyOf(qrCode),
+  };
+}
+
 class MyConsignmentsScreen extends ConsumerWidget {
-  const MyConsignmentsScreen({super.key});
+  const MyConsignmentsScreen({
+    this.kind = StepListKind.registrations,
+    super.key,
+  });
+
+  final StepListKind kind;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final items = ref.watch(myConsignmentsProvider);
+    final items = ref.watch(myStepsProvider(kind.type));
 
     final Widget body;
     // While the list is read again after a send, the old one stays.
     if (items.hasValue) {
       final list = items.requireValue;
       body = list.isEmpty
-          ? const _Empty()
-          : _List(list, now: ref.watch(clockProvider)());
+          ? _Empty(kind)
+          : _List(list, kind: kind, now: ref.watch(clockProvider)());
     } else if (items.hasError) {
-      body = _Problem(items.error!);
+      body = _Problem(items.error!, kind: kind);
     } else {
       body = const _Message(
         icon: Icons.hourglass_empty,
@@ -48,27 +111,31 @@ class MyConsignmentsScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        leading: BackButton(onPressed: () => _back(context)),
-        title: const Text(AppText.myConsignments),
+        leading: BackButton(onPressed: () => _back(context, kind)),
+        title: Text(kind.title),
       ),
       body: SafeArea(child: body),
     );
   }
 }
 
-void _back(BuildContext context) {
+void _back(BuildContext context, StepListKind kind) {
   if (context.canPop()) {
     context.pop();
   } else {
-    context.go(AppRoutes.miner);
+    context.go(kind.homePath);
   }
 }
 
-/// Opens the registration screen, and reads the list again on the way
-/// back, whether or not a send has finished by then.
-Future<void> _register(BuildContext context, WidgetRef ref) async {
-  await context.push(AppRoutes.minerRegister);
-  ref.invalidate(myConsignmentsProvider);
+/// Opens the screen that saves this kind of step, and reads the list again
+/// on the way back, whether or not a send has finished by then.
+Future<void> _add(
+  BuildContext context,
+  WidgetRef ref,
+  StepListKind kind,
+) async {
+  await context.push(kind.addPath);
+  ref.invalidate(myStepsProvider(kind.type));
 }
 
 /// A centred, scrollable column for the states without a list, so large
@@ -104,17 +171,18 @@ class _Message extends StatelessWidget {
 }
 
 class _Empty extends ConsumerWidget {
-  const _Empty();
+  const _Empty(this.kind);
+  final StepListKind kind;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => _Centred(
     children: [
-      const _IconLine(Icons.inventory_2, AppText.noConsignmentsYet),
+      _IconLine(Icons.inventory_2, kind.empty),
       const SizedBox(height: AppSizes.spaceM),
       FilledButton.icon(
-        onPressed: () => _register(context, ref),
-        icon: const Icon(Icons.qr_code_scanner),
-        label: const Text(AppText.registerConsignment),
+        onPressed: () => _add(context, ref, kind),
+        icon: Icon(kind.addIcon),
+        label: Text(kind.addLabel),
       ),
     ],
   );
@@ -123,8 +191,9 @@ class _Empty extends ConsumerWidget {
 /// "Cannot be opened" only when it really cannot (Mobile (26)); anything
 /// else is a busy moment, with a way to try again.
 class _Problem extends ConsumerWidget {
-  const _Problem(this.error);
+  const _Problem(this.error, {required this.kind});
   final Object error;
+  final StepListKind kind;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -137,10 +206,10 @@ class _Problem extends ConsumerWidget {
     }
     return _Centred(
       children: [
-        const _IconLine(Icons.hourglass_empty, AppText.consignmentsPhoneBusy),
+        _IconLine(Icons.hourglass_empty, kind.busy),
         const SizedBox(height: AppSizes.spaceM),
         OutlinedButton.icon(
-          onPressed: () => ref.invalidate(myConsignmentsProvider),
+          onPressed: () => ref.invalidate(myStepsProvider(kind.type)),
           icon: const Icon(Icons.refresh),
           label: const Text(AppText.tryAgain),
         ),
@@ -150,8 +219,9 @@ class _Problem extends ConsumerWidget {
 }
 
 class _List extends StatelessWidget {
-  const _List(this.items, {required this.now});
+  const _List(this.items, {required this.kind, required this.now});
   final List<ConsignmentListItem> items;
+  final StepListKind kind;
   final DateTime now;
 
   @override
@@ -161,15 +231,16 @@ class _List extends StatelessWidget {
     itemBuilder: (context, index) => Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560),
-        child: _Item(items[index], now: now),
+        child: _Item(items[index], kind: kind, now: now),
       ),
     ),
   );
 }
 
 class _Item extends StatelessWidget {
-  const _Item(this.item, {required this.now});
+  const _Item(this.item, {required this.kind, required this.now});
   final ConsignmentListItem item;
+  final StepListKind kind;
   final DateTime now;
 
   @override
@@ -184,7 +255,10 @@ class _Item extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(item.qrCode, style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              kind.heading(item.qrCode),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             const SizedBox(height: AppSizes.spaceS),
             Text(_what(item)),
             Text(AppText.savedAt(item.createdAt.toLocal())),
