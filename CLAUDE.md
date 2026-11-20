@@ -36,7 +36,7 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 19 Nov 2026. Read this first in a new session, then `docs/progress.md` (the day
+Updated 20 Nov 2026, 00:40. Read this first in a new session, then `docs/progress.md` (the day
 plan and the current feature's subtasks), then `docs/decisions.md`.
 
 - **Done: Hardening** (`docs/plans/hardening-plan.md`, on a new branch the developer creates
@@ -76,7 +76,17 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
   - Merged as PR #13 (`229b65a`).
   - Then `fix/account-back-arrow`: "My account" has a back arrow that goes to the Home
     branch (`goBranch`), decision Mobile (39), reversing Q10 of Mobile (37). Tests 1438
-    passed, 0 skipped. A57 check fine. Left: PR. Next feature: Consignment check (Thu 19).
+    passed, 0 skipped. A57 check fine. Merged as PR #14 (`c1a95ef`). Wednesday's features
+    are all done.
+  - Now: Consignment check (Thu 19) on `feature/consignment-check`,
+    `docs/plans/consignment-check-plan.md` (approved; Q6 demo accounts asked before T6).
+    T1 domain, T2 data, T3 scan step, T4 result page, T5 role differences done (1584
+    tests passed). T6 partly done on the A57 (20 Nov, 00:20, a new transporter account): the two
+    result-page fixes it found are made (1587 tests passed). T6 finished 20 Nov (offline,
+    and a verified result from an emulator registration inside the demo zone); T7 docs
+    done (Verification app (1)–(10)). Consignment check 7/7: the developer opens the PR.
+    Next: Transporter handoff (plan first).
+    The officer phone check waits for the admin's "Create account" screen (Sat 21).
 
 - **Design integration merged as PR #11** (`d86e33c`, 19 Nov;
   `docs/plans/design-integration-plan.md`, T1–T14). Mapalo Maseko's copper theme, the home
@@ -518,6 +528,15 @@ backend/src/
     pager waits for `q`, and every later line waits too. Use `git --no-pager ...`.
   - When a docs file holds rows for two subtasks, it goes into the later commit, and the
     report says so.
+- **Start-of-feature script** (asked for on 19 Nov): after a PR is merged and its branch
+  deleted on GitHub, give one PowerShell script, ready to paste, with the new branch name
+  filled in. If the working tree has uncommitted changes, it first sets them aside with
+  `git stash push -m "<why>" -- <files>` and ends with `git stash pop` on the new branch
+  (a switch to an older local `main` refuses otherwise). It records the current branch,
+  switches to `main`, pulls, runs
+  `git fetch --prune`, deletes the old local branch with `git branch -d` (never `-D`),
+  creates the new branch with `git switch -c`, and ends with `git --no-pager log
+  --oneline -3`. Each step runs only if the one before it worked (`$LASTEXITCODE`).
 
 ## Platform
 

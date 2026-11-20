@@ -549,6 +549,97 @@ abstract final class AppText {
       'The server is running but not ready. Try again in a minute.';
   static const String tryAgain = 'Try again';
 
+  // ---- Check a consignment (consignment check plan) ----
+  static const String checkScanHint =
+      "Hold the QR code on the bag's custody record inside the camera view.";
+  static String checkingRecord(String code) =>
+      'Checking $code against the blockchain…';
+  static const String checkingTakesTime =
+      'This can take a few seconds on a slow network.';
+  static const String scanAgain = 'Scan again';
+  static const String checkNeedsPassword =
+      'Your session has ended. Enter your password to check this consignment.';
+
+  /// A 429's Retry-After, rounded up to whole minutes.
+  static String tryAgainIn(Duration wait) {
+    final minutes = (wait.inSeconds / 60).ceil().clamp(1, 1440);
+    return minutes == 1
+        ? 'You can scan again in about 1 minute.'
+        : 'You can scan again in about $minutes minutes.';
+  }
+
+  // The result page (plan §4). The verdicts, worst first.
+  static const String verdictMismatch =
+      'This record does not match the blockchain. Officers have been told, '
+      'and the consignment is held.';
+  static const String verdictUnderReview =
+      'Under review: an officer is checking a problem with this consignment.';
+  static const String verdictChainUnavailable =
+      'Could not reach the blockchain just now. Try again later.';
+  static const String verdictNotAnchoredYet =
+      'Recorded, not on the blockchain yet. This usually takes a few minutes.';
+  static const String verdictNothingToCheck =
+      'Nothing to check yet: no accepted step is recorded for this '
+      'consignment.';
+  static const String verdictVerified =
+      'Verified: every step matches the blockchain.';
+
+  static String stageLine(String stage) => 'Stage: $stage';
+  static const String stageRegistered = 'Registered';
+  static const String stageInTransit = 'On its way';
+  static const String stagePurchased = 'Bought';
+  static const String custodySteps = 'Custody steps';
+
+  /// "miner mutale_banda", or "a miner" when the username is not shown.
+  static String actorName(String role, String? username) =>
+      username == null ? 'a $role' : '$role $username';
+  static const String you = 'you';
+  static String registeredBy(String who) => 'Registered by $who';
+  static String handedOffTo(String who) => 'Handed off to $who';
+  static String boughtBy(String who) => 'Bought by $who';
+
+  static String weightLine(String weight) => 'Weight: $weight';
+  static String zoneLine(String zone) => 'Zone: $zone';
+  static const String outsideEveryZone = 'Outside every licensed zone';
+
+  /// "Recorded 10 Nov 2026, 10:00", in the phone's own time.
+  static String recordedAt(DateTime localTime) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return 'Recorded ${localTime.day} ${_months[localTime.month - 1]} '
+        '${localTime.year}, ${two(localTime.hour)}:${two(localTime.minute)}';
+  }
+
+  static const String stepMatches = 'Matches the blockchain';
+  static const String stepMismatch = 'Does not match the blockchain';
+  static const String stepNotAnchoredYet = 'Not on the blockchain yet';
+  static const String stepChainUnavailable =
+      'Could not check the blockchain just now';
+  static const String blockchainTransaction = 'Blockchain transaction:';
+  static const String notSentYet = 'Not sent to the blockchain yet';
+
+  // Role differences (T5).
+  static const String weighFirst =
+      'Weigh it before you take custody: the weight is hidden until you '
+      'record yours.';
+  static const String stepsHiddenWhileHeld =
+      'Its custody steps are hidden while an officer reviews it.';
+  static String locationLine(String latitude, String longitude) =>
+      'Location: $latitude, $longitude';
+
+  /// Officers, on a mismatch: field NAMES only, as the server sends them.
+  static String whatDiffers(String names) => 'What differs: $names';
+  static String mismatchReason(String code) => 'Reason: $code';
+  static const String reviewPassed = 'Passed the automatic checks';
+  static const String reviewCleared = 'Cleared by an officer';
+  static const String reviewFlagged = 'Flagged: waiting for an officer';
+  static const String reviewRejected =
+      'Rejected: an officer confirmed the problem';
+  static String alertsLine(int total, int open) {
+    if (total == 0) return 'No alerts';
+    final count = total == 1 ? '1 alert' : '$total alerts';
+    return '$count, $open open';
+  }
+
   // ---- Problems with the server's answer (core/errors/failure_text.dart) ----
 
   static const String invalidCredentials = 'Wrong username or password.';

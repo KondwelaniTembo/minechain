@@ -1,5 +1,6 @@
 // The regulatory officer's home (plan section 4.2). Placeholder tiles for now:
-// each says "Coming soon" until its module is built.
+// each says "Coming soon" until its module is built. "Check a consignment"
+// is built (consignment check plan).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -37,7 +38,8 @@ class OfficerHomeScreen extends ConsumerWidget {
         HomeAction(
           icon: Icons.fact_check,
           label: AppText.checkConsignment,
-          onTap: soon,
+          // push(): a task page over the home, whose back arrow returns here.
+          onTap: () => context.push(AppRoutes.officerCheck),
         ),
         HomeAction(
           icon: Icons.table_chart,
