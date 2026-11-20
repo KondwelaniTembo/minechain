@@ -95,7 +95,7 @@ NFR-06 counts taps after the scan: weight (typing), Save. The mineral chip only 
   through the existing `ConsignmentCheckRepository` (one request per scan; offline,
   timeout or 5xx fall through to "could not be checked", never a dead end), Q2's warnings,
   the mineral from the check or the chips. Widget tests with the fake camera and fake server.
-- ⬜ **T4 Take custody, weight, GPS and save** (about 75 min). The location handling moved
+- ✅ **T4 Take custody, weight, GPS and save** (about 75 min). The location handling moved
   out of `RegistrationController` into a shared controller both screens use (registration
   tests unchanged); weight field; Save through T2; the saved state; refusals (no screen lock,
   key not usable, phone busy). Widget tests: the whole flow online and offline, a 1.5 kg

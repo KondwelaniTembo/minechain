@@ -4,8 +4,8 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 20 Nov 2026, after Transporter handoff T3, on `feature/transporter-handoff`
-(3/7). Consignment check merged as PR #15. Next: T4, Take custody: weight, GPS and save.
+Last updated: 20 Nov 2026, after Transporter handoff T4, on `feature/transporter-handoff`
+(4/7). Consignment check merged as PR #15. Next: T5, My handoffs and Send my work.
 
 ## (a) Whole project
 
@@ -100,7 +100,11 @@ Plan: `docs/plans/transporter-handoff-plan.md`, approved 20 Nov (Q1–Q5 as prop
 - ✅ T3 Take custody: scan and check: `/transporter/custody`, the tile wired; Q4 on the
   phone first; one check per scan; 404, offline, failed and ended-session sentences, the
   chips; Q2's warnings and "Record anyway"; shared gate and chips; 30 new tests
-- ⬜ T4 Take custody: weight, GPS and save
+- ✅ T4 Take custody: weight, GPS and save: the location moved into a shared
+  `LocationTracker` (registration tests unchanged), started only once a code is accepted;
+  the weight in the mineral's unit; Save with Q4 checked again; every refusal stores
+  nothing; the send after a save; shared location view, weight field and saved view;
+  18 new tests
 - ⬜ T5 My handoffs and Send my work
 - ⬜ T6 Phone check (the developer)
 - ⬜ T7 Docs and PR

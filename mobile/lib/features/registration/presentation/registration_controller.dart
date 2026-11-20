@@ -18,64 +18,28 @@ import '../../../core/database/local_settings.dart';
 import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../steps/data/local_steps_repository.dart';
+import '../../steps/presentation/location_tracker.dart';
 import '../../sync/data/sync_service.dart';
 import '../../sync/domain/sync_report.dart';
 import '../data/location_source.dart';
 import '../data/register_consignment.dart';
 import '../domain/custody_record.dart';
-import '../domain/gps_fix.dart';
 import '../domain/mineral.dart';
 import '../domain/weight.dart';
 
-/// After this long without a usable fix, the screen suggests open sky.
-const Duration stillLookingAfter = Duration(seconds: 60);
-
-/// The longest "Starting the location…" may last (the permission dialog
-/// included). After it the screen shows "could not be read" with "Try
-/// again", so it can never hang for ever. A slower answer still counts if
-/// it arrives later.
-const Duration locationStartTimeout = Duration(seconds: 30);
-
-// ---- Location ---------------------------------------------------------------
-
-sealed class LocationStatus {
-  const LocationStatus();
-}
-
-final class LocationStarting extends LocationStatus {
-  const LocationStarting();
-}
-
-final class LocationBlocked extends LocationStatus {
-  const LocationBlocked(this.access);
-
-  /// Never [LocationAccess.granted].
-  final LocationAccess access;
-}
-
-/// Readings are coming, none usable yet. [accuracyM] is the latest one's,
-/// for "Finding your location… 40 m".
-final class LocationSearching extends LocationStatus {
-  const LocationSearching({this.accuracyM, this.stillLooking = false});
-  final double? accuracyM;
-  final bool stillLooking;
-}
-
-/// The latest reading came from a fake-location app.
-final class LocationMocked extends LocationStatus {
-  const LocationMocked();
-}
-
-/// The stream failed for another reason; "Try again" restarts it.
-final class LocationFailed extends LocationStatus {
-  const LocationFailed();
-}
-
-/// A reading that passes the policy.
-final class LocationFound extends LocationStatus {
-  const LocationFound(this.fix);
-  final GpsReading fix;
-}
+// The location statuses and the timings are shared with "Take custody"
+// (Transporter handoff T4); exported so this file's users see them as before.
+export '../../steps/presentation/location_tracker.dart'
+    show
+        LocationStatus,
+        LocationStarting,
+        LocationBlocked,
+        LocationSearching,
+        LocationMocked,
+        LocationFailed,
+        LocationFound,
+        stillLookingAfter,
+        locationStartTimeout;
 
 // ---- The scanned code -------------------------------------------------------
 
@@ -174,19 +138,19 @@ class RegistrationState {
 }
 
 class RegistrationController extends Notifier<RegistrationState> {
-  StreamSubscription<GpsReading>? _readings;
-
-  /// When the current search began. "Still looking" is worked out from it on
-  /// each reading (they come every second), rather than with a Timer: no
-  /// timer is left running when the screen closes.
-  DateTime? _searchStarted;
-
-  LocationSource get _source => ref.read(locationSourceProvider);
-  Clock get _now => ref.read(clockProvider);
+  late final LocationTracker _location = LocationTracker(
+    source: () => ref.read(locationSourceProvider),
+    clock: () => ref.read(clockProvider),
+    isAlive: () => ref.mounted,
+    onStatus: (status) => state = state.copyWith(location: status),
+    // The camera asks for its own permission as soon as it is shown, and
+    // Android shows one permission dialog at a time.
+    onSettled: () => state = state.copyWith(cameraMayStart: true),
+  );
 
   @override
   RegistrationState build() {
-    ref.onDispose(_stopLocation);
+    ref.onDispose(_location.stop);
     // After build returns: a Notifier may not change its state while it is
     // being built.
     Future.microtask(_start);
@@ -213,143 +177,18 @@ class RegistrationController extends Notifier<RegistrationState> {
     }
   }
 
-  // ---- Location -------------------------------------------------------------
+  // ---- Location (the shared tracker) ---------------------------------------
 
-  /// Counts the starts, so the answer to an older one (a late permission
-  /// answer, say) never overwrites a newer one.
-  int _attempt = 0;
-
-  /// Asks for access and starts the readings: on open, and for "Allow
-  /// location" and "Try again". With [ask] false (coming back from the
-  /// settings page), only looks and never shows a dialog.
-  ///
-  /// Every outcome ends in a visible state: blocked, failed (with "Try
-  /// again"), or searching. A throw, or no answer within
-  /// [locationStartTimeout], is "failed".
-  Future<void> startLocation({bool ask = true}) async {
-    _stopLocation();
-    final attempt = ++_attempt;
-    state = state.copyWith(location: const LocationStarting());
-
-    final Future<LocationAccess> asking;
-    try {
-      asking = _source.ensureAccess(ask: ask);
-    } on Object {
-      _accessFailed(attempt);
-      return;
-    }
-    try {
-      _afterAccess(attempt, await asking.timeout(locationStartTimeout));
-    } on TimeoutException {
-      _accessFailed(attempt);
-      // The miner may simply have been slow with the dialog: a late answer
-      // still counts, unless something else has started since.
-      unawaited(
-        asking.then(
-          (access) {
-            if (_isCurrent(attempt) && state.location is LocationFailed) {
-              _afterAccess(attempt, access);
-            }
-          },
-          onError: (Object _) {}, // already shown as failed
-        ),
-      );
-    } on Object {
-      _accessFailed(attempt);
-    }
-  }
-
-  bool _isCurrent(int attempt) => ref.mounted && attempt == _attempt;
-
-  void _accessFailed(int attempt) {
-    if (!_isCurrent(attempt)) return;
-    state = state.copyWith(
-      location: const LocationFailed(),
-      cameraMayStart: true,
-    );
-  }
-
-  void _afterAccess(int attempt, LocationAccess access) {
-    if (!_isCurrent(attempt)) return;
-    if (access != LocationAccess.granted) {
-      state = state.copyWith(
-        location: LocationBlocked(access),
-        cameraMayStart: true,
-      );
-      return;
-    }
-    state = state.copyWith(
-      location: const LocationSearching(),
-      cameraMayStart: true,
-    );
-    _searchStarted = _now();
-    try {
-      _readings = _source.readings().listen(
-        _onReading,
-        onError: (Object error) => _onStreamError(error),
-      );
-    } on Object {
-      _stopLocation();
-      state = state.copyWith(location: const LocationFailed());
-    }
-  }
+  /// On open, and for "Allow location" and "Try again"; with [ask] false
+  /// (back from the settings page) it never shows a dialog.
+  Future<void> startLocation({bool ask = true}) => _location.start(ask: ask);
 
   /// Whether startLocation is worth running again by itself (after the user
   /// came back from the settings page).
-  bool get locationBlocked =>
-      state.location is LocationBlocked || state.location is LocationFailed;
+  bool get locationBlocked => _location.blocked;
 
-  void _onReading(GpsReading reading) {
-    final now = _now();
-    final problem = fixProblem(reading, now);
-    if (problem == null) {
-      // Usable: the newest usable one always replaces the last.
-      state = state.copyWith(location: LocationFound(reading));
-      return;
-    }
-    if (problem == FixProblem.mocked) {
-      state = state.copyWith(location: const LocationMocked());
-      return;
-    }
-    // Not usable. Keep a found fix while it is still fresh; once it is too
-    // old, go back to searching.
-    final current = state.location;
-    if (current is LocationFound && fixProblem(current.fix, now) == null) {
-      return;
-    }
-    final started = _searchStarted ?? now;
-    state = state.copyWith(
-      location: LocationSearching(
-        accuracyM: reading.hasAccuracy ? reading.accuracyM : null,
-        stillLooking: now.difference(started) >= stillLookingAfter,
-      ),
-    );
-  }
-
-  void _onStreamError(Object error) {
-    _stopLocation();
-    final problem = error is LocationStreamError ? error.problem : null;
-    state = state.copyWith(
-      location: switch (problem) {
-        LocationStreamProblem.serviceOff => const LocationBlocked(
-          LocationAccess.serviceOff,
-        ),
-        LocationStreamProblem.permissionDenied => const LocationBlocked(
-          LocationAccess.deniedOnce,
-        ),
-        _ => const LocationFailed(),
-      },
-    );
-  }
-
-  void _stopLocation() {
-    _searchStarted = null;
-    unawaited(_readings?.cancel());
-    _readings = null;
-  }
-
-  Future<void> openLocationSettings() => _source.openLocationSettings();
-  Future<void> openAppSettings() => _source.openAppSettings();
+  Future<void> openLocationSettings() => _location.openLocationSettings();
+  Future<void> openAppSettings() => _location.openAppSettings();
 
   // ---- The code, the mineral, the weight -----------------------------------
 
@@ -403,15 +242,13 @@ class RegistrationController extends Notifier<RegistrationState> {
       _ => null,
     };
     if (!form.canSave || user == null) return;
-    final location = form.location as LocationFound;
     final weight = form.weight! as WeightOk;
 
     // The fix may have aged since it was found: check again at the moment
-    // of saving (plan §5, fresh within 30 s).
-    if (fixProblem(location.fix, _now()) != null) {
-      state = form.copyWith(location: const LocationSearching());
-      return;
-    }
+    // of saving (plan §5, fresh within 30 s). An aged one goes back to
+    // searching.
+    final fix = _location.freshFix();
+    if (fix == null) return;
 
     state = form.copyWith(saving: true, result: () => null);
 
@@ -452,9 +289,9 @@ class RegistrationController extends Notifier<RegistrationState> {
           qrCode: form.qrCode!,
           mineral: form.mineral!,
           weightMg: weight.milligrams,
-          latitude: location.fix.latitude,
-          longitude: location.fix.longitude,
-          gpsAccuracyM: location.fix.accuracyM,
+          latitude: fix.latitude,
+          longitude: fix.longitude,
+          gpsAccuracyM: fix.accuracyM,
         );
     stopwatch.stop();
     if (!ref.mounted) return;

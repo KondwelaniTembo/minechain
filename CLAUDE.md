@@ -36,13 +36,13 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 20 Nov 2026, after Transporter handoff T3. Read this first in a new session, then
+Updated 20 Nov 2026, after Transporter handoff T4. Read this first in a new session, then
 `docs/progress.md` (the day plan and the current feature's subtasks), then `docs/decisions.md`.
 
 - **Now: Transporter handoff** on `feature/transporter-handoff` (pushed, tracks origin),
   `docs/plans/transporter-handoff-plan.md` (approved 20 Nov, Q1–Q5 as proposed; Q3 changed
-  in T2). App only (`mobile/`, `docs/`); nothing deploys to Render. 3/7 done, 1678 tests
-  passed, 0 skipped. Decisions Handoff app (1)–(4).
+  in T2). App only (`mobile/`, `docs/`); nothing deploys to Render. 4/7 done, 1696 tests
+  passed, 0 skipped. Decisions Handoff app (1)–(6).
   - T1 (`962870a`): `handoff/domain/handoff_payload.dart` `buildHandoffPayload` (8 lines, no
     `mineral`), checked byte for byte against the spec example and the vectors.
   - T2 (`db3ee26`): `steps/data/save_signed_step.dart` `SignedStepSaver` (key check →
@@ -62,15 +62,17 @@ Updated 20 Nov 2026, after Transporter handoff T3. Read this first in a new sess
     `mayContinue` T4 builds on); `take_custody_screen.dart`. Shared widgets:
     `steps/presentation/saved_work_gate.dart` `SavedWorkGate` + `backOrHome`, and
     `registration/presentation/mineral_chips.dart` `MineralChips`.
-  - **Next: T4** (weight, GPS and Save on `CustodyReady`): move the location handling out of
-    `RegistrationController` into a shared controller both screens use, with registration
-    tests unchanged. Start the location only AFTER a code is accepted, so the camera's and
-    the location's permission dialogs never overlap (one request at a time). Weight field in
-    the mineral's unit (`parseWeightToMg`); Save only when `mayContinue`, a fresh fix and a
-    valid weight; re-check `handedOffOn` just before saving, as registration re-checks
-    `registeredOn`; refusals as registration (no screen lock, key not usable, busy); after
-    `SaveDone`, `syncNow` as registration does (no "remember the mineral" for handoffs).
-    Then T5 "My handoffs" and `/transporter/sync`, T6 phone check (developer), T7 docs and PR.
+  - T4 (not committed yet): `steps/presentation/location_tracker.dart` `LocationTracker`
+    (a plain class each controller owns; `freshFix()` at Save), used by
+    `RegistrationController` (re-exports the status types; tests unchanged) and
+    `CustodyController`, which starts it once a code passes Q4. `CustodyReady` gained
+    `location`, `weightText`, `saving`, `result`, `canSave`, `editable`; `save()` re-checks
+    `handedOffOn`, then `recordHandoffProvider`, then `syncNow(afterSave)`. Shared widgets:
+    `LocationStatusView`, `WeightField` / `weightErrorText`, `SavedView` / `saveProblemText`
+    (`steps/presentation/`), `core/widgets/status_line.dart` `StatusLine`.
+  - **Next: T5** "My handoffs" (`/transporter/handoffs`, the list by step type, weights in
+    the hint's unit) and `/transporter/sync` (the miner-only link made role-aware). Then T6
+    phone check (developer), T7 docs and PR.
   - Lessons from this feature: a new branch's first push needs
     `git push --set-upstream origin <branch>`; `dart format` takes file paths only, never a
     folder (a folder-wide run on `lib/core` re-wrapped five network and storage files in T3,

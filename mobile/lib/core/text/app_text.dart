@@ -663,6 +663,13 @@ abstract final class AppText {
   static const String chooseMineralFromRecord =
       'Choose the mineral written on the custody record.';
 
+  // T4: the transporter's own weighing, place and save.
+  static const String handoffLocationStep = 'Your location';
+  static const String handoffWeightStep = 'Weight on your scale';
+  static const String handoffWeightHint =
+      'Weigh the bag and type what your own scale says.';
+  static const String takeAnotherCustody = 'Take custody of another';
+
   // Role differences (T5).
   static const String weighFirst =
       'Weigh it before you take custody: the weight is hidden until you '

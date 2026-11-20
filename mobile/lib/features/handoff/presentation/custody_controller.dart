@@ -3,7 +3,11 @@
 // this phone (Q4), ask the server what it knows (Q1, Q2), and settle the
 // mineral, from the server or from the transporter's choice.
 //
-// T4 adds the weight, the GPS fix and Save on top of [CustodyReady].
+// T4 adds the transporter's own weight, the GPS fix and Save on
+// [CustodyReady]. The GPS starts only once a code is accepted: by then the
+// camera's permission question is answered, so the two dialogs can never
+// be on screen together (one permission request at a time). It then keeps
+// running for the next bag until the screen closes.
 //
 // One request per scan, as on "Check a consignment": the camera reads the
 // same code many times a second, so any code that arrives after one is
@@ -12,18 +16,30 @@
 // Never a dead end (Q2): offline, a slow answer, a server error or an ended
 // session all lead to "could not be checked, you can still record it".
 //
-// Nothing here is logged; the states' toString() print no QR code.
+// Nothing here is logged; the states' toString() print no QR code, place or
+// weight.
+
+import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/clock.dart';
+import '../../../core/database/database_failure.dart';
 import '../../../core/errors/api_codes.dart';
 import '../../../core/errors/app_failure.dart';
 import '../../auth/domain/auth_state.dart';
+import '../../auth/domain/user.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../../registration/data/location_source.dart';
 import '../../registration/domain/custody_record.dart';
 import '../../registration/domain/mineral.dart';
+import '../../registration/domain/weight.dart';
 import '../../steps/data/local_steps_repository.dart';
+import '../../steps/presentation/location_tracker.dart';
+import '../../sync/data/sync_service.dart';
+import '../../sync/domain/sync_report.dart';
 import '../../verification/data/consignment_check_repository.dart';
+import '../data/record_handoff.dart';
 import '../domain/custody_check.dart';
 
 sealed class CustodyState {
@@ -70,13 +86,19 @@ final class CustodyChecking extends CustodyState {
   String toString() => 'CustodyChecking()';
 }
 
-/// What is known about the bag; the transporter can go on.
+/// What is known about the bag; the transporter can go on, weigh it and
+/// save.
 final class CustodyReady extends CustodyState {
   const CustodyReady({
     required this.qrCode,
     required this.check,
     this.chosenMineral,
     this.recordAnyway = false,
+    this.location = const LocationStarting(),
+    this.weightText = '',
+    this.saving = false,
+    this.result,
+    this.saveDuration,
   });
 
   final String qrCode;
@@ -87,6 +109,18 @@ final class CustodyReady extends CustodyState {
 
   /// "Record anyway" was tapped (Q2).
   final bool recordAnyway;
+
+  final LocationStatus location;
+
+  /// What the transporter typed from their own scale, in [mineral]'s unit.
+  final String weightText;
+  final bool saving;
+
+  /// The last save's outcome, if any.
+  final SaveResult? result;
+
+  /// How long that save took (shown in debug builds only).
+  final Duration? saveDuration;
 
   /// The server's mineral wins: it was signed by the miner, and the chips
   /// are not shown then.
@@ -101,24 +135,71 @@ final class CustodyReady extends CustodyState {
   bool get waitingForRecordAnyway =>
       !recordAnyway && warnings.any(needsRecordAnyway);
 
-  /// Everything T4's weight and Save need from this part.
+  /// The mineral is settled and no "Record anyway" is waiting: the weight
+  /// and Save may be shown.
   bool get mayContinue => mineral != null && !waitingForRecordAnyway;
 
-  CustodyReady copyWith({Mineral? chosenMineral, bool? recordAnyway}) =>
-      CustodyReady(
-        qrCode: qrCode,
-        check: check,
-        chosenMineral: chosenMineral ?? this.chosenMineral,
-        recordAnyway: recordAnyway ?? this.recordAnyway,
-      );
+  /// The weight as milligrams, or why not. Null while no mineral is
+  /// settled, because the unit follows the mineral (Q1).
+  WeightParse? get weight =>
+      mineral == null ? null : parseWeightToMg(weightText, mineral!.unit);
+
+  /// Whether a save has been committed.
+  bool get saved => result is SaveDone;
+
+  /// Whether a tap may change the form: not while saving, nor once saved.
+  bool get editable => !saving && !saved;
+
+  /// Every condition for Save: the part above settled, a usable fix and a
+  /// valid weight, and nothing already running or done.
+  bool get canSave =>
+      mayContinue &&
+      location is LocationFound &&
+      weight is WeightOk &&
+      editable;
+
+  CustodyReady copyWith({
+    Mineral? chosenMineral,
+    bool? recordAnyway,
+    LocationStatus? location,
+    String? weightText,
+    bool? saving,
+    SaveResult? Function()? result,
+    Duration? Function()? saveDuration,
+  }) => CustodyReady(
+    qrCode: qrCode,
+    check: check,
+    chosenMineral: chosenMineral ?? this.chosenMineral,
+    recordAnyway: recordAnyway ?? this.recordAnyway,
+    location: location ?? this.location,
+    weightText: weightText ?? this.weightText,
+    saving: saving ?? this.saving,
+    result: result == null ? this.result : result(),
+    saveDuration: saveDuration == null ? this.saveDuration : saveDuration(),
+  );
 
   @override
-  String toString() => 'CustodyReady($check, mayContinue: $mayContinue)';
+  String toString() =>
+      'CustodyReady($check, mayContinue: $mayContinue, '
+      'location: ${location.runtimeType}, canSave: $canSave)';
 }
 
 class CustodyController extends Notifier<CustodyState> {
+  late final LocationTracker _location = LocationTracker(
+    source: () => ref.read(locationSourceProvider),
+    clock: () => ref.read(clockProvider),
+    isAlive: () => ref.mounted,
+    onStatus: (status) {
+      final current = state;
+      if (current is CustodyReady) state = current.copyWith(location: status);
+    },
+  );
+
   @override
-  CustodyState build() => const CustodyScanning();
+  CustodyState build() {
+    ref.onDispose(_location.stop);
+    return const CustodyScanning();
+  }
 
   /// A code from the camera, exactly as read.
   Future<void> onScanned(String raw) async {
@@ -138,7 +219,7 @@ class CustodyController extends Notifier<CustodyState> {
     final DateTime? earlier;
     try {
       final steps = await ref.read(localStepsRepositoryProvider.future);
-      earlier = await steps.handedOffOn(raw, user);
+      earlier = await steps.handedOffOn(raw, user.id);
     } on Object {
       // Busy, or a database problem the screen's gate shows by itself.
       if (ref.mounted) state = const CustodyScanning(ScanPhoneBusy());
@@ -150,9 +231,13 @@ class CustodyController extends Notifier<CustodyState> {
       return;
     }
 
+    // The code is accepted, so the camera has its permission: the location
+    // may now ask for its own. Started once; it keeps going for the next bag.
+    if (!_location.started) unawaited(_location.start());
+
     final check = await _askServer(raw);
     if (!ref.mounted || state is! CustodyChecking) return;
-    state = CustodyReady(qrCode: raw, check: check);
+    state = CustodyReady(qrCode: raw, check: check, location: _location.status);
   }
 
   Future<CustodyCheck> _askServer(String qrCode) async {
@@ -183,26 +268,127 @@ class CustodyController extends Notifier<CustodyState> {
   /// A mineral chip, when the server did not say (Q1).
   void chooseMineral(Mineral mineral) {
     final current = state;
-    if (current is! CustodyReady || !current.choosesMineral) return;
+    if (current is! CustodyReady ||
+        !current.choosesMineral ||
+        !current.editable) {
+      return;
+    }
     state = current.copyWith(chosenMineral: mineral);
   }
 
   /// "Record anyway" under a mismatch or a hold (Q2).
   void recordAnyway() {
     final current = state;
-    if (current is! CustodyReady) return;
+    if (current is! CustodyReady || !current.editable) return;
     state = current.copyWith(recordAnyway: true);
   }
 
-  /// "Scan another record": back to the camera. Not while asking.
+  void weightChanged(String text) {
+    final current = state;
+    if (current is! CustodyReady || !current.editable) return;
+    state = current.copyWith(weightText: text, result: () => null);
+  }
+
+  /// "Scan another record", and "Take custody of another" after a save:
+  /// back to the camera. Not while asking or saving. The GPS keeps running.
   void scanAgain() {
-    if (state is CustodyChecking) return;
+    final current = state;
+    if (current is CustodyChecking) return;
+    if (current is CustodyReady && current.saving) return;
     state = const CustodyScanning();
   }
 
-  /// The signed-in account's id: the custodian whose handoffs count for Q4.
-  String? _user() => switch (ref.read(authControllerProvider)) {
-    SignedIn(:final user) || SignedInNeedsPassword(:final user) => user.id,
+  // ---- Location (the shared tracker) ---------------------------------------
+
+  /// "Allow location" and "Try again"; with [ask] false (back from the
+  /// settings page) it never shows a dialog.
+  Future<void> startLocation({bool ask = true}) => _location.start(ask: ask);
+
+  /// Whether startLocation is worth running again by itself (after the user
+  /// came back from the settings page). Never before a code is accepted.
+  bool get locationBlocked => _location.started && _location.blocked;
+
+  Future<void> openLocationSettings() => _location.openLocationSettings();
+  Future<void> openAppSettings() => _location.openAppSettings();
+
+  // ---- Save -----------------------------------------------------------------
+
+  /// Saves the signed handoff. The screen only enables Save when canSave.
+  Future<void> save() async {
+    final form = state;
+    final user = _user();
+    if (form is! CustodyReady || !form.canSave || user == null) return;
+    final weight = form.weight! as WeightOk;
+    final mineral = form.mineral!;
+
+    // The fix may have aged since it was found: check again at the moment
+    // of saving (fresh within 30 s). An aged one goes back to searching.
+    final fix = _location.freshFix();
+    if (fix == null) return;
+
+    state = form.copyWith(saving: true, result: () => null);
+
+    // Q4 once more, just before saving, as registration checks its
+    // duplicate again: this account may have recorded this bag since the
+    // scan. Nothing is signed yet.
+    final DateTime? earlier;
+    try {
+      final steps = await ref.read(localStepsRepositoryProvider.future);
+      earlier = await steps.handedOffOn(form.qrCode, user.id);
+    } on Object catch (error) {
+      // A busy moment says "try Save again"; any other failure is the
+      // storage problem.
+      _finish(
+        isBusyMoment(error)
+            ? const SaveBusy()
+            : SaveStorageFailed(error is DatabaseFailure ? error : null),
+      );
+      return;
+    }
+    if (!ref.mounted) return;
+    if (earlier != null) {
+      state = CustodyScanning(ScanAlreadyTaken(earlier));
+      return;
+    }
+
+    final stopwatch = Stopwatch()..start();
+    final result = await ref
+        .read(recordHandoffProvider)
+        .save(
+          user: user,
+          qrCode: form.qrCode,
+          mineral: mineral,
+          weightMg: weight.milligrams,
+          latitude: fix.latitude,
+          longitude: fix.longitude,
+          gpsAccuracyM: fix.accuracyM,
+        );
+    stopwatch.stop();
+    _finish(result, stopwatch.elapsed);
+    if (result is SaveDone && ref.mounted) {
+      // Not awaited: "Saved on this phone" shows whatever happens, and a
+      // failed send leaves the step safely queued (as registration does).
+      unawaited(
+        ref.read(syncServiceProvider.notifier).syncNow(SyncTrigger.afterSave),
+      );
+    }
+  }
+
+  void _finish(SaveResult result, [Duration? took]) {
+    if (!ref.mounted) return;
+    final current = state;
+    if (current is! CustodyReady) return;
+    state = current.copyWith(
+      saving: false,
+      result: () => result,
+      saveDuration: () => took,
+    );
+  }
+
+  /// The signed-in account: the custodian whose handoffs count for Q4, and
+  /// who signs. An ended session still saves on the phone (FR-07).
+  User? _user() => switch (ref.read(authControllerProvider)) {
+    SignedIn(:final user) || SignedInNeedsPassword(:final user) => user,
     _ => null,
   };
 
@@ -212,7 +398,8 @@ class CustodyController extends Notifier<CustodyState> {
   }
 }
 
-/// autoDispose: leaving the screen forgets the scan and the answer.
+/// autoDispose: leaving the screen stops the GPS and forgets the scan, the
+/// answer and the form.
 final custodyControllerProvider =
     NotifierProvider.autoDispose<CustodyController, CustodyState>(
       CustodyController.new,
