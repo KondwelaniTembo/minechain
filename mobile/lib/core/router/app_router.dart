@@ -22,6 +22,7 @@ import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/buyer/presentation/buyer_home_screen.dart';
 import '../../features/consignments/presentation/my_consignments_screen.dart';
+import '../../features/handoff/presentation/take_custody_screen.dart';
 import '../../features/miner/presentation/miner_home_screen.dart';
 import '../../features/officer/presentation/officer_home_screen.dart';
 import '../../features/registration/presentation/register_consignment_screen.dart';
@@ -158,6 +159,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           path: path,
           builder: (context, state) => const ConsignmentCheckScreen(),
         ),
+      // Under /transporter, so redirect rule 4 sends every other role home.
+      // The transporter home opens it with push().
+      GoRoute(
+        path: AppRoutes.transporterCustody,
+        builder: (context, state) => const TakeCustodyScreen(),
+      ),
       // Under /admin, so redirect rule 4 sends every other role home. The
       // admin home opens it with push(), so the back arrow returns there.
       GoRoute(

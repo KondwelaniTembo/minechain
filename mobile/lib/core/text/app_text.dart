@@ -617,6 +617,52 @@ abstract final class AppText {
   static const String blockchainTransaction = 'Blockchain transaction:';
   static const String notSentYet = 'Not sent to the blockchain yet';
 
+  // ---- Take custody (transporter handoff plan, T3) ----
+
+  /// Q4: this account already took custody of the bag on this phone, in
+  /// the phone's own time.
+  static String alreadyTookCustody(DateTime localTime) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return 'You recorded taking custody of this consignment on '
+        '${localTime.day} ${_months[localTime.month - 1]}, '
+        '${two(localTime.hour)}:${two(localTime.minute)}.';
+  }
+
+  static const String custodyPhoneBusy =
+      'The phone was busy for a moment. Scan the custody record again.';
+  static String custodyChecking(String code) => 'Looking up $code…';
+  static String mineralLine(String mineral) => 'Mineral: $mineral';
+
+  // Q2: the warnings, worst first. The first two need "Record anyway".
+  static const String custodyMismatch =
+      'This record does not match the blockchain. Officers have been told, '
+      'and the consignment is held. You can still record that you took it.';
+  static const String custodyUnderReview =
+      'Under review: an officer is checking a problem with this '
+      'consignment. You can still record that you took it.';
+  static const String custodyAlreadyBought =
+      'The server says this consignment is already bought. Your handoff is '
+      'checked when it is sent.';
+  static const String custodyNotOnServer =
+      "This consignment is not on the server yet: the miner's registration "
+      'may not have been sent. You can still record it; it is checked when '
+      'it is sent.';
+  static const String recordAnyway = 'Record anyway';
+  static const String recordingAnyway = 'You chose to record it anyway.';
+
+  // Q1: the check could not be made, so the transporter chooses the mineral.
+  static const String custodyOffline =
+      'No network: the consignment could not be checked. You can still '
+      'record it; it is checked when it is sent.';
+  static const String custodyCheckFailed =
+      'The consignment could not be checked just now. You can still record '
+      'it; it is checked when it is sent.';
+  static const String custodyCheckNeedsPassword =
+      'Your session has ended, so the consignment could not be checked. You '
+      'can still record it; enter your password before you send it.';
+  static const String chooseMineralFromRecord =
+      'Choose the mineral written on the custody record.';
+
   // Role differences (T5).
   static const String weighFirst =
       'Weigh it before you take custody: the weight is hidden until you '

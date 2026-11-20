@@ -1,6 +1,6 @@
 # Transporter handoff plan
 
-Status: **approved 20 Nov 2026** (Q1–Q5 as proposed; Q3 changed in T2, see below). T1–T2 done.
+Status: **approved 20 Nov 2026** (Q1–Q5 as proposed; Q3 changed in T2, see below). T1–T3 done.
 
 Branch: `feature/transporter-handoff`, created by the developer from `main` after PR #15.
 
@@ -90,7 +90,7 @@ NFR-06 counts taps after the scan: weight (typing), Save. The mineral chip only 
   on top of it (type `handoff`, mineral as the local hint, Q3). Repository:
   `handedOffOn(qrCode, actorId)` (earliest non-rejected handoff by this user, Q4) and the
   list query taking a type. Tests with the fake Keystore and a real encrypted test database.
-- ⬜ **T3 Take custody, scan and check** (about 60 min). Route `/transporter/custody`, the tile
+- ✅ **T3 Take custody, scan and check** (about 60 min). Route `/transporter/custody`, the tile
   wired. Controller: scan with the custody record rule, Q4's refusal, the optional check
   through the existing `ConsignmentCheckRepository` (one request per scan; offline,
   timeout or 5xx fall through to "could not be checked", never a dead end), Q2's warnings,

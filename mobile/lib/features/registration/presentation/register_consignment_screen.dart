@@ -7,134 +7,44 @@
 // itself and the fix arrives by itself; typing the weight is data entry.
 //
 // Before the form, two gates: the encrypted database must open, and this
-// phone must be allowed to sign (plan §4). Neither problem can be fixed on
-// this screen, so each gets its own plain message instead of a dead form.
+// phone must be allowed to sign (plan §4), in SavedWorkGate, shared with
+// "Take custody".
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/sizes.dart';
 import '../../../core/widgets/form_message.dart';
-import '../../device_key/presentation/device_key_controller.dart';
-import '../../steps/data/local_steps_repository.dart';
+import '../../steps/presentation/saved_work_gate.dart';
 import '../data/location_source.dart';
 import '../data/register_consignment.dart';
 import '../domain/mineral.dart';
 import '../domain/weight.dart';
-import 'mineral_text.dart';
+import 'mineral_chips.dart';
 import 'qr_scanner_view.dart';
 import 'registration_controller.dart';
 
-class RegisterConsignmentScreen extends ConsumerWidget {
+class RegisterConsignmentScreen extends StatelessWidget {
   const RegisterConsignmentScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final steps = ref.watch(localStepsRepositoryProvider);
-    final key = ref.watch(deviceKeyControllerProvider);
-
-    final Widget body;
-    if (steps.isLoading) {
-      body = const _Waiting(AppText.openingSavedWork);
-    } else if (steps.hasError) {
-      body = const _Blocked(
-        icon: Icons.storage,
-        text: AppText.savedWorkProblem,
-      );
-    } else {
-      body = switch (key) {
-        DeviceKeyReady() || DeviceKeyUnregistered() => const _Form(),
-        DeviceKeyOtherDevice() => const _Blocked(
-          icon: Icons.phonelink_lock,
-          text: AppText.deviceKeyOtherDevice,
-        ),
-        DeviceKeyFailed(:final message) => _Blocked(
-          icon: Icons.phonelink_lock,
-          text: message,
-        ),
-        DeviceKeyChecking() ||
-        DeviceKeyNotNeeded() => const _Waiting(AppText.checkingDeviceKey),
-      };
-    }
-
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => _back(context)),
         title: const Text(AppText.registerConsignment),
       ),
-      body: SafeArea(child: body),
+      body: const SafeArea(
+        child: SavedWorkGate(homePath: AppRoutes.miner, child: _Form()),
+      ),
     );
   }
 }
 
-void _back(BuildContext context) {
-  if (context.canPop()) {
-    context.pop();
-  } else {
-    context.go(AppRoutes.miner);
-  }
-}
-
-// ---- Gates ------------------------------------------------------------------
-
-class _Waiting extends StatelessWidget {
-  const _Waiting(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSizes.spaceL),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: AppSizes.spaceM),
-          Text(text, textAlign: TextAlign.center),
-        ],
-      ),
-    ),
-  );
-}
-
-class _Blocked extends StatelessWidget {
-  const _Blocked({required this.icon, required this.text});
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSizes.spaceL),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ExcludeSemantics(
-            child: Icon(
-              icon,
-              size: AppSizes.tileIcon,
-              color: Theme.of(context).colorScheme.error,
-            ),
-          ),
-          const SizedBox(height: AppSizes.spaceM),
-          Semantics(
-            liveRegion: true,
-            child: Text(text, textAlign: TextAlign.center),
-          ),
-          const SizedBox(height: AppSizes.spaceL),
-          FilledButton(
-            onPressed: () => _back(context),
-            child: const Text(AppText.backToHome),
-          ),
-        ],
-      ),
-    ),
-  );
-}
+void _back(BuildContext context) => backOrHome(context, AppRoutes.miner);
 
 // ---- The form ----------------------------------------------------------------
 
@@ -590,45 +500,11 @@ class _MineralPart extends StatelessWidget {
   final RegistrationController controller;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    // The fill and outline come from the theme's chipTheme. The label colour
-    // is set here because a theme label style would replace the chip's own
-    // text style instead of adding to it (see app_theme.dart).
-    final label = WidgetStateColor.resolveWith((states) {
-      if (states.contains(WidgetState.disabled)) {
-        return scheme.onSurface.withValues(alpha: 0.38);
-      }
-      if (states.contains(WidgetState.selected)) return scheme.onPrimary;
-      return scheme.onSurface;
-    });
-    return Wrap(
-      spacing: AppSizes.spaceS,
-      runSpacing: AppSizes.spaceS,
-      children: [
-        for (final mineral in Mineral.values)
-          // A chip is only 48 dp tall to the finger by default; the app's
-          // minimum is 56 (gloves, dusty fingers). The chip grows to fill the
-          // box, with its label centred.
-          ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: AppSizes.tapTargetMin),
-            child: ChoiceChip(
-              label: Text(mineralName(mineral)),
-              labelStyle: TextStyle(color: label),
-              selected: form.mineral == mineral,
-              // The chosen chip stands a little higher than the others.
-              elevation: form.mineral == mineral ? 4 : 2,
-              // While saving, every chip is greyed out, and a white tick
-              // would vanish on the grey.
-              checkmarkColor: form.saving ? scheme.onSurface : scheme.onPrimary,
-              onSelected: form.saving
-                  ? null
-                  : (_) => controller.chooseMineral(mineral),
-            ),
-          ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => MineralChips(
+    selected: form.mineral,
+    enabled: !form.saving,
+    onSelected: controller.chooseMineral,
+  );
 }
 
 // ---- 4. Weight ---------------------------------------------------------------

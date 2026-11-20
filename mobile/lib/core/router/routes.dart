@@ -45,6 +45,10 @@ abstract final class AppRoutes {
   static const String buyerCheck = '/buyer/check';
   static const String officerCheck = '/officer/check';
 
+  /// "Take custody" (transporter handoff plan). Under /transporter, so the
+  /// redirect's role rule keeps it for transporters only.
+  static const String transporterCustody = '/transporter/custody';
+
   /// The administrator's list of pending account requests. Under /admin, so
   /// the redirect's role rule keeps it for administrators only.
   static const String adminRequests = '/admin/requests';

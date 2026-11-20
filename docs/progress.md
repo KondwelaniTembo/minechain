@@ -4,8 +4,8 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 20 Nov 2026, after Transporter handoff T2, on `feature/transporter-handoff`
-(2/7). Consignment check merged as PR #15. Next: T3, Take custody: scan and check.
+Last updated: 20 Nov 2026, after Transporter handoff T3, on `feature/transporter-handoff`
+(3/7). Consignment check merged as PR #15. Next: T4, Take custody: weight, GPS and save.
 
 ## (a) Whole project
 
@@ -39,7 +39,7 @@ Last updated: 20 Nov 2026, after Transporter handoff T2, on `feature/transporter
 
 - ✅ Consignment check (7/7, PR #15): scan and verify, with the provenance
   view (FR-04, Scope (9)), shared by transporter, buyer and officer
-- ⬜ Transporter handoff (2/7, plan approved 20 Nov): scan, weigh, GPS, sign, cache, sync
+- ⬜ Transporter handoff (3/7, plan approved 20 Nov): scan, weigh, GPS, sign, cache, sync
   (FR-01, FR-02, FR-07)
 
 ### Fri 20 Nov
@@ -78,7 +78,7 @@ Last updated: 20 Nov 2026, after Transporter handoff T2, on `feature/transporter
 
 1. ✅ Consignment check, carried over from Thu 19 (7/7; merged as PR #15): ✅ two result-page
    fixes (1587 tests passed); ✅ the rest of T6 (offline, a verified result); ✅ T7 docs
-2. ⬜ Transporter handoff, carried over from Thu 19 (about 4–5 h): 2/7
+2. ⬜ Transporter handoff, carried over from Thu 19 (about 4–5 h): 3/7
 3. ⬜ Buyer purchase and "My purchases" (about 3–4 h)
 4. ⬜ If time is left: Full chain on devices; Officer alerts. Otherwise both move to Sat 21,
    and FR-14 (dashboard) is the first cut there
@@ -86,7 +86,7 @@ Last updated: 20 Nov 2026, after Transporter handoff T2, on `feature/transporter
 Done on Thu 19 (session ended 20 Nov, 00:40): Hardening (PR #13), "My account" back arrow
 (PR #14), Consignment check T1–T5 (1584 tests passed, 0 skipped).
 
-## (c) Current feature: Transporter handoff — 2/7
+## (c) Current feature: Transporter handoff — 3/7
 
 Plan: `docs/plans/transporter-handoff-plan.md`, approved 20 Nov (Q1–Q5 as proposed). Branch
 `feature/transporter-handoff`, created by the developer from `main` after PR #15. App only
@@ -97,7 +97,9 @@ Plan: `docs/plans/transporter-handoff-plan.md`, approved 20 Nov (Q1–Q5 as prop
 - ✅ T2 Shared save: `SignedStepSaver` shared by registration and `RecordHandoff`
   (registration tests unchanged); local schema version 2 adds `mineral_hint` (Q3 changed,
   Handoff app (1)); `listOfTypeForActor`, `handedOffOn`; 39 new tests
-- ⬜ T3 Take custody: scan and check
+- ✅ T3 Take custody: scan and check: `/transporter/custody`, the tile wired; Q4 on the
+  phone first; one check per scan; 404, offline, failed and ended-session sentences, the
+  chips; Q2's warnings and "Record anyway"; shared gate and chips; 30 new tests
 - ⬜ T4 Take custody: weight, GPS and save
 - ⬜ T5 My handoffs and Send my work
 - ⬜ T6 Phone check (the developer)

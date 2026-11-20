@@ -1,6 +1,7 @@
 // The transporter's home (plan section 4.2). Placeholder tiles for now: each
 // says "Coming soon" until its module is built.
-// "Check a consignment" is built (consignment check plan).
+// "Check a consignment" is built (consignment check plan), and "Take
+// custody" (transporter handoff plan).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,7 +33,8 @@ class TransporterHomeScreen extends ConsumerWidget {
         HomeAction(
           icon: Icons.local_shipping,
           label: AppText.takeCustody,
-          onTap: soon,
+          // push(): a task page over the home, whose back arrow returns here.
+          onTap: () => context.push(AppRoutes.transporterCustody),
           primary: true,
         ),
         HomeAction(
