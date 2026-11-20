@@ -36,13 +36,16 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 20 Nov 2026, after Transporter handoff T6. Read this first in a new session, then
+Updated 20 Nov 2026, after Transporter handoff T7. Read this first in a new session, then
 `docs/progress.md` (the day plan and the current feature's subtasks), then `docs/decisions.md`.
 
-- **Now: Transporter handoff** on `feature/transporter-handoff` (pushed, tracks origin),
-  `docs/plans/transporter-handoff-plan.md` (approved 20 Nov, Q1–Q5 as proposed; Q3 changed
-  in T2). App only (`mobile/`, `docs/`); nothing deploys to Render. 6/8 done (T5b added), 1717 tests
-  passed, 0 skipped. Decisions Handoff app (1)–(7).
+- **Now: Transporter handoff, done (8/8), waiting for its PR** on
+  `feature/transporter-handoff` (pushed, tracks origin), `docs/plans/transporter-handoff-plan.md`
+  (approved 20 Nov, Q1–Q5 as proposed; Q3 changed in T2). App only (`mobile/`, `docs/`);
+  nothing deploys to Render. 1740 tests passed, 0 skipped. Decisions Handoff app (1)–(9),
+  plus two known limitations (the offline mineral pick; the summary in memory only).
+  **Next: the developer opens and merges the PR; then Buyer purchase** (new branch from
+  `main`, start-of-feature script, then "plan only").
   - T1 (`962870a`): `handoff/domain/handoff_payload.dart` `buildHandoffPayload` (8 lines, no
     `mineral`), checked byte for byte against the spec example and the vectors.
   - T2 (`db3ee26`): `steps/data/save_signed_step.dart` `SignedStepSaver` (key check →
@@ -78,12 +81,13 @@ Updated 20 Nov 2026, after Transporter handoff T6. Read this first in a new sess
     all as planned (results in the plan's T6). It found that "Send my work" shows only the
     last send. Two saves in a row read "1 sent", and an automatic "nothing to send" hid a
     review message.
-  - **Next: T5b** (approved, option 1, both parts; spec in the plan's T5b):
-    - the sync service keeps a summary of every send since the user last looked, shown on
-      "Send my work" ("Since 14:40 — 2 sends after you saved"); an empty send adds nothing;
-      the summary is cleared by Send now and by leaving the screen;
-    - both saved screens add "2 saved this time." from the second save in one visit.
-    - Then a short emulator re-check, then T7 docs and PR.
+  - T5b: `SyncStatus.summary` (`SyncSummary` in `sync/domain/sync_report.dart`): every send
+    since the user last looked, final counts summed, the stop and waiting from the newest;
+    an empty send adds nothing; Send now starts fresh; leaving "Send my work" clears it
+    (`clearSummary()` after the frame). Heading "Since 16:03 — sent 2 times after you saved"
+    ("2 sends" read as a verb on the emulator). Both saved screens say "2 saved this time."
+    (`savesThisVisit` on each controller). Emulator re-check fine (20 Nov, 16:03–16:05).
+  - T7: docs and the PR description.
   - Lessons from this feature: a new branch's first push needs
     `git push --set-upstream origin <branch>`; `dart format` takes file paths only, never a
     folder (a folder-wide run on `lib/core` re-wrapped five network and storage files in T3,

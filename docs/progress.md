@@ -4,8 +4,8 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 20 Nov 2026, after Transporter handoff T6, on `feature/transporter-handoff`
-(6/8). Consignment check merged as PR #15. Next: T5b (added after the phone check), then T7.
+Last updated: 20 Nov 2026, after Transporter handoff T7, on `feature/transporter-handoff`
+(8/8, waiting for the PR). Consignment check merged as PR #15. Next: buyer purchase.
 
 ## (a) Whole project
 
@@ -39,8 +39,8 @@ Last updated: 20 Nov 2026, after Transporter handoff T6, on `feature/transporter
 
 - ✅ Consignment check (7/7, PR #15): scan and verify, with the provenance
   view (FR-04, Scope (9)), shared by transporter, buyer and officer
-- ⬜ Transporter handoff (6/8, plan approved 20 Nov): scan, weigh, GPS, sign, cache, sync
-  (FR-01, FR-02, FR-07)
+- ✅ Transporter handoff (8/8, plan approved 20 Nov): scan, weigh, GPS, sign, cache, sync;
+  the "Send my work" summary and the saved count (T5b) (FR-01, FR-02, FR-07)
 
 ### Fri 20 Nov
 
@@ -78,7 +78,7 @@ Last updated: 20 Nov 2026, after Transporter handoff T6, on `feature/transporter
 
 1. ✅ Consignment check, carried over from Thu 19 (7/7; merged as PR #15): ✅ two result-page
    fixes (1587 tests passed); ✅ the rest of T6 (offline, a verified result); ✅ T7 docs
-2. ⬜ Transporter handoff, carried over from Thu 19 (about 4–5 h): 6/8 (T5b added)
+2. ✅ Transporter handoff, carried over from Thu 19: 8/8 (T5b added); PR to open
 3. ⬜ Buyer purchase and "My purchases" (about 3–4 h)
 4. ⬜ If time is left: Full chain on devices; Officer alerts. Otherwise both move to Sat 21,
    and FR-14 (dashboard) is the first cut there
@@ -86,7 +86,7 @@ Last updated: 20 Nov 2026, after Transporter handoff T6, on `feature/transporter
 Done on Thu 19 (session ended 20 Nov, 00:40): Hardening (PR #13), "My account" back arrow
 (PR #14), Consignment check T1–T5 (1584 tests passed, 0 skipped).
 
-## (c) Current feature: Transporter handoff — 6/8
+## (c) Current feature: Transporter handoff — 8/8
 
 Plan: `docs/plans/transporter-handoff-plan.md`, approved 20 Nov (Q1–Q5 as proposed). Branch
 `feature/transporter-handoff`, created by the developer from `main` after PR #15. App only
@@ -111,10 +111,12 @@ Plan: `docs/plans/transporter-handoff-plan.md`, approved 20 Nov (Q1–Q5 as prop
   21 new tests
 - ✅ T6 Phone check (the developer, 20 Nov 14:38–15:01, emulator and A57): accepted, flagged
   and offline handoffs all as planned. Found: "Send my work" shows only the last send
-- ⬜ T5b What the sends came to (added after T6, approved: both parts): the summary on
-  "Send my work" since you last looked, and "2 saved this time" on both saved screens;
-  then a short emulator re-check
-- ⬜ T7 Docs and PR
+- ✅ T5b What the sends came to (added after T6, approved: both parts): the summary on
+  "Send my work" since you last looked, and "2 saved this time." on both saved screens
+  (Handoff app (8), (9)); 23 new tests, 1740 passed. ✅ Emulator re-check fine; the heading
+  then became "sent 2 times"
+- ✅ T7 Docs and PR: decisions Handoff app (1)–(9) and two known limitations, the PR
+  description
 
 Consignment check (7/7) is merged as PR #15; its subtasks are in
 `docs/plans/consignment-check-plan.md`.

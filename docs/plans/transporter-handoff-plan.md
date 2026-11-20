@@ -1,6 +1,8 @@
 # Transporter handoff plan
 
-Status: **approved 20 Nov 2026** (Q1–Q5 as proposed; Q3 changed in T2, see below). T1–T3 done.
+Status: **approved 20 Nov 2026** (Q1–Q5 as proposed; Q3 changed in T2, see below). **Done**
+(8/8, T5b added after the phone check): 1740 tests passed, 0 skipped; decisions Handoff
+app (1)–(9) and two known limitations.
 
 Branch: `feature/transporter-handoff`, created by the developer from `main` after PR #15.
 
@@ -125,7 +127,7 @@ NFR-06 counts taps after the scan: weight (typing), Save. The mineral chip only 
   - Found: "Send my work" shows only the **last** send. Two saves in a row became two sends
     of "1 sent" each, and the screen said "1 sent". At 14:57, an automatic "nothing to
     send" replaced the 14:56 report that had the review message. This is fixed by T5b.
-- ⬜ **T5b What the sends came to** (added 20 Nov after T6, approved by the developer:
+- ✅ **T5b What the sends came to** (added 20 Nov after T6, approved by the developer:
   option 1, both parts; about 60 min). App only.
   - **(a) Send my work sums up the sends since you last looked.** The sync service keeps,
     besides `last`, a summary of every send that ended since the summary was last cleared:
@@ -152,7 +154,12 @@ NFR-06 counts taps after the scan: weight (typing), Save. The mineral chip only 
     - text 2.0.
   - A short phone re-check on the emulator: register two bags in a row, then open
     "Send my work".
-- ⬜ **T7 Docs and PR** (about 20 min). `decisions.md` "Handoff app (1)…", `testing-log.md`,
+  - As built: decisions Handoff app (8) and (9). Two points the spec left open: with no
+    summary (just cleared, or only empty sends) the screen shows the last send as before;
+    with different triggers the heading names none. Emulator re-check fine (20 Nov, 16:03–16:05);
+    after it the heading became "Since 14:40 — sent 2 times after you saved" ("2 sends" read
+    as a verb). 23 new tests, 1740 passed.
+- ✅ **T7 Docs and PR** (about 20 min). `decisions.md` "Handoff app (1)…", `testing-log.md`,
   `progress.md`, `CLAUDE.md`, the PR description.
 
 About 5 h of Claude Code time plus the developer's 30 minutes.
