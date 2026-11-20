@@ -36,16 +36,46 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 20 Nov 2026, 21:30, after Buyer purchase T5 (feature done). Read this first in a new
-session, then `docs/progress.md` (the day plan and the current feature's subtasks), then the
-current feature's plan, then `docs/decisions.md`.
+Updated 21 Nov 2026, after Officer alerts T6 (7/7). Read this first in a new session,
+then `docs/progress.md` (the day plan and the current feature's subtasks), then
+`docs/decisions.md`.
 
-- **Now: Buyer purchase done (5/5), waiting for the developer's commits and PR** on
-  `feature/buyer-purchase` (created from `main` after PR #16; pushed, tracks
-  `origin/feature/buyer-purchase`), `docs/plans/buyer-purchase-plan.md` (approved 20 Nov,
-  Q1–Q5 as proposed). App only (`mobile/`, `docs/`); nothing deploys to Render. 1806 tests
-  passed, 0 skipped. T2–T5 are **not committed**: two commits, code (T2+T3, because four
-  files changed in both) then docs; the file lists are in `docs/progress.md`.
+- **Next: Admin accounts** (FR-10, FR-12, Scope (3), (6)), then GPS zones, Reports, the
+  FR-16 decision, the dashboard (first cut) and the end-to-end test; order in
+  `docs/progress.md`. Start with a plan in `docs/plans/`, after the developer merges the
+  officer alerts PR and gives the start-of-feature script's branch.
+
+- **Done: Officer alerts** (7/7) on `feature/officer-alerts`, `docs/plans/officer-alerts-plan.md`
+  (approved 20 Nov, Q1–Q6 as proposed). App only (`mobile/`, `docs/`); nothing deploys to
+  Render. 1988 tests passed, 0 skipped. Decisions Officer alerts app (1)–(9), Verification
+  app (11), two known limitations (Q6; decisions final). Not committed when T6 ended: two
+  commits (code T1–T4 + T5b; docs) with the script given in chat; the branch's first push
+  needs `git push --set-upstream origin feature/officer-alerts`.
+  - Built: `features/alerts/` (`domain/alert.dart`; `data/alerts_api.dart`,
+    `alerts_repository.dart`; `presentation/alert_words.dart` (words in presentation, as
+    they come from `AppText`), `alert_widgets.dart`, `alerts_list_controller.dart` (a
+    family by `AlertStatus`), `alerts_screen.dart`, `alert_detail_controller.dart`,
+    `alert_detail_screen.dart` with the decision dialog). Routes `/officer/alerts` and
+    `/officer/alerts/:id`; the officer's "Alerts" tile wired. Tests use
+    `test/fakes/fake_alerts_server.dart` and `alert_page_helpers.dart`.
+  - T5 phone check (20 Nov 23:46 – 21 Nov 00:27, A57 as `officer_demo`, emulator as buyer
+    Kay): MC-2026-LSK-0008's handoff cleared and anchored; the buyer's purchase then sent,
+    flagged and confirmed (rejected, never anchored). 0008 now stays "On its way" for good.
+  - T5b fixed what it found: "Holds this consignment" only on open alerts; on "Check a
+    consignment" a rejected step reads "Never put on the blockchain" and is left out of
+    the verdict (`verdict.dart`). Re-checked on the A57.
+  - Production now has an officer, `officer_demo` ("Demo Officer"), made with the Q5
+    script (admin `POST /admin/users`) and activated in the app. Still 8 open alerts there
+    (registrations 0001–0005 among them), useful for later demos.
+  - Lessons: inline `python - <<'EOF'` scripts with many quotes can break in the Bash
+    tool; write the script to the scratchpad and run it. A phone check's notes field is
+    the officer's reason and is kept for ever: give a sample reason in the steps.
+
+- **Done: Buyer purchase** (5/5), merged as PR #17 (`93c1a94`; code `a823a30`, docs
+  `7571325`), `docs/plans/buyer-purchase-plan.md` (approved 20 Nov, Q1–Q5 as proposed).
+  1806 tests passed, 0 skipped. Decisions Purchase app (1)–(6) ((5) confirmed by the
+  developer), one known limitation. Phone check passed on the emulator and the A57; it was
+  also "Full chain on devices".
   - T1 (`9ca43c0`, CLAUDE.md in `49ce746` under the same message):
     `steps/domain/later_step_payload.dart`
     `buildLaterStepPayload(LaterStepType.handoff|purchase, …)`, the one 8-line builder;
@@ -74,11 +104,6 @@ current feature's plan, then `docs/decisions.md`.
   - T5: `decisions.md` Purchase app (1)–(6) and one known limitation; Purchase app (5)
     ("already bought" by someone else also needs "Record anyway") confirmed by the
     developer after T4.
-  - **Next:** the developer runs the two-commit script, opens the PR and merges it; then
-    the start-of-feature script for **Officer alerts** (`feature/officer-alerts`, Sat 21),
-    which starts with "plan only". Its test case: 0008's flagged handoff; clearing it
-    should let the buyer's waiting 1.6 kg purchase in, which is itself more than 10% off
-    the 2 kg registration, so a second alert is expected.
   - Lesson: never put `git checkout` (or any forbidden git write) in a command, even to
     restore a file after a mutation check; undo a mutation with a second `sed`.
 
@@ -369,7 +394,8 @@ their known limitations):
 1. ~~Check M7 on the A57, then the pull request for `feature/miner-registration`~~ (merged as
    PR #10).
 2. The remaining role modules in the app: ~~transporter handoff~~ (PR #16), ~~buyer
-   purchase~~ (done 20 Nov, PR pending), the officer's alerts list and consignment check (Scope (2), (9)), and the
+   purchase~~ (PR #17), ~~the officer's alerts list and consignment check~~ (Scope (2), (9);
+   check PR #15, alerts on `feature/officer-alerts`), and the
    admin screens and reports (Scope (3)). The order by day is in `docs/progress.md`.
 
 **Working rules that held all weekend:**
