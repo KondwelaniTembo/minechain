@@ -7,134 +7,45 @@
 // itself and the fix arrives by itself; typing the weight is data entry.
 //
 // Before the form, two gates: the encrypted database must open, and this
-// phone must be allowed to sign (plan §4). Neither problem can be fixed on
-// this screen, so each gets its own plain message instead of a dead form.
+// phone must be allowed to sign (plan §4), in SavedWorkGate, shared with
+// "Take custody".
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/sizes.dart';
 import '../../../core/widgets/form_message.dart';
-import '../../device_key/presentation/device_key_controller.dart';
-import '../../steps/data/local_steps_repository.dart';
+import '../../../core/widgets/status_line.dart';
+import '../../steps/presentation/location_status_view.dart';
+import '../../steps/presentation/saved_view.dart';
+import '../../steps/presentation/saved_work_gate.dart';
+import '../../steps/presentation/weight_field.dart';
 import '../data/location_source.dart';
 import '../data/register_consignment.dart';
-import '../domain/mineral.dart';
-import '../domain/weight.dart';
-import 'mineral_text.dart';
+import 'mineral_chips.dart';
 import 'qr_scanner_view.dart';
 import 'registration_controller.dart';
 
-class RegisterConsignmentScreen extends ConsumerWidget {
+class RegisterConsignmentScreen extends StatelessWidget {
   const RegisterConsignmentScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final steps = ref.watch(localStepsRepositoryProvider);
-    final key = ref.watch(deviceKeyControllerProvider);
-
-    final Widget body;
-    if (steps.isLoading) {
-      body = const _Waiting(AppText.openingSavedWork);
-    } else if (steps.hasError) {
-      body = const _Blocked(
-        icon: Icons.storage,
-        text: AppText.savedWorkProblem,
-      );
-    } else {
-      body = switch (key) {
-        DeviceKeyReady() || DeviceKeyUnregistered() => const _Form(),
-        DeviceKeyOtherDevice() => const _Blocked(
-          icon: Icons.phonelink_lock,
-          text: AppText.deviceKeyOtherDevice,
-        ),
-        DeviceKeyFailed(:final message) => _Blocked(
-          icon: Icons.phonelink_lock,
-          text: message,
-        ),
-        DeviceKeyChecking() ||
-        DeviceKeyNotNeeded() => const _Waiting(AppText.checkingDeviceKey),
-      };
-    }
-
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         leading: BackButton(onPressed: () => _back(context)),
         title: const Text(AppText.registerConsignment),
       ),
-      body: SafeArea(child: body),
+      body: const SafeArea(
+        child: SavedWorkGate(homePath: AppRoutes.miner, child: _Form()),
+      ),
     );
   }
 }
 
-void _back(BuildContext context) {
-  if (context.canPop()) {
-    context.pop();
-  } else {
-    context.go(AppRoutes.miner);
-  }
-}
-
-// ---- Gates ------------------------------------------------------------------
-
-class _Waiting extends StatelessWidget {
-  const _Waiting(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSizes.spaceL),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: AppSizes.spaceM),
-          Text(text, textAlign: TextAlign.center),
-        ],
-      ),
-    ),
-  );
-}
-
-class _Blocked extends StatelessWidget {
-  const _Blocked({required this.icon, required this.text});
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) => Center(
-    child: SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSizes.spaceL),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ExcludeSemantics(
-            child: Icon(
-              icon,
-              size: AppSizes.tileIcon,
-              color: Theme.of(context).colorScheme.error,
-            ),
-          ),
-          const SizedBox(height: AppSizes.spaceM),
-          Semantics(
-            liveRegion: true,
-            child: Text(text, textAlign: TextAlign.center),
-          ),
-          const SizedBox(height: AppSizes.spaceL),
-          FilledButton(
-            onPressed: () => _back(context),
-            child: const Text(AppText.backToHome),
-          ),
-        ],
-      ),
-    ),
-  );
-}
+void _back(BuildContext context) => backOrHome(context, AppRoutes.miner);
 
 // ---- The form ----------------------------------------------------------------
 
@@ -205,13 +116,16 @@ class _FormState extends ConsumerState<_Form> with WidgetsBindingObserver {
     final controller = ref.read(registrationControllerProvider.notifier);
 
     if (form.result is SaveDone) {
-      return _Saved(
+      return SavedView(
         duration: form.saveDuration,
+        anotherLabel: AppText.registerAnother,
+        savedThisVisit: controller.savesThisVisit,
         onAnother: () {
           _weight.clear();
           _showWeightProblems = false;
           controller.registerAnother();
         },
+        onHome: () => _back(context),
       );
     }
 
@@ -263,7 +177,7 @@ class _FormState extends ConsumerState<_Form> with WidgetsBindingObserver {
               if (form.result case final SaveResult result
                   when result is! SaveDone) ...[
                 const SizedBox(height: AppSizes.spaceM),
-                FormMessage(_saveProblemText(result)),
+                FormMessage(saveProblemText(result)),
               ],
             ],
           ),
@@ -272,17 +186,6 @@ class _FormState extends ConsumerState<_Form> with WidgetsBindingObserver {
     );
   }
 }
-
-String _saveProblemText(SaveResult result) => switch (result) {
-  SaveDone() => AppText.savedOnPhone,
-  SaveKeyNotUsable() => AppText.saveKeyNotUsable,
-  SaveInvalidField() => AppText.saveInvalid,
-  SaveSigningFailed() => AppText.saveSigningFailed,
-  SaveNoScreenLock() => AppText.saveNoScreenLock,
-  SaveDuplicateStepId() => AppText.saveFailed,
-  SaveStorageFailed() => AppText.savedWorkProblem,
-  SaveBusy() => AppText.saveBusy, // calm: Save again works (Mobile (26))
-};
 
 class _Section extends StatelessWidget {
   const _Section({required this.title, required this.child});
@@ -303,36 +206,6 @@ class _Section extends StatelessWidget {
   );
 }
 
-/// An icon and a sentence, never colour alone (plan section 7).
-class _StatusLine extends StatelessWidget {
-  const _StatusLine({
-    required this.icon,
-    required this.text,
-    this.error = false,
-  });
-  final IconData icon;
-  final String text;
-  final bool error;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = error ? Theme.of(context).colorScheme.error : null;
-    return Semantics(
-      liveRegion: true,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ExcludeSemantics(child: Icon(icon, color: color)),
-          const SizedBox(width: AppSizes.spaceS),
-          Expanded(
-            child: Text(text, style: TextStyle(color: color)),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 // ---- 1. Scan -----------------------------------------------------------------
 
 class _ScanPart extends ConsumerWidget {
@@ -347,7 +220,7 @@ class _ScanPart extends ConsumerWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _StatusLine(icon: Icons.qr_code_2, text: AppText.scannedRecord(code)),
+          StatusLine(icon: Icons.qr_code_2, text: AppText.scannedRecord(code)),
           Align(
             alignment: AlignmentDirectional.centerStart,
             child: TextButton(
@@ -396,7 +269,7 @@ class _ScanPart extends ConsumerWidget {
         const Text(AppText.scanHint),
         if (notice != null) ...[
           const SizedBox(height: AppSizes.spaceS),
-          _StatusLine(
+          StatusLine(
             icon: Icons.error_outline,
             error: true,
             text: switch (notice) {
@@ -426,7 +299,7 @@ class _ScannerProblem extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _StatusLine(
+            StatusLine(
               icon: Icons.no_photography,
               error: true,
               text: switch (problem) {
@@ -479,107 +352,12 @@ class _LocationPart extends StatelessWidget {
   final RegistrationController controller;
 
   @override
-  Widget build(BuildContext context) {
-    final (
-      IconData icon,
-      String text,
-      bool error,
-      Widget? action,
-    ) = switch (form.location) {
-      LocationStarting() => (
-        Icons.gps_not_fixed,
-        AppText.startingLocation,
-        false,
-        null,
-      ),
-      LocationSearching(:final accuracyM, :final stillLooking) => (
-        Icons.gps_not_fixed,
-        stillLooking
-            ? '${AppText.findingLocation(accuracyM)}\n${AppText.stillLooking}'
-            : AppText.findingLocation(accuracyM),
-        false,
-        null,
-      ),
-      LocationFound(:final fix) => (
-        Icons.gps_fixed,
-        AppText.locationFound(fix.accuracyM),
-        false,
-        null,
-      ),
-      LocationMocked() => (Icons.gps_off, AppText.fakeLocation, true, null),
-      LocationFailed() => (
-        Icons.gps_off,
-        AppText.locationFailed,
-        true,
-        FilledButton(
-          onPressed: controller.startLocation,
-          child: const Text(AppText.tryAgain),
-        ),
-      ),
-      LocationBlocked(:final access) => switch (access) {
-        LocationAccess.serviceOff => (
-          Icons.location_disabled,
-          AppText.locationOff,
-          true,
-          FilledButton(
-            onPressed: controller.openLocationSettings,
-            child: const Text(AppText.turnOnLocation),
-          ),
-        ),
-        LocationAccess.deniedOnce => (
-          Icons.location_disabled,
-          AppText.locationNeeded,
-          true,
-          FilledButton(
-            onPressed: controller.startLocation,
-            child: const Text(AppText.allowLocation),
-          ),
-        ),
-        LocationAccess.deniedForever => (
-          Icons.location_disabled,
-          AppText.locationRefused,
-          true,
-          FilledButton(
-            onPressed: controller.openAppSettings,
-            child: const Text(AppText.openSettings),
-          ),
-        ),
-        LocationAccess.approximateOnly => (
-          Icons.location_searching,
-          AppText.locationApproximate,
-          true,
-          FilledButton(
-            onPressed: controller.openAppSettings,
-            child: const Text(AppText.openSettings),
-          ),
-        ),
-        // Never stored as "blocked"; listed so the switch is complete.
-        LocationAccess.granted => (
-          Icons.gps_not_fixed,
-          AppText.startingLocation,
-          false,
-          null,
-        ),
-      },
-    };
-
-    final searching =
-        form.location is LocationStarting || form.location is LocationSearching;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _StatusLine(icon: icon, text: text, error: error),
-        if (searching) ...[
-          const SizedBox(height: AppSizes.spaceS),
-          const LinearProgressIndicator(),
-        ],
-        if (action != null) ...[
-          const SizedBox(height: AppSizes.spaceS),
-          Align(alignment: AlignmentDirectional.centerStart, child: action),
-        ],
-      ],
-    );
-  }
+  Widget build(BuildContext context) => LocationStatusView(
+    status: form.location,
+    onStart: controller.startLocation,
+    onOpenLocationSettings: controller.openLocationSettings,
+    onOpenAppSettings: controller.openAppSettings,
+  );
 }
 
 // ---- 3. Mineral --------------------------------------------------------------
@@ -590,68 +368,14 @@ class _MineralPart extends StatelessWidget {
   final RegistrationController controller;
 
   @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    // The fill and outline come from the theme's chipTheme. The label colour
-    // is set here because a theme label style would replace the chip's own
-    // text style instead of adding to it (see app_theme.dart).
-    final label = WidgetStateColor.resolveWith((states) {
-      if (states.contains(WidgetState.disabled)) {
-        return scheme.onSurface.withValues(alpha: 0.38);
-      }
-      if (states.contains(WidgetState.selected)) return scheme.onPrimary;
-      return scheme.onSurface;
-    });
-    return Wrap(
-      spacing: AppSizes.spaceS,
-      runSpacing: AppSizes.spaceS,
-      children: [
-        for (final mineral in Mineral.values)
-          // A chip is only 48 dp tall to the finger by default; the app's
-          // minimum is 56 (gloves, dusty fingers). The chip grows to fill the
-          // box, with its label centred.
-          ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: AppSizes.tapTargetMin),
-            child: ChoiceChip(
-              label: Text(mineralName(mineral)),
-              labelStyle: TextStyle(color: label),
-              selected: form.mineral == mineral,
-              // The chosen chip stands a little higher than the others.
-              elevation: form.mineral == mineral ? 4 : 2,
-              // While saving, every chip is greyed out, and a white tick
-              // would vanish on the grey.
-              checkmarkColor: form.saving ? scheme.onSurface : scheme.onPrimary,
-              onSelected: form.saving
-                  ? null
-                  : (_) => controller.chooseMineral(mineral),
-            ),
-          ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => MineralChips(
+    selected: form.mineral,
+    enabled: !form.saving,
+    onSelected: controller.chooseMineral,
+  );
 }
 
 // ---- 4. Weight ---------------------------------------------------------------
-
-/// The sentence under the weight field, if any. "Choose the mineral first"
-/// shows at once (the unit depends on it); format problems only when
-/// [showProblems].
-String? _weightError(RegistrationState form, {required bool showProblems}) {
-  if (form.weightText.trim().isEmpty) return null; // nothing typed yet
-  final mineral = form.mineral;
-  if (mineral == null) return AppText.chooseMineralFirst;
-  if (!showProblems) return null;
-  return switch (form.weight) {
-    WeightRefused(problem: WeightProblem.empty) || WeightOk() || null => null,
-    WeightRefused(problem: WeightProblem.negative) => AppText.weightNegative,
-    WeightRefused(problem: WeightProblem.notANumber) =>
-      AppText.weightNotANumber,
-    WeightRefused(problem: WeightProblem.tooManyDecimals) =>
-      AppText.weightTooManyDecimals(mineral.unit.decimals),
-    WeightRefused(problem: WeightProblem.zero) => AppText.weightZero,
-    WeightRefused(problem: WeightProblem.tooLarge) => AppText.weightTooLarge,
-  };
-}
 
 class _WeightPart extends StatelessWidget {
   const _WeightPart({
@@ -668,90 +392,12 @@ class _WeightPart extends StatelessWidget {
   final ValueChanged<String> onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    final unit = form.mineral?.unit;
-    return TextField(
-      controller: text,
-      focusNode: focus,
-      enabled: !form.saving,
-      // "Done" on the keyboard closes it, and leaving the field shows any
-      // problem with what was typed.
-      textInputAction: TextInputAction.done,
-      // The number keyboard with a decimal key.
-      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      // No suggestions or learning: weights are not words, and the keyboard
-      // must not remember them.
-      autocorrect: false,
-      enableSuggestions: false,
-      onChanged: onChanged,
-      decoration: InputDecoration(
-        labelText: unit == WeightUnit.kilograms
-            ? AppText.weightInKilograms
-            : AppText.weightInGrams,
-        suffixText: unit == WeightUnit.kilograms
-            ? AppText.kilograms
-            : AppText.grams,
-        errorText: _weightError(form, showProblems: showProblems),
-        errorMaxLines: 3,
-      ),
-    );
-  }
-}
-
-// ---- Saved -------------------------------------------------------------------
-
-class _Saved extends StatelessWidget {
-  const _Saved({required this.duration, required this.onAnother});
-  final Duration? duration;
-  final VoidCallback onAnother;
-
-  @override
-  Widget build(BuildContext context) {
-    // The save's duration, in debug builds only, for measuring NFR-03 on
-    // the A57. It is a number of seconds and nothing else; release builds
-    // never show it, and it is never logged.
-    final timing = kDebugMode && duration != null
-        ? ' (${(duration!.inMilliseconds / 1000).toStringAsFixed(1)} s)'
-        : '';
-    return Center(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSizes.spaceL),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ExcludeSemantics(
-                child: Icon(
-                  Icons.check_circle,
-                  size: AppSizes.primaryTileIcon,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
-              const SizedBox(height: AppSizes.spaceM),
-              Semantics(
-                liveRegion: true,
-                child: Text(
-                  '${AppText.savedOnPhone}$timing',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              const SizedBox(height: AppSizes.spaceL),
-              FilledButton(
-                onPressed: onAnother,
-                child: const Text(AppText.registerAnother),
-              ),
-              const SizedBox(height: AppSizes.spaceS),
-              OutlinedButton(
-                onPressed: () => _back(context),
-                child: const Text(AppText.backToHome),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => WeightField(
+    unit: form.mineral?.unit,
+    controller: text,
+    focus: focus,
+    enabled: !form.saving,
+    showProblems: showProblems,
+    onChanged: onChanged,
+  );
 }

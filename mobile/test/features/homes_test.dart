@@ -132,8 +132,10 @@ void main() {
       //
       // Not for the miner: all three of its tiles are built (M7), so it has
       // no "Coming soon" tile. Hardening T3 replaced the skipped miner case
-      // with the router test after this loop.
-      if (role != Role.miner) {
+      // with the router test after this loop. Nor for the transporter since
+      // Transporter handoff T5 wired its last two tiles (changed by plan);
+      // "transporter tiles" below checks each of its tiles instead.
+      if (role != Role.miner && role != Role.transporter) {
         testWidgets('a tile says "Coming soon"', (tester) async {
           await pumpHome(tester, screen, signedInAs(role));
           await tester.ensureVisible(tile(labels.last));
@@ -287,57 +289,76 @@ void main() {
   // camera and location (their tests are in features/registration,
   // features/consignments and features/sync).
   group('miner tiles', () {
-    for (final (label, path) in [
+    tilesOpenTheirPages(Role.miner, AppRoutes.miner, const MinerHomeScreen(), [
       (AppText.registerConsignment, AppRoutes.minerRegister),
       (AppText.myConsignments, AppRoutes.minerConsignments),
       (AppText.sendMyWork, AppRoutes.minerSync),
-    ]) {
-      testWidgets('"$label" opens $path, never "Coming soon"', (tester) async {
-        final router = GoRouter(
-          initialLocation: AppRoutes.miner,
-          routes: [
-            GoRoute(
-              path: AppRoutes.miner,
-              builder: (_, _) => const MinerHomeScreen(),
-            ),
-            for (final page in [
-              AppRoutes.minerRegister,
-              AppRoutes.minerConsignments,
-              AppRoutes.minerSync,
-            ])
-              GoRoute(
-                path: page,
-                builder: (_, _) => Scaffold(body: Text('page $page')),
-              ),
-          ],
-        );
-        addTearDown(router.dispose);
-        tester.view.devicePixelRatio = 3.0;
-        tester.view.physicalSize = const Size(360, 640) * 3.0;
-        addTearDown(tester.view.reset);
-        await tester.pumpWidget(
-          ProviderScope(
-            retry: noRetry,
-            overrides: fakeOverrides(
-              FakeAuthController(signedInAs(Role.miner)),
-            ),
-            child: MaterialApp.router(
-              theme: AppTheme.light,
-              routerConfig: router,
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        await tester.ensureVisible(tile(label));
-        await tester.pump();
-        await tester.tap(tile(label));
-        await tester.pumpAndSettle();
-
-        expect(find.text('page $path'), findsOneWidget);
-        expect(router.state.uri.path, path);
-        expect(find.text(AppText.comingSoon), findsNothing);
-      });
-    }
+    ]);
   });
+
+  // Transporter handoff T5: every transporter tile is built, so each is
+  // checked the same way.
+  group('transporter tiles', () {
+    tilesOpenTheirPages(
+      Role.transporter,
+      AppRoutes.transporter,
+      const TransporterHomeScreen(),
+      [
+        (AppText.takeCustody, AppRoutes.transporterCustody),
+        (AppText.checkConsignment, AppRoutes.transporterCheck),
+        (AppText.myHandoffs, AppRoutes.transporterHandoffs),
+        (AppText.sendMyWork, AppRoutes.transporterSync),
+      ],
+    );
+  });
+}
+
+/// One test per tile of [role]'s home ([home] at [homePath]): the tile
+/// opens its path, never "Coming soon". Shared by the miner (Hardening T3)
+/// and the transporter (T5).
+void tilesOpenTheirPages(
+  Role role,
+  String homePath,
+  Widget home,
+  List<(String, String)> tiles,
+) {
+  for (final (label, path) in tiles) {
+    testWidgets('"$label" opens $path, never "Coming soon"', (tester) async {
+      final router = GoRouter(
+        initialLocation: homePath,
+        routes: [
+          GoRoute(path: homePath, builder: (_, _) => home),
+          for (final (_, page) in tiles)
+            GoRoute(
+              path: page,
+              builder: (_, _) => Scaffold(body: Text('page $page')),
+            ),
+        ],
+      );
+      addTearDown(router.dispose);
+      tester.view.devicePixelRatio = 3.0;
+      tester.view.physicalSize = const Size(360, 640) * 3.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        ProviderScope(
+          retry: noRetry,
+          overrides: fakeOverrides(FakeAuthController(signedInAs(role))),
+          child: MaterialApp.router(
+            theme: AppTheme.light,
+            routerConfig: router,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.ensureVisible(tile(label));
+      await tester.pump();
+      await tester.tap(tile(label));
+      await tester.pumpAndSettle();
+
+      expect(find.text('page $path'), findsOneWidget);
+      expect(router.state.uri.path, path);
+      expect(find.text(AppText.comingSoon), findsNothing);
+    });
+  }
 }

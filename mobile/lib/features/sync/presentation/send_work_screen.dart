@@ -1,10 +1,11 @@
 // "Send my work" (plan M6): what is waiting on this phone, a Send button,
-// the progress of a send, and what the last send came to.
+// the progress of a send, and what the sends came to.
 //
 // The counts come from the database itself, so "safe on this phone" is
-// only said when the rows are really there (plan §3). The last send's
-// result is the sync service's, so a send started by a save or a resume is
-// shown here too.
+// only said when the rows are really there (plan §3). The sends' result is
+// the sync service's, so a send started by a save or a resume is shown here
+// too. Since T5b it sums up every send since the user last looked (two
+// saves in a row are two sends), and leaving the screen forgets that sum.
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/database/database_failure.dart';
 import '../../../core/errors/api_codes.dart';
+import '../../../core/router/redirect.dart';
 import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/sizes.dart';
@@ -23,18 +25,49 @@ import '../../steps/domain/local_step.dart';
 import '../data/sync_service.dart';
 import '../domain/sync_report.dart';
 
-class SendWorkScreen extends ConsumerWidget {
+class SendWorkScreen extends ConsumerStatefulWidget {
   const SendWorkScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SendWorkScreen> createState() => _SendWorkScreenState();
+}
+
+class _SendWorkScreenState extends ConsumerState<SendWorkScreen> {
+  // Read in initState: ref may not be used in dispose.
+  late final SyncService _sync;
+
+  @override
+  void initState() {
+    super.initState();
+    _sync = ref.read(syncServiceProvider.notifier);
+  }
+
+  @override
+  void dispose() {
+    // However the screen is left (back arrow, Android back, the navigation
+    // bar): the user has seen these sends. After this frame, because a
+    // provider may not change while widgets are being taken down.
+    final sync = _sync;
+    Future.microtask(sync.clearSummary);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final counts = ref.watch(syncCountsProvider);
     final status = ref.watch(syncServiceProvider);
-    final last = status.last;
+    final summary =
+        status.summary ??
+        switch (status.last) {
+          // Nothing new since the screen was last left: the last send, as
+          // before T5b, so the screen does not go blank.
+          final SyncReport last => SyncSummary.of(last),
+          null => null,
+        };
 
     return Scaffold(
       appBar: AppBar(
-        leading: BackButton(onPressed: () => _back(context)),
+        leading: BackButton(onPressed: () => _back(context, ref)),
         title: const Text(AppText.sendMyWork),
       ),
       body: SafeArea(
@@ -62,8 +95,8 @@ class SendWorkScreen extends ConsumerWidget {
                   const SizedBox(height: AppSizes.spaceM),
                   if (status.running)
                     _Progress(status)
-                  else if (last != null)
-                    _LastSend(last),
+                  else if (summary != null)
+                    _Sends(summary),
                 ],
               ),
             ),
@@ -74,12 +107,19 @@ class SendWorkScreen extends ConsumerWidget {
   }
 }
 
-void _back(BuildContext context) {
+/// Back to the screen below, or to the signed-in user's own home when there
+/// is none: the screen serves miners and transporters (T5).
+void _back(BuildContext context, WidgetRef ref) {
   if (context.canPop()) {
     context.pop();
-  } else {
-    context.go(AppRoutes.miner);
+    return;
   }
+  final home = switch (ref.read(authControllerProvider)) {
+    SignedIn(:final user) ||
+    SignedInNeedsPassword(:final user) => homeOf(user.role),
+    _ => AppRoutes.login,
+  };
+  context.go(home);
 }
 
 /// A tap on Send: ask for the password first if the session needs it
@@ -213,24 +253,29 @@ class _Progress extends StatelessWidget {
   );
 }
 
-class _LastSend extends StatelessWidget {
-  const _LastSend(this.report);
-  final SyncReport report;
+class _Sends extends StatelessWidget {
+  const _Sends(this.summary);
+  final SyncSummary summary;
 
   @override
   Widget build(BuildContext context) {
+    final report = summary.combined;
     final stop = report.stop;
+    // The phone's own time: the user reads it against their watch.
+    final startedAt = report.startedAt.toLocal();
     return Semantics(
       liveRegion: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            // The phone's own time: the miner reads it against their watch.
-            AppText.lastSendAt(
-              report.startedAt.toLocal(),
-              _whyText(report.trigger),
-            ),
+            summary.sends == 1
+                ? AppText.lastSendAt(startedAt, _whyText(report.trigger))
+                : AppText.sendsSince(
+                    startedAt,
+                    summary.sends,
+                    summary.sameTrigger ? _whyText(report.trigger) : null,
+                  ),
             style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: AppSizes.spaceS),

@@ -68,14 +68,15 @@ final syncBusyRetryDelayProvider = Provider<Duration>(
   (ref) => const Duration(seconds: 5),
 );
 
-/// What the screen shows: whether a run is going, how far it is, and the
-/// last run's report.
+/// What the screen shows: whether a run is going, how far it is, the last
+/// run's report, and every send since the user last looked (T5b).
 class SyncStatus {
   const SyncStatus({
     this.running = false,
     this.done = 0,
     this.total = 0,
     this.last,
+    this.summary,
   });
 
   final bool running;
@@ -86,6 +87,11 @@ class SyncStatus {
 
   /// The last finished run's report, if any.
   final SyncReport? last;
+
+  /// Every send that ended since "Send my work" was last left, or since the
+  /// user last tapped Send now; null when none did (a send with nothing to
+  /// send adds nothing). See [SyncSummary].
+  final SyncSummary? summary;
 }
 
 class SyncService extends Notifier<SyncStatus> {
@@ -129,10 +135,36 @@ class SyncService extends Notifier<SyncStatus> {
           running: state.running,
           done: state.done,
           total: state.total,
+          summary: _withoutStaleStop(state.summary),
         );
       }
     });
     return const SyncStatus();
+  }
+
+  /// The user has left "Send my work": the sends they saw are forgotten,
+  /// and the next one starts a new summary. The last report stays, so the
+  /// screen is never blank when it opens again.
+  void clearSummary() {
+    if (state.summary == null) return;
+    state = SyncStatus(
+      running: state.running,
+      done: state.done,
+      total: state.total,
+      last: state.last,
+    );
+  }
+
+  /// [summary] without a "needs password" or "signed out" stop; null when
+  /// nothing else is left in it.
+  static SyncSummary? _withoutStaleStop(SyncSummary? summary) {
+    if (summary == null) return null;
+    final stop = summary.combined.stop;
+    if (stop != SyncStop.needsPassword && stop != SyncStop.notSignedIn) {
+      return summary;
+    }
+    final kept = summary.withoutStop();
+    return kept.combined.nothingToSend ? null : kept;
   }
 
   /// Starts a run for [trigger], or joins the one already running.
@@ -197,7 +229,13 @@ class SyncService extends Notifier<SyncStatus> {
     final stopwatch = Stopwatch()..start();
     final startedAt = _now();
     final manual = trigger == SyncTrigger.tap;
-    state = SyncStatus(running: true, last: state.last);
+    // Send now starts a fresh summary: the user is looking, and asked for
+    // this send's answer.
+    state = SyncStatus(
+      running: true,
+      last: state.last,
+      summary: manual ? null : state.summary,
+    );
 
     bool retrySoon(SyncStop? stop) => stop == SyncStop.phoneBusy && mayRetry;
 
@@ -211,7 +249,12 @@ class SyncService extends Notifier<SyncStatus> {
     // and the counts are read again.
     SyncReport finish(SyncReport report) {
       if (ref.mounted) {
-        state = SyncStatus(last: report);
+        // Read now, not at the start: the screen may have been left (and
+        // the summary cleared) while this run went on.
+        state = SyncStatus(
+          last: report,
+          summary: SyncSummary.add(state.summary, report),
+        );
         ref.invalidate(syncCountsProvider);
       }
       return report;
@@ -257,7 +300,12 @@ class SyncService extends Notifier<SyncStatus> {
     }
     if (total == 0) return finish(empty());
     if (ref.mounted) {
-      state = SyncStatus(running: true, total: total, last: state.last);
+      state = SyncStatus(
+        running: true,
+        total: total,
+        last: state.last,
+        summary: state.summary,
+      );
     }
 
     // 4. The device key.
@@ -388,6 +436,7 @@ class SyncService extends Notifier<SyncStatus> {
           done: answers.length.clamp(0, total),
           total: total,
           last: state.last,
+          summary: state.summary,
         );
       }
       after = SyncCursor.after(batch.last);

@@ -122,8 +122,9 @@ void main() {
 
       // 5. The cipher in use is SQLCipher's scheme.
       expect(db.select('PRAGMA cipher').first.columnAt(0), 'sqlcipher');
-      // And the schema is there, at version 1.
-      expect(db.userVersion, 1);
+      // And the schema is there, at the current version. Changed by decision
+      // (Transporter handoff T2, the mineral hint): 2, not 1.
+      expect(db.userVersion, 2);
     } finally {
       db.close();
     }

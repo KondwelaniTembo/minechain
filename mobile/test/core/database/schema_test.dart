@@ -1,4 +1,4 @@
-// Schema version 1 (plan §2) and migrations, on an in-memory database on the
+// Schema versions 1 (plan §2) and 2 (Transporter handoff T2) and migrations, on an in-memory database on the
 // laptop. No encryption here: that is proved on the phone
 // (integration_test/db_encryption_test.dart).
 
@@ -42,11 +42,14 @@ void main() {
   tearDown(() => db.close());
 
   group('migrate', () {
-    test('a new file goes to version 1 with both tables', () {
+    // Changed by decision (Transporter handoff T2, the mineral hint): a new
+    // file now goes to version 2, not 1.
+    test('a new file goes to version 2 with both tables', () {
       expect(db.userVersion, 0);
       migrate(db);
 
-      expect(db.userVersion, 1);
+      expect(currentSchemaVersion, 2);
+      expect(db.userVersion, 2);
       final tables = db
           .select("SELECT name FROM sqlite_master WHERE type = 'table'")
           .map((r) => r['name'])
@@ -70,7 +73,8 @@ void main() {
       migrate(db);
       insertRow(db, validRow());
       migrate(db);
-      expect(db.userVersion, 1);
+      // Changed by decision (Transporter handoff T2): version 2, not 1.
+      expect(db.userVersion, 2);
       expect(db.select('SELECT * FROM local_steps'), hasLength(1));
     });
 
@@ -79,6 +83,104 @@ void main() {
       expect(() => migrate(db), throwsA(isA<DatabaseTooNew>()));
       expect(db.userVersion, 7);
       expect(db.select('SELECT name FROM sqlite_master'), isEmpty);
+    });
+  });
+
+  // Phones in the field (the A57, the emulator) hold version 1 files with
+  // real, signed rows. Version 2 must keep every one of them as it was.
+  group('version 1 to 2 (the mineral hint)', () {
+    /// A file as the miner module left it: version 1 only, with one row.
+    void makeVersion1File() {
+      for (final statement in migrations[0]) {
+        db.execute(statement);
+      }
+      db.userVersion = 1;
+      insertRow(db, validRow());
+    }
+
+    test('a version 1 file with a row goes to version 2, the row kept', () {
+      makeVersion1File();
+      final before = db.select('SELECT * FROM local_steps').single;
+
+      migrate(db);
+
+      expect(db.userVersion, 2);
+      final after = db.select('SELECT * FROM local_steps').single;
+      for (final column in before.keys) {
+        expect(after[column], before[column], reason: column);
+      }
+      expect(after['mineral_hint'], isNull);
+    });
+
+    test('a failed upgrade leaves the file at version 1, rows kept', () {
+      makeVersion1File();
+      // The column already there makes the ALTER fail inside the migration's
+      // transaction.
+      db.execute('ALTER TABLE local_steps ADD COLUMN mineral_hint TEXT');
+
+      expect(() => migrate(db), throwsA(isA<DatabaseOpenFailed>()));
+      expect(db.userVersion, 1);
+      expect(db.select('SELECT * FROM local_steps'), hasLength(1));
+    });
+  });
+
+  group('the mineral hint (version 2)', () {
+    setUp(() => migrate(db));
+
+    Map<String, Object?> handoff() => validRow()
+      ..['step_id'] = '6f1d2c3a-0000-4000-8000-000000000102'
+      ..['type'] = 'handoff'
+      ..['mineral'] = null
+      ..['payload'] = 'minechain-step/1/handoff\n';
+
+    test('a handoff may carry a hint, or none', () {
+      insertRow(db, handoff()..['mineral_hint'] = 'copper');
+      insertRow(
+        db,
+        handoff()..['step_id'] = '6f1d2c3a-0000-4000-8000-000000000103',
+      );
+      final hints = db
+          .select('SELECT mineral_hint FROM local_steps ORDER BY step_id')
+          .map((r) => r['mineral_hint'])
+          .toList();
+      expect(hints, ['copper', null]);
+    });
+
+    test('a purchase may carry a hint', () {
+      insertRow(
+        db,
+        handoff()
+          ..['type'] = 'purchase'
+          ..['mineral_hint'] = 'gold',
+      );
+    });
+
+    test('a registration never has a hint (it has the signed mineral)', () {
+      expect(
+        () => insertRow(db, validRow()..['mineral_hint'] = 'gold'),
+        throwsA(isA<SqliteException>()),
+      );
+    });
+
+    for (final hint in ['Gold', 'diamond', '']) {
+      test('refuses the hint "$hint"', () {
+        expect(
+          () => insertRow(db, handoff()..['mineral_hint'] = hint),
+          throwsA(isA<SqliteException>()),
+        );
+      });
+    }
+
+    test('the hint does not let a handoff hold the signed mineral', () {
+      expect(
+        () => insertRow(
+          db,
+          handoff()
+            ..['mineral'] = 'gold'
+            ..['mineral_hint'] = 'gold',
+        ),
+        throwsA(isA<SqliteException>()),
+      );
     });
   });
 

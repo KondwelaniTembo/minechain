@@ -274,6 +274,10 @@ abstract final class AppText {
   static const String saving = 'Saving…';
   static const String savedOnPhone =
       'Saved on this phone. It will be sent when you are online.';
+
+  /// Under "Saved on this phone" from the second save in one visit (T5b).
+  static String savedThisVisit(int count) => '$count saved this time.';
+
   static const String registerAnother = 'Register another';
   static const String backToHome = 'Back to home';
   static const String saveKeyNotUsable =
@@ -328,6 +332,19 @@ abstract final class AppText {
   static String lastSendAt(DateTime localTime, String why) {
     String two(int n) => n.toString().padLeft(2, '0');
     return 'Last send, ${two(localTime.hour)}:${two(localTime.minute)} — $why';
+  }
+
+  /// The heading for two or more sends since the user last looked (T5b):
+  /// "Since 14:40 — sent 2 times after you saved". [why] is null when the
+  /// sends had different triggers. Not "2 sends" (read as a verb on the
+  /// emulator check) and not "2 sent", which the line below uses for
+  /// records.
+  static String sendsSince(DateTime localTime, int sends, String? why) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final time = '${two(localTime.hour)}:${two(localTime.minute)}';
+    return why == null
+        ? 'Since $time — sent $sends times'
+        : 'Since $time — sent $sends times $why';
   }
 
   static const String sendYouTapped = 'you tapped Send now';
@@ -407,6 +424,14 @@ abstract final class AppText {
   static const String consignmentsPhoneBusy =
       'The phone was busy and could not show your consignments. Your work '
       'is safe on this phone.';
+
+  // "My handoffs" (transporter handoff plan, T5).
+  static String tookCustodyOf(String code) => 'Took custody of $code';
+  static const String noHandoffsYet =
+      'You have not recorded taking custody of any consignment yet.';
+  static const String handoffsPhoneBusy =
+      'The phone was busy and could not show your handoffs. Your work is '
+      'safe on this phone.';
 
   // Why a send stopped. Every one says the work is still on the phone,
   // because it is: a stop never changes a saved record.
@@ -616,6 +641,59 @@ abstract final class AppText {
       'Could not check the blockchain just now';
   static const String blockchainTransaction = 'Blockchain transaction:';
   static const String notSentYet = 'Not sent to the blockchain yet';
+
+  // ---- Take custody (transporter handoff plan, T3) ----
+
+  /// Q4: this account already took custody of the bag on this phone, in
+  /// the phone's own time.
+  static String alreadyTookCustody(DateTime localTime) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return 'You recorded taking custody of this consignment on '
+        '${localTime.day} ${_months[localTime.month - 1]}, '
+        '${two(localTime.hour)}:${two(localTime.minute)}.';
+  }
+
+  static const String custodyPhoneBusy =
+      'The phone was busy for a moment. Scan the custody record again.';
+  static String custodyChecking(String code) => 'Looking up $code…';
+  static String mineralLine(String mineral) => 'Mineral: $mineral';
+
+  // Q2: the warnings, worst first. The first two need "Record anyway".
+  static const String custodyMismatch =
+      'This record does not match the blockchain. Officers have been told, '
+      'and the consignment is held. You can still record that you took it.';
+  static const String custodyUnderReview =
+      'Under review: an officer is checking a problem with this '
+      'consignment. You can still record that you took it.';
+  static const String custodyAlreadyBought =
+      'The server says this consignment is already bought. Your handoff is '
+      'checked when it is sent.';
+  static const String custodyNotOnServer =
+      "This consignment is not on the server yet: the miner's registration "
+      'may not have been sent. You can still record it; it is checked when '
+      'it is sent.';
+  static const String recordAnyway = 'Record anyway';
+  static const String recordingAnyway = 'You chose to record it anyway.';
+
+  // Q1: the check could not be made, so the transporter chooses the mineral.
+  static const String custodyOffline =
+      'No network: the consignment could not be checked. You can still '
+      'record it; it is checked when it is sent.';
+  static const String custodyCheckFailed =
+      'The consignment could not be checked just now. You can still record '
+      'it; it is checked when it is sent.';
+  static const String custodyCheckNeedsPassword =
+      'Your session has ended, so the consignment could not be checked. You '
+      'can still record it; enter your password before you send it.';
+  static const String chooseMineralFromRecord =
+      'Choose the mineral written on the custody record.';
+
+  // T4: the transporter's own weighing, place and save.
+  static const String handoffLocationStep = 'Your location';
+  static const String handoffWeightStep = 'Weight on your scale';
+  static const String handoffWeightHint =
+      'Weigh the bag and type what your own scale says.';
+  static const String takeAnotherCustody = 'Take custody of another';
 
   // Role differences (T5).
   static const String weighFirst =

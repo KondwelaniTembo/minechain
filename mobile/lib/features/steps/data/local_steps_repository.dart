@@ -68,7 +68,15 @@ class LocalStepsRepository {
   /// [actorId]'s registrations for "My consignments", newest first: only
   /// the columns the list shows (decision Mobile (34)).
   Future<List<ConsignmentListItem>> listRegistrationsForActor(String actorId) =>
-      _db.run((db) => _listRegistrationsForActor(db, actorId));
+      listOfTypeForActor(actorId, 'registration');
+
+  /// [actorId]'s steps of [type] (`registration`, `handoff` or `purchase`),
+  /// newest first, with only the columns a list shows. The mineral is the
+  /// signed one for a registration, the unsigned hint otherwise.
+  Future<List<ConsignmentListItem>> listOfTypeForActor(
+    String actorId,
+    String type,
+  ) => _db.run((db) => _listOfTypeForActor(db, actorId, type));
 
   /// The next steps to send for [actorId], oldest first, at most
   /// [batchSize]: those `queued`, and those `deferred` whose wait is over at
@@ -116,6 +124,13 @@ class LocalStepsRepository {
   Future<DateTime?> registeredOn(String qrCode) =>
       _db.run((db) => _registeredOn(db, qrCode));
 
+  /// When [actorId] first recorded taking custody of [qrCode] on this phone,
+  /// or null if never (plan Q4). Only this account's handoffs count: another
+  /// transporter on the same phone is a different custodian. A handoff the
+  /// server rejected does not count, as for [registeredOn].
+  Future<DateTime?> handedOffOn(String qrCode, String actorId) =>
+      _db.run((db) => _handedOffOn(db, qrCode, actorId));
+
   /// Writes down the server's answers, all in one transaction. Only rows
   /// still `queued` or `deferred` change: an answer never moves a synced,
   /// flagged or rejected step back. Returns how many rows changed.
@@ -143,8 +158,8 @@ void _insert(Database db, NewLocalStep step) {
       INSERT INTO local_steps (
         step_id, actor_id, type, qr_code, mineral, weight_mg, latitude,
         longitude, captured_at, payload, signature, key_fingerprint,
-        gps_accuracy_m, sync_state, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?)
+        gps_accuracy_m, sync_state, created_at, mineral_hint
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)
       ''',
       [
         step.stepId,
@@ -161,6 +176,7 @@ void _insert(Database db, NewLocalStep step) {
         step.keyFingerprint,
         step.gpsAccuracyM,
         storedTime(step.createdAt),
+        step.mineralHint,
       ],
     );
   } on SqliteException catch (e) {
@@ -188,27 +204,30 @@ List<LocalStep> _listForActor(Database db, String actorId) {
 
 // The columns are named one by one: never `SELECT *`, so a payload,
 // signature, key fingerprint or coordinate is never even read for the list.
-List<ConsignmentListItem> _listRegistrationsForActor(
+// A row has at most one of the two minerals (the schema's CHECKs), so
+// COALESCE picks whichever it has.
+List<ConsignmentListItem> _listOfTypeForActor(
   Database db,
   String actorId,
+  String type,
 ) {
   try {
     return db
         .select(
           '''
-          SELECT step_id, qr_code, mineral, weight_mg, sync_state,
-                 review_status, last_code, last_message, first_deferred_at,
-                 created_at
+          SELECT step_id, qr_code, COALESCE(mineral, mineral_hint) AS mineral,
+                 weight_mg, sync_state, review_status, last_code,
+                 last_message, first_deferred_at, created_at
           FROM local_steps
-          WHERE actor_id = ? AND type = 'registration'
+          WHERE actor_id = ? AND type = ?
           ORDER BY created_at DESC, step_id DESC
           ''',
-          [actorId],
+          [actorId, type],
         )
         .map(ConsignmentListItem.fromRow)
         .toList();
   } on SqliteException catch (e) {
-    throw LocalStepsFailure('list-registrations', busy: isBusyOrLocked(e));
+    throw LocalStepsFailure('list-$type', busy: isBusyOrLocked(e));
   }
 }
 
@@ -224,6 +243,21 @@ DateTime? _registeredOn(Database db, String qrCode) {
     return first == null ? null : DateTime.parse(first);
   } on SqliteException catch (e) {
     throw LocalStepsFailure('registered-on', busy: isBusyOrLocked(e));
+  }
+}
+
+DateTime? _handedOffOn(Database db, String qrCode, String actorId) {
+  try {
+    final rows = db.select(
+      "SELECT min(created_at) AS first FROM local_steps "
+      "WHERE qr_code = ? AND type = 'handoff' AND actor_id = ? "
+      "AND sync_state <> 'rejected'",
+      [qrCode, actorId],
+    );
+    final first = rows.single['first'] as String?;
+    return first == null ? null : DateTime.parse(first);
+  } on SqliteException catch (e) {
+    throw LocalStepsFailure('handed-off-on', busy: isBusyOrLocked(e));
   }
 }
 

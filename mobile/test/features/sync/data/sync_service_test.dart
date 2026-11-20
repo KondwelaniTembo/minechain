@@ -724,6 +724,142 @@ void main() {
     });
   });
 
+  group('what the sends came to since the user last looked (T5b)', () {
+    SyncSummary? summary() => container.read(syncServiceProvider).summary;
+
+    Map<String, Object> flagged(String id) => {
+      'outcome': 'flagged',
+      'code': 'QUANTITY_DISCREPANCY',
+      'message': 'The weight differs by more than 10%.',
+      'transactionId': 'tx-$id',
+      'reviewStatus': 'flagged',
+      'alerts': ['quantity_discrepancy'],
+    };
+
+    test('two saves, two sends: one summary of 2 (found in T6)', () async {
+      await queue(1);
+      start();
+      final first = await service.syncNow(SyncTrigger.afterSave);
+
+      now = now.add(const Duration(minutes: 1));
+      await queue(1, from: 2);
+      await service.syncNow(SyncTrigger.afterSave);
+
+      final s = summary()!;
+      expect(s.sends, 2);
+      expect(s.sameTrigger, isTrue);
+      expect(s.combined.sent, 2);
+      expect(s.combined.sentToServer, 2);
+      // The heading's time is the first send's.
+      expect(s.combined.startedAt, first!.startedAt);
+      expect(s.combined.trigger, SyncTrigger.afterSave);
+      // The last report is still the newest send alone.
+      expect(container.read(syncServiceProvider).last!.sent, 1);
+    });
+
+    test('an automatic "nothing to send" after a review does not hide it '
+        '(found in T6)', () async {
+      await queue(1);
+      server.outcomes[stepIdFor(1)] = flagged('1');
+      start();
+      await service.syncNow(SyncTrigger.afterSave);
+
+      now = now.add(const Duration(minutes: 3));
+      final empty = await service.syncNow(SyncTrigger.resume);
+      expect(empty!.nothingToSend, isTrue);
+
+      final s = summary()!;
+      expect(s.sends, 1);
+      expect(s.combined.underReview, 1);
+      expect(s.combined.problems.single.code, 'QUANTITY_DISCREPANCY');
+      expect(container.read(syncServiceProvider).last, same(empty));
+    });
+
+    test(
+      'a send with nothing to send adds nothing to an empty summary',
+      () async {
+        start();
+        final report = await tap();
+        expect(report.nothingToSend, isTrue);
+        expect(summary(), isNull);
+        expect(container.read(syncServiceProvider).last, same(report));
+      },
+    );
+
+    test('Send now starts a fresh summary', () async {
+      await queue(1);
+      start();
+      await service.syncNow(SyncTrigger.afterSave);
+      expect(summary()!.sends, 1);
+
+      await queue(1, from: 2);
+      await tap();
+
+      final s = summary()!;
+      expect(s.sends, 1);
+      expect(s.combined.trigger, SyncTrigger.tap);
+      expect(s.combined.sent, 1);
+    });
+
+    test('leaving the screen clears it; the last report stays', () async {
+      await queue(1);
+      start();
+      final report = await service.syncNow(SyncTrigger.afterSave);
+
+      service.clearSummary();
+
+      expect(summary(), isNull);
+      expect(container.read(syncServiceProvider).last, same(report));
+
+      // The next send starts a new summary.
+      await queue(1, from: 2);
+      await service.syncNow(SyncTrigger.afterSave);
+      expect(summary()!.sends, 1);
+    });
+
+    test('the stop and the waiting come from the newest send only', () async {
+      await queue(1);
+      server.next.add(offline);
+      start();
+      final stopped = await service.syncNow(SyncTrigger.afterSave);
+      expect(stopped!.stop, SyncStop.offline);
+      expect(summary()!.combined.stop, SyncStop.offline);
+
+      await queue(1, from: 2);
+      await service.syncNow(SyncTrigger.afterSave);
+
+      final s = summary()!;
+      expect(s.sends, 2);
+      expect(s.combined.stop, isNull); // how things are now: sent
+      expect(s.combined.sent, 2); // the first bag went in the second send
+      expect(s.combined.waiting, 0);
+    });
+
+    test('different triggers: the heading names none', () async {
+      await queue(1);
+      start();
+      await service.syncNow(SyncTrigger.afterSave);
+      await queue(1, from: 2);
+      await service.syncNow(SyncTrigger.resume);
+
+      expect(summary()!.sends, 2);
+      expect(summary()!.sameTrigger, isFalse);
+    });
+
+    test('a stale "enter your password" leaves the summary too', () async {
+      await queue(1);
+      start(signedIn: SignedInNeedsPassword(userOf(Role.miner)));
+      await service.syncNow(SyncTrigger.resume);
+      expect(summary()!.combined.stop, SyncStop.needsPassword);
+
+      auth.setState(signedInAs(Role.miner));
+      await pumpEventQueue();
+
+      // Nothing else was in it, so it is gone, like the last report.
+      expect(summary(), isNull);
+    });
+  });
+
   test('the counts follow what the server said', () async {
     await queue(3);
     server.outcomes[stepIdFor(2)] = {

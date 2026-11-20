@@ -496,6 +496,165 @@ void main() {
     expect(find.text(AppText.waitingOnPhone(1)), findsOneWidget);
   });
 
+  group('what the sends came to since the user last looked (T5b)', () {
+    Future<void> saveAndSend(WidgetTester tester, int n) async {
+      await queueSteps(
+        steps,
+        count: 1,
+        from: n,
+        start: now.subtract(const Duration(hours: 1)),
+      );
+      unawaited(
+        app.container
+            .read(syncServiceProvider.notifier)
+            .syncNow(SyncTrigger.afterSave),
+      );
+      await frames(tester);
+    }
+
+    Future<void> back(WidgetTester tester) async {
+      await tester.tap(find.byType(BackButton));
+      await frames(tester);
+      expect(app.path, AppRoutes.miner);
+    }
+
+    Future<void> reopen(WidgetTester tester) async {
+      final tile = find.text(AppText.sendMyWork);
+      await scrollTo(
+        tester,
+        tile,
+        scrollable: find.byType(Scrollable).first,
+        settle: false,
+      );
+      await tester.tap(tile);
+      await frames(tester);
+      expect(app.path, AppRoutes.minerSync);
+    }
+
+    final firstAt = DateTime.utc(2026, 11, 16, 9);
+    String twoAfterSave() =>
+        AppText.sendsSince(firstAt.toLocal(), 2, AppText.sendAfterSave);
+
+    // The words themselves, pinned: "2 sends" read as a verb on the
+    // emulator re-check, and "2 sent" is the records line's (Handoff app (8)).
+    test('the heading counts times, not records', () {
+      final at = DateTime(2026, 11, 20, 14, 40);
+      expect(
+        AppText.sendsSince(at, 2, AppText.sendAfterSave),
+        'Since 14:40 — sent 2 times after you saved',
+      );
+      expect(AppText.sendsSince(at, 3, null), 'Since 14:40 — sent 3 times');
+    });
+
+    testWidgets('two saves, two sends: "sent 2 times", 2 sent (found in T6)', (
+      tester,
+    ) async {
+      await open(tester);
+      await saveAndSend(tester, 1);
+      now = now.add(const Duration(minutes: 1));
+      await saveAndSend(tester, 2);
+
+      expect(find.text(twoAfterSave()), findsOneWidget);
+      expect(
+        find.text(AppText.resultSentToServer(2, underReview: 0)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('sends while away are summed up when it opens', (tester) async {
+      await open(tester);
+      await back(tester);
+
+      await saveAndSend(tester, 1);
+      now = now.add(const Duration(minutes: 1));
+      await saveAndSend(tester, 2);
+      await reopen(tester);
+
+      expect(find.text(twoAfterSave()), findsOneWidget);
+      expect(
+        find.text(AppText.resultSentToServer(2, underReview: 0)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('leaving and coming back clears it: the last send only', (
+      tester,
+    ) async {
+      await open(tester);
+      await saveAndSend(tester, 1);
+      now = now.add(const Duration(minutes: 1));
+      await saveAndSend(tester, 2);
+      expect(find.text(twoAfterSave()), findsOneWidget);
+
+      await back(tester);
+      await reopen(tester);
+
+      expect(find.text(twoAfterSave()), findsNothing);
+      expect(
+        find.text(AppText.lastSendAt(now.toLocal(), AppText.sendAfterSave)),
+        findsOneWidget,
+      );
+      expect(
+        find.text(AppText.resultSentToServer(1, underReview: 0)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Send now starts a fresh summary', (tester) async {
+      await open(tester);
+      await saveAndSend(tester, 1);
+      now = now.add(const Duration(minutes: 1));
+      await saveAndSend(tester, 2);
+
+      now = now.add(const Duration(minutes: 1));
+      await queueSteps(
+        steps,
+        count: 1,
+        from: 3,
+        start: now.subtract(const Duration(hours: 1)),
+      );
+      await send(tester);
+
+      expect(find.text(twoAfterSave()), findsNothing);
+      expect(
+        find.text(AppText.lastSendAt(now.toLocal(), AppText.sendYouTapped)),
+        findsOneWidget,
+      );
+      expect(
+        find.text(AppText.resultSentToServer(1, underReview: 0)),
+        findsOneWidget,
+      );
+    });
+
+    for (final (name, size) in [
+      ('portrait', const Size(360, 640)),
+      ('landscape', const Size(640, 360)),
+    ]) {
+      testWidgets('a summary of 2 with a review line: $name, text 2.0', (
+        tester,
+      ) async {
+        server.outcomes[stepIdFor(2)] = {
+          'outcome': 'flagged',
+          'code': 'QUANTITY_DISCREPANCY',
+          'message': 'The weight differs by more than 10%.',
+          'transactionId': 'tx-2',
+          'reviewStatus': 'flagged',
+        };
+        await open(tester, size: size, textScale: 2.0);
+        await saveAndSend(tester, 1);
+        now = now.add(const Duration(minutes: 1));
+        await saveAndSend(tester, 2);
+
+        expect(tester.takeException(), isNull);
+        expect(find.text(twoAfterSave()), findsOneWidget);
+        expect(
+          find.text(AppText.resultSentToServer(2, underReview: 1)),
+          findsOneWidget,
+        );
+      });
+    }
+  });
+
   group('fits small screens and large text', () {
     for (final (name, size, scale) in [
       ('portrait 360x640', const Size(360, 640), 1.0),

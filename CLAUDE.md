@@ -36,8 +36,62 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 20 Nov 2026, 00:40. Read this first in a new session, then `docs/progress.md` (the day
-plan and the current feature's subtasks), then `docs/decisions.md`.
+Updated 20 Nov 2026, after Transporter handoff T7. Read this first in a new session, then
+`docs/progress.md` (the day plan and the current feature's subtasks), then `docs/decisions.md`.
+
+- **Now: Transporter handoff, done (8/8), waiting for its PR** on
+  `feature/transporter-handoff` (pushed, tracks origin), `docs/plans/transporter-handoff-plan.md`
+  (approved 20 Nov, Q1–Q5 as proposed; Q3 changed in T2). App only (`mobile/`, `docs/`);
+  nothing deploys to Render. 1740 tests passed, 0 skipped. Decisions Handoff app (1)–(9),
+  plus two known limitations (the offline mineral pick; the summary in memory only).
+  **Next: the developer opens and merges the PR; then Buyer purchase** (new branch from
+  `main`, start-of-feature script, then "plan only").
+  - T1 (`962870a`): `handoff/domain/handoff_payload.dart` `buildHandoffPayload` (8 lines, no
+    `mineral`), checked byte for byte against the spec example and the vectors.
+  - T2 (`db3ee26`): `steps/data/save_signed_step.dart` `SignedStepSaver` (key check →
+    database → build once → sign → one row; the `SaveResult` types, re-exported by
+    `register_consignment.dart` and `record_handoff.dart`); `handoff/data/record_handoff.dart`
+    `RecordHandoff.save(user, qrCode, mineral, weightMg, latitude, longitude, gpsAccuracyM)`
+    and `recordHandoffProvider`. **Local schema version 2**: `local_steps.mineral_hint`
+    (unsigned display mineral, never on a registration), because version 1's CHECK allows
+    `mineral` on registrations only. Repository: `listOfTypeForActor(actorId, type)`
+    (`COALESCE(mineral, mineral_hint)`; `ConsignmentListItem.mineral` is now nullable) and
+    `handedOffOn(qrCode, actorId)`.
+  - T3 (`98c2d65`): `/transporter/custody` (`AppRoutes.transporterCustody`, tile wired);
+    `handoff/domain/custody_check.dart` (`CustodyChecked` / `CustodyNotOnServer` /
+    `CustodyUnchecked(reason)`, `custodyWarnings`, `needsRecordAnyway`);
+    `handoff/presentation/custody_controller.dart` (`CustodyScanning(notice)` →
+    `CustodyChecking` → `CustodyReady`, whose `mineral`, `waitingForRecordAnyway` and
+    `mayContinue` T4 builds on); `take_custody_screen.dart`. Shared widgets:
+    `steps/presentation/saved_work_gate.dart` `SavedWorkGate` + `backOrHome`, and
+    `registration/presentation/mineral_chips.dart` `MineralChips`.
+  - T4 (`39d756d`): `steps/presentation/location_tracker.dart` `LocationTracker`
+    (a plain class each controller owns; `freshFix()` at Save), used by
+    `RegistrationController` (re-exports the status types; tests unchanged) and
+    `CustodyController`, which starts it once a code passes Q4. `CustodyReady` gained
+    `location`, `weightText`, `saving`, `result`, `canSave`, `editable`; `save()` re-checks
+    `handedOffOn`, then `recordHandoffProvider`, then `syncNow(afterSave)`. Shared widgets:
+    `LocationStatusView`, `WeightField` / `weightErrorText`, `SavedView` / `saveProblemText`
+    (`steps/presentation/`), `core/widgets/status_line.dart` `StatusLine`.
+  - T5 (`d877290`): `MyConsignmentsScreen(kind: StepListKind.handoffs)` at
+    `/transporter/handoffs` ("Took custody of …", weight in the hint's unit), `myStepsProvider`
+    (family by step type), `SendWorkScreen` at `/transporter/sync` with its back arrow to
+    `homeOf(role)`; transporter tiles all wired; `homes_test.dart` `tilesOpenTheirPages`.
+  - T6 phone check done (20 Nov, emulator and A57): accepted, flagged and offline handoffs
+    all as planned (results in the plan's T6). It found that "Send my work" shows only the
+    last send. Two saves in a row read "1 sent", and an automatic "nothing to send" hid a
+    review message.
+  - T5b: `SyncStatus.summary` (`SyncSummary` in `sync/domain/sync_report.dart`): every send
+    since the user last looked, final counts summed, the stop and waiting from the newest;
+    an empty send adds nothing; Send now starts fresh; leaving "Send my work" clears it
+    (`clearSummary()` after the frame). Heading "Since 16:03 — sent 2 times after you saved"
+    ("2 sends" read as a verb on the emulator). Both saved screens say "2 saved this time."
+    (`savesThisVisit` on each controller). Emulator re-check fine (20 Nov, 16:03–16:05).
+  - T7: docs and the PR description.
+  - Lessons from this feature: a new branch's first push needs
+    `git push --set-upstream origin <branch>`; `dart format` takes file paths only, never a
+    folder (a folder-wide run on `lib/core` re-wrapped five network and storage files in T3,
+    and they were restored by hand).
 
 - **Done: Hardening** (`docs/plans/hardening-plan.md`, on a new branch the developer creates
   from `main`, suggested `chore/hardening`). An OWASP MASVS/MSTG review of the app as built
@@ -78,15 +132,9 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
     branch (`goBranch`), decision Mobile (39), reversing Q10 of Mobile (37). Tests 1438
     passed, 0 skipped. A57 check fine. Merged as PR #14 (`c1a95ef`). Wednesday's features
     are all done.
-  - Now: Consignment check (Thu 19) on `feature/consignment-check`,
-    `docs/plans/consignment-check-plan.md` (approved; Q6 demo accounts asked before T6).
-    T1 domain, T2 data, T3 scan step, T4 result page, T5 role differences done (1584
-    tests passed). T6 partly done on the A57 (20 Nov, 00:20, a new transporter account): the two
-    result-page fixes it found are made (1587 tests passed). T6 finished 20 Nov (offline,
-    and a verified result from an emulator registration inside the demo zone); T7 docs
-    done (Verification app (1)–(10)). Consignment check 7/7: the developer opens the PR.
-    Next: Transporter handoff (plan first).
-    The officer phone check waits for the admin's "Create account" screen (Sat 21).
+  - Consignment check (`docs/plans/consignment-check-plan.md`, 7/7, decisions Verification
+    app (1)–(10)) merged as PR #15 (`f71b1cb`). The officer phone check waits for the
+    admin's "Create account" screen (Sat 21).
 
 - **Design integration merged as PR #11** (`d86e33c`, 19 Nov;
   `docs/plans/design-integration-plan.md`, T1–T14). Mapalo Maseko's copper theme, the home
