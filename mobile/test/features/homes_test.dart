@@ -328,6 +328,34 @@ void main() {
       (AppText.sendMyWork, AppRoutes.buyerSync),
     ]);
   });
+
+  // Officer alerts T2: "Alerts" and "Check a consignment" are built.
+  // "Reports" and "Audit trail" still say "Coming soon" (the officer's case
+  // above taps "Audit trail").
+  group('officer tiles', () {
+    tilesOpenTheirPages(
+      Role.officer,
+      AppRoutes.officer,
+      const OfficerHomeScreen(),
+      [
+        (AppText.alerts, AppRoutes.officerAlerts),
+        (AppText.checkConsignment, AppRoutes.officerCheck),
+      ],
+    );
+
+    testWidgets('"Reports" still says "Coming soon"', (tester) async {
+      await pumpHome(
+        tester,
+        const OfficerHomeScreen(),
+        signedInAs(Role.officer),
+      );
+      await tester.ensureVisible(tile(AppText.reports));
+      await tester.pump();
+      await tester.tap(tile(AppText.reports));
+      await tester.pump();
+      expect(find.text(AppText.comingSoon), findsOneWidget);
+    });
+  });
 }
 
 /// One test per tile of [role]'s home ([home] at [homePath]): the tile

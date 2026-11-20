@@ -207,6 +207,9 @@ class _StepCard extends StatelessWidget {
     final location = step.location;
     final hash = step.chainTxHash;
     final review = step.reviewStatus;
+    // Officers only: a rejected step never goes on the blockchain, so its
+    // lines never say "yet".
+    final rejected = review == ReviewStatus.rejected;
     final alerts = step.alerts;
     final fields = step.mismatchFields;
     final reason = step.mismatchReason;
@@ -234,7 +237,7 @@ class _StepCard extends StatelessWidget {
               Text(AppText.locationLine(location.latitude, location.longitude)),
             Text(AppText.recordedAt(step.capturedAt.toLocal())),
             const SizedBox(height: AppSizes.spaceS),
-            _CheckLine(step.check),
+            _CheckLine(step.check, rejected: rejected),
             // Officers only, on a mismatch: what differs, by name. The
             // server never sends the values, and neither does this page.
             if (fields != null && fields.isNotEmpty)
@@ -257,9 +260,10 @@ class _StepCard extends StatelessWidget {
             // does not get it); null there means nothing was sent yet.
             if (step.chainTxHashShown) ...[
               const SizedBox(height: AppSizes.spaceS),
-              if (hash == null)
+              // A rejected step's check line already says it never goes.
+              if (hash == null && !rejected)
                 const Text(AppText.notSentYet)
-              else ...[
+              else if (hash != null) ...[
                 const Text(AppText.blockchainTransaction),
                 // Selectable, so it can be copied into Etherscan (Q4). It is
                 // 66 characters with no spaces, so it breaks anywhere.
@@ -357,8 +361,9 @@ class _IconLine extends StatelessWidget {
 }
 
 class _CheckLine extends StatelessWidget {
-  const _CheckLine(this.result);
+  const _CheckLine(this.result, {required this.rejected});
   final CheckResult result;
+  final bool rejected;
 
   @override
   Widget build(BuildContext context) {
@@ -373,6 +378,11 @@ class _CheckLine extends StatelessWidget {
         Icons.cancel,
         AppText.stepMismatch,
         scheme.error,
+      ),
+      CheckResult.notAnchoredYet when rejected => (
+        Icons.block,
+        AppText.stepRejectedNeverAnchored,
+        scheme.onSurface,
       ),
       CheckResult.notAnchoredYet => (
         Icons.hourglass_top,

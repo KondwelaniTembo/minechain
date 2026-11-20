@@ -645,6 +645,9 @@ abstract final class AppText {
   static const String stepMatches = 'Matches the blockchain';
   static const String stepMismatch = 'Does not match the blockchain';
   static const String stepNotAnchoredYet = 'Not on the blockchain yet';
+
+  /// A rejected step (officers only): it is never sent, so not "yet".
+  static const String stepRejectedNeverAnchored = 'Never put on the blockchain';
   static const String stepChainUnavailable =
       'Could not check the blockchain just now';
   static const String blockchainTransaction = 'Blockchain transaction:';
@@ -761,6 +764,257 @@ abstract final class AppText {
     return '$count, $open open';
   }
 
+  // ---- Officer alerts (officer alerts plan, T1: alert_words.dart) ----
+
+  // The finding as a heading, one per alert type (plan §4).
+  static const String alertDuplicate = 'QR code already registered';
+  static const String alertQuantity = 'Weight differs by more than 10%';
+  static const String alertGpsZone = 'Registered outside the licensed zones';
+  static const String alertSignature = 'Signature does not match';
+  static const String alertHandoffOrder = 'Recorded after the purchase';
+  static const String alertTampered =
+      'Record changed after it was put on the blockchain';
+  static const String alertUnknown = 'Unknown alert';
+
+  static const String severityHigh = 'High';
+  static const String severityMedium = 'Medium';
+  static const String severityLow = 'Low';
+
+  /// Any alert whose details this version cannot read, and an unknown type.
+  /// The decisions still work.
+  static const String alertDetailsUnreadable =
+      'This version of the app cannot show its details.';
+
+  // quantity_discrepancy: "This handoff: 1.6 kg.", then one line per
+  // baseline.
+  static const String thisHandoff = 'This handoff';
+  static const String thisPurchase = 'This purchase';
+  static const String thisStep = 'This step';
+  static const String theRegistration = 'The registration';
+  static const String thePreviousStep = 'The previous step';
+  static String stepWeighed(String step, String weight) => '$step: $weight.';
+
+  /// "The registration: 2 kg. This handoff is 0.4 kg (20%) lighter." A
+  /// baseline within the limit says so, for example ", within the 10%
+  /// allowed".
+  static String comparedWith({
+    required String baseline,
+    required String baselineWeight,
+    required String step,
+    required String difference,
+    required String percent,
+    required bool lighter,
+    required bool exceeded,
+    required int thresholdPercent,
+  }) {
+    final direction = lighter ? 'lighter' : 'heavier';
+    final within = exceeded ? '' : ', within the $thresholdPercent% allowed';
+    return '$baseline: $baselineWeight. $step is $difference ($percent) '
+        '$direction$within.';
+  }
+
+  /// A baseline with exactly the step's weight.
+  static String sameWeightAs(String baseline, String baselineWeight) =>
+      '$baseline: $baselineWeight, the same weight.';
+
+  /// A difference just over the limit that would read as the limit itself
+  /// once cut to one decimal ("10%").
+  static String moreThanPercent(int percent) => 'more than $percent%';
+
+  // gps_zone.
+  static String outsideZone(int metres, String zone, int tolerance) =>
+      '$metres m outside $zone; $tolerance m is allowed.';
+  static const String noZoneActive =
+      'No licensed zone was active when it was registered.';
+
+  // duplicate_consignment.
+  static const String registeredBeforeSameMiner =
+      'Registered before by the same miner.';
+  static const String registeredBeforeOtherMiner =
+      'Registered before by another miner.';
+  static String mineralsDiffer(String now, String before) =>
+      'This registration says $now; the first one said $before.';
+
+  // invalid_signature.
+  static String notThisDeviceKey(String shortFingerprint) =>
+      "The signature was not made by this account's registered device key "
+      '($shortFingerprint).';
+
+  // handoff_order.
+  static const String handoffAfterPurchase =
+      'This handoff was recorded after the consignment was bought.';
+  static const String purchaseAfterPurchase =
+      'This purchase was recorded after the consignment was already bought.';
+
+  // record_tampered: the names of what differs, in words.
+  static const String fieldWeight = 'weight';
+  static const String fieldMineral = 'mineral';
+  static const String fieldLocation = 'location';
+  static const String fieldTime = 'time';
+  static const String fieldQrCode = 'QR code';
+  static const String fieldPerson = 'person who signed';
+  static const String fieldStepType = 'kind of step';
+  static const String fieldStepId = 'step number';
+  static const String fieldSignature = 'signature';
+  static const String fieldSignedRecord = 'signed record';
+  static const String fieldFingerprint = 'record fingerprint';
+  static const String fieldReceipt = 'blockchain receipt';
+  static const String fieldOther = 'other details';
+
+  /// "The weight no longer matches the blockchain." / "The weight and
+  /// location no longer match the blockchain."
+  static String noLongerMatches(List<String> what) {
+    final names = switch (what.length) {
+      0 => '',
+      1 => what.single,
+      _ => '${what.sublist(0, what.length - 1).join(', ')} and ${what.last}',
+    };
+    if (names.isEmpty) {
+      return 'Something in this record no longer matches the blockchain.';
+    }
+    final verb = what.length == 1 ? 'matches' : 'match';
+    return 'The $names no longer $verb the blockchain.';
+  }
+
+  // ---- Officer alerts: the list (T2) ----
+
+  // Q1: the three-way switch.
+  static const String alertsOpen = 'Open';
+  static const String alertsConfirmed = 'Confirmed';
+  static const String alertsCleared = 'Cleared';
+  static const String alertsShowing = 'Show alerts';
+
+  static const String loadingAlerts = 'Loading alerts…';
+  static const String noOpenAlerts = 'No open alerts.';
+  static const String noConfirmedAlerts = 'No confirmed alerts yet.';
+  static const String noClearedAlerts = 'No cleared alerts yet.';
+  static const String alertsNeedPassword =
+      'Your session has expired. Enter your password to see the alerts.';
+
+  /// Above the list: "1 open alert.", "3 cleared alerts.", or, when only
+  /// part is loaded, "Showing 20 of 45 alerts."
+  static String alertsCount({
+    required String status,
+    required int shown,
+    required int total,
+  }) {
+    if (shown < total) return 'Showing $shown of $total alerts.';
+    return total == 1 ? '1 $status alert.' : '$total $status alerts.';
+  }
+
+  static const String statusOpen = 'open';
+  static const String statusConfirmed = 'confirmed';
+  static const String statusCleared = 'cleared';
+
+  static const String stepRegistration = 'Registration';
+  static const String stepHandoff = 'Handoff';
+  static const String stepPurchase = 'Purchase';
+
+  /// "MC-2026-LSK-0008, Copper".
+  static String alertConsignment(String qrCode, String mineral) =>
+      '$qrCode, $mineral';
+
+  /// "Handoff by transporter patsani".
+  static String stepByWhom(String step, String role, String username) =>
+      '$step by $role $username';
+
+  /// "Raised 20 Nov, 14:56", in the phone's own time.
+  static String raisedAt(DateTime localTime) =>
+      'Raised ${_dayAndTime(localTime)}';
+  static const String holdsConsignment = 'Holds this consignment';
+
+  /// A closed alert's decision: "Confirmed by officer_chanda, 20 Nov, 15:00".
+  static String confirmedBy(String username, DateTime localTime) =>
+      'Confirmed by $username, ${_dayAndTime(localTime)}';
+  static String clearedBy(String username, DateTime localTime) =>
+      'Cleared by $username, ${_dayAndTime(localTime)}';
+
+  // ---- Officer alerts: one alert (T3) ----
+
+  static const String alertTitle = 'Alert';
+  static const String loadingAlert = 'Loading the alert…';
+  static const String alertNeedsPassword =
+      'Your session has expired. Enter your password to see this alert.';
+  static const String alertGone =
+      'This alert no longer exists. It may have been removed with its '
+      'consignment.';
+  static const String backToAlerts = 'Back to the alerts';
+
+  static String severityLine(String severity) => 'Severity: $severity';
+  static const String alertIsOpen = 'Open: waiting for a decision';
+  static const String alertIsConfirmed = 'Confirmed: a real problem';
+  static const String alertIsCleared = 'Cleared: no problem';
+
+  static const String whatTheCheckFound = 'What the check found';
+  static const String theStep = 'The step';
+  static const String theConsignment = 'The consignment';
+  static const String otherAlerts = 'Other alerts on this consignment';
+  static const String theDecision = 'The decision';
+
+  static String phoneTime(DateTime localTime) =>
+      'Recorded on the phone: ${_dayAndTime(localTime)}';
+  static String serverTime(DateTime localTime) =>
+      'Received by the server: ${_dayAndTime(localTime)}';
+  static String qrCodeLine(String qrCode) => 'QR code: $qrCode';
+  static const String consignmentHeld =
+      'Held: it is not put on the blockchain while an alert on it is open.';
+  static const String consignmentNotHeld = 'Not held.';
+  static const String noOtherAlerts = 'No other alerts.';
+
+  /// "Open, raised 20 Nov, 14:56".
+  static String otherAlertLine(String status, DateTime localTime) =>
+      '$status, raised ${_dayAndTime(localTime)}';
+  static const String otherStatusOpen = 'Open';
+  static const String otherStatusConfirmed = 'Confirmed';
+  static const String otherStatusCleared = 'Cleared';
+  static const String anotherAlertHolds =
+      'Clearing this alert does not release the consignment while another '
+      'is open.';
+  static String notesLine(String notes) => 'Notes: $notes';
+
+  // ---- Officer alerts: the two decisions (T4) ----
+
+  static const String confirmProblem = 'Confirm problem';
+  static const String clearNoProblem = 'Clear, no problem';
+
+  /// Q2: a handoff_order alert can only be confirmed.
+  static const String onlyConfirm =
+      'This step was recorded after the purchase, so it can only be '
+      'confirmed.';
+
+  static const String confirmQuestion = 'Confirm the problem?';
+  static const String clearQuestion = 'Clear this alert?';
+  static const String confirmExplains =
+      'The step is rejected and never put on the blockchain. This cannot be '
+      'undone.';
+  static const String clearExplains =
+      'The step is accepted and put on the blockchain like any other. This '
+      'cannot be undone.';
+  static const String decisionNotes = 'Notes';
+  static const String decisionNotesHint =
+      'For example: Weighed again at the depot, 1.6 kg confirmed';
+  static const String decisionNotesWarning =
+      'Kept for ever in the audit log. Do not add personal details.';
+  static const String decisionNotesTooShort = 'Write at least 3 characters.';
+
+  /// Q3: decisions are never queued.
+  static const String decisionNotSent =
+      'No network: the decision was not sent.';
+
+  /// 404 or 409 INVALID_STATUS_TRANSITION: another officer decided first.
+  static const String alertAlreadyDecided =
+      'Another officer has already decided this alert. It has been read '
+      'again.';
+
+  // The message after a decision, from the server's answer.
+  static const String confirmedDone = 'Confirmed.';
+  static const String clearedDone = 'Cleared.';
+  static const String stepNeverAnchored =
+      'The step will never go on the blockchain.';
+  static String noLongerHeld(String qrCode) => '$qrCode is no longer held.';
+  static String stillHeld(String qrCode) =>
+      '$qrCode is still held: another alert on it is open.';
+
   // ---- Problems with the server's answer (core/errors/failure_text.dart) ----
 
   static const String invalidCredentials = 'Wrong username or password.';
@@ -784,6 +1038,8 @@ abstract final class AppText {
   static const String activationInvalid =
       'This activation code is not valid. Check it, or ask an administrator '
       'for a new one.';
+  static const String alertNotFound =
+      'This alert no longer exists. Refresh the list.';
   static const String checkTheForm =
       'Some details are missing or wrong. Please check them and try again.';
   static const String somethingWentWrong =

@@ -14,6 +14,8 @@ import 'package:go_router/go_router.dart';
 import '../../features/account/presentation/account_screen.dart';
 import '../../features/admin/presentation/account_requests_screen.dart';
 import '../../features/admin/presentation/admin_home_screen.dart';
+import '../../features/alerts/presentation/alert_detail_screen.dart';
+import '../../features/alerts/presentation/alerts_screen.dart';
 import '../../features/auth/domain/auth_state.dart';
 import '../../features/auth/presentation/auth_controller.dart';
 import '../../features/auth/presentation/activate_screen.dart';
@@ -194,6 +196,19 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.buyerSync,
         builder: (context, state) => const SendWorkScreen(),
+      ),
+      // The officer's alerts (officer alerts plan, T2 and T3). Under
+      // /officer, so redirect rule 4 sends every other role home,
+      // administrators included (Scope (5)). The home pushes the list, and
+      // the list pushes one alert, so each back arrow returns one page.
+      GoRoute(
+        path: AppRoutes.officerAlerts,
+        builder: (context, state) => const AlertsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.officerAlertPattern,
+        builder: (context, state) =>
+            AlertDetailScreen(id: state.pathParameters['id']!),
       ),
       // Under /admin, so redirect rule 4 sends every other role home. The
       // admin home opens it with push(), so the back arrow returns there.

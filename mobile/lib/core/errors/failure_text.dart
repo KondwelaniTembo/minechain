@@ -55,6 +55,9 @@ String? _ourTextFor(String code) {
     // F9: the register and activate forms.
     ApiCodes.weakPassword => AppText.weakPassword,
     ApiCodes.activationInvalid => AppText.activationInvalid,
+    // Officer alerts. STEP_CANNOT_BE_CLEARED is left to the server's
+    // message on purpose: it names which of the three cases this is.
+    ApiCodes.alertNotFound => AppText.alertNotFound,
     _ => null,
   };
 }

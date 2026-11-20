@@ -10,8 +10,10 @@ ServerRefused refused(String code, {String message = 'Server says no.'}) =>
 void main() {
   group('a code the app handles', () {
     test('uses our own sentence, not the server\'s', () {
-      expect(failureText(refused(ApiCodes.invalidCredentials)),
-          AppText.invalidCredentials);
+      expect(
+        failureText(refused(ApiCodes.invalidCredentials)),
+        AppText.invalidCredentials,
+      );
     });
 
     // Every code handled now, with the sentence it must give.
@@ -29,6 +31,7 @@ void main() {
       ApiCodes.validationFailed: AppText.checkTheForm,
       ApiCodes.weakPassword: AppText.weakPassword,
       ApiCodes.activationInvalid: AppText.activationInvalid,
+      ApiCodes.alertNotFound: AppText.alertNotFound,
     };
     handled.forEach((code, sentence) {
       test(code, () => expect(failureText(refused(code)), sentence));
@@ -38,22 +41,43 @@ void main() {
   group('a code the app does not handle yet', () {
     test('falls back to the server\'s message', () {
       expect(
-        failureText(refused(ApiCodes.usernameTaken,
-            message: 'That username is already taken.')),
+        failureText(
+          refused(
+            ApiCodes.usernameTaken,
+            message: 'That username is already taken.',
+          ),
+        ),
         'That username is already taken.',
       );
     });
 
+    test("STEP_CANNOT_BE_CLEARED shows the server's sentence: it names which "
+        'of the three cases it is', () {
+      const message =
+          'This step cannot be cleared: the consignment already has an '
+          'accepted purchase. Confirm the problem instead.';
+      expect(
+        failureText(refused(ApiCodes.stepCannotBeCleared, message: message)),
+        message,
+      );
+    });
+
     test('a code the app has never heard of also uses the message', () {
-      expect(failureText(refused('SOME_FUTURE_CODE', message: 'New thing.')),
-          'New thing.');
+      expect(
+        failureText(refused('SOME_FUTURE_CODE', message: 'New thing.')),
+        'New thing.',
+      );
     });
 
     test('an empty server message gives a fixed sentence', () {
-      expect(failureText(refused(ApiCodes.usernameTaken, message: '')),
-          AppText.somethingWentWrong);
-      expect(failureText(refused(ApiCodes.usernameTaken, message: '   ')),
-          AppText.somethingWentWrong);
+      expect(
+        failureText(refused(ApiCodes.usernameTaken, message: '')),
+        AppText.somethingWentWrong,
+      );
+      expect(
+        failureText(refused(ApiCodes.usernameTaken, message: '   ')),
+        AppText.somethingWentWrong,
+      );
     });
   });
 
@@ -65,8 +89,10 @@ void main() {
       expect(failureText(const TimedOut()), AppText.timedOut);
     });
     test('InsecureConnection', () {
-      expect(failureText(const InsecureConnection()),
-          AppText.insecureConnection);
+      expect(
+        failureText(const InsecureConnection()),
+        AppText.insecureConnection,
+      );
     });
     test('BadResponse', () {
       expect(failureText(const BadResponse(status: 502)), AppText.badResponse);
