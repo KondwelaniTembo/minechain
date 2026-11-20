@@ -4,8 +4,8 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 20 Nov 2026, after Transporter handoff T7, on `feature/transporter-handoff`
-(8/8, waiting for the PR). Consignment check merged as PR #15. Next: buyer purchase.
+Last updated: 20 Nov 2026, after Buyer purchase T1, on `feature/buyer-purchase` (1/5).
+Transporter handoff merged as PR #16. Next: T2, the "Record purchase" screen.
 
 ## (a) Whole project
 
@@ -78,45 +78,31 @@ Last updated: 20 Nov 2026, after Transporter handoff T7, on `feature/transporter
 
 1. ✅ Consignment check, carried over from Thu 19 (7/7; merged as PR #15): ✅ two result-page
    fixes (1587 tests passed); ✅ the rest of T6 (offline, a verified result); ✅ T7 docs
-2. ✅ Transporter handoff, carried over from Thu 19: 8/8 (T5b added); PR to open
-3. ⬜ Buyer purchase and "My purchases" (about 3–4 h)
+2. ✅ Transporter handoff, carried over from Thu 19: 8/8 (T5b added); merged as PR #16
+3. ⬜ Buyer purchase and "My purchases" (about 3 h): 1/5; its phone check also covers
+   "Full chain on devices" (Q5)
 4. ⬜ If time is left: Full chain on devices; Officer alerts. Otherwise both move to Sat 21,
    and FR-14 (dashboard) is the first cut there
 
 Done on Thu 19 (session ended 20 Nov, 00:40): Hardening (PR #13), "My account" back arrow
 (PR #14), Consignment check T1–T5 (1584 tests passed, 0 skipped).
 
-## (c) Current feature: Transporter handoff — 8/8
+## (c) Current feature: Buyer purchase — 1/5
 
-Plan: `docs/plans/transporter-handoff-plan.md`, approved 20 Nov (Q1–Q5 as proposed). Branch
-`feature/transporter-handoff`, created by the developer from `main` after PR #15. App only
+Plan: `docs/plans/buyer-purchase-plan.md`, approved 20 Nov (Q1–Q5 as proposed). Branch
+`feature/buyer-purchase`, created by the developer from `main` after PR #16. App only
 (`mobile/`, `docs/`); nothing deploys to Render.
 
-- ✅ T1 Handoff payload: `buildHandoffPayload` (8 lines, no `mineral`), the shared grammar
-  checks; the spec's example and the handoff vectors byte for byte; 22 new tests
-- ✅ T2 Shared save: `SignedStepSaver` shared by registration and `RecordHandoff`
-  (registration tests unchanged); local schema version 2 adds `mineral_hint` (Q3 changed,
-  Handoff app (1)); `listOfTypeForActor`, `handedOffOn`; 39 new tests
-- ✅ T3 Take custody: scan and check: `/transporter/custody`, the tile wired; Q4 on the
-  phone first; one check per scan; 404, offline, failed and ended-session sentences, the
-  chips; Q2's warnings and "Record anyway"; shared gate and chips; 30 new tests
-- ✅ T4 Take custody: weight, GPS and save: the location moved into a shared
-  `LocationTracker` (registration tests unchanged), started only once a code is accepted;
-  the weight in the mineral's unit; Save with Q4 checked again; every refusal stores
-  nothing; the send after a save; shared location view, weight field and saved view;
-  18 new tests
-- ✅ T5 My handoffs and Send my work: `/transporter/handoffs` (the list screen by
-  `StepListKind`, "Took custody of …", the weight in the hint's unit) and
-  `/transporter/sync`; both tiles wired; "Send my work" goes back to the user's own home;
-  21 new tests
-- ✅ T6 Phone check (the developer, 20 Nov 14:38–15:01, emulator and A57): accepted, flagged
-  and offline handoffs all as planned. Found: "Send my work" shows only the last send
-- ✅ T5b What the sends came to (added after T6, approved: both parts): the summary on
-  "Send my work" since you last looked, and "2 saved this time." on both saved screens
-  (Handoff app (8), (9)); 23 new tests, 1740 passed. ✅ Emulator re-check fine; the heading
-  then became "sent 2 times"
-- ✅ T7 Docs and PR: decisions Handoff app (1)–(9) and two known limitations, the PR
-  description
+- ✅ T1 Purchase payload and save: one 8-line builder for handoff and purchase
+  (`later_step_payload.dart`, handoff tests unchanged); `buildPurchasePayload` against the
+  purchase vectors byte for byte; `RecordPurchase`; `firstStepOn`; 22 new tests, 1762 passed
+- ⬜ T2 The "Record purchase" screen (`CustodyStepKind`, `/buyer/purchase`, Q1–Q3)
+- ⬜ T3 My purchases and Send my work (`/buyer/purchases`, `/buyer/sync`)
+- ⬜ T4 Phone check, also "Full chain on devices" (Q5)
+- ⬜ T5 Docs and PR
+
+Transporter handoff (8/8) is merged as PR #16; its subtasks are in
+`docs/plans/transporter-handoff-plan.md`.
 
 Consignment check (7/7) is merged as PR #15; its subtasks are in
 `docs/plans/consignment-check-plan.md`.
