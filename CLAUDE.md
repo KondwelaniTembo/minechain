@@ -81,10 +81,11 @@ plan and the current feature's subtasks), then `docs/decisions.md`.
   - Now: Consignment check (Thu 19) on `feature/consignment-check`,
     `docs/plans/consignment-check-plan.md` (approved; Q6 demo accounts asked before T6).
     T1 domain, T2 data, T3 scan step, T4 result page, T5 role differences done (1584
-    tests passed). T6 partly done on the A57 (20 Nov, 00:20, transporter Patsani): next
-    session (20 Nov, 11:30) first makes two result-page fixes (held with no steps listed:
-    say the steps are hidden while under review; hide "weigh it first" while held), then
-    the rest of T6 (offline, a verified result), T7 and the PR, then Transporter handoff.
+    tests passed). T6 partly done on the A57 (20 Nov, 00:20, a new transporter account): the two
+    result-page fixes it found are made (1587 tests passed). T6 finished 20 Nov (offline,
+    and a verified result from an emulator registration inside the demo zone); T7 docs
+    done (Verification app (1)–(10)). Consignment check 7/7: the developer opens the PR.
+    Next: Transporter handoff (plan first).
     The officer phone check waits for the admin's "Create account" screen (Sat 21).
 
 - **Design integration merged as PR #11** (`d86e33c`, 19 Nov;

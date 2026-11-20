@@ -1,7 +1,7 @@
 # Consignment check plan
 
 Status: **approved 19 Nov 2026, Q1–Q5 and Q7 as proposed; Q6 (demo accounts) asked again
-before T6.** T1–T5 done.
+before T6.** T1–T7 done.
 
 Branch: `feature/consignment-check`, created by the developer from `main` after PR #14.
 
@@ -135,10 +135,10 @@ check in words. Shown only when the answer has it:
   `event.weightMilligrams`), joined; alerts as "2 alerts, 1 open". "Rejected" reads "an
   officer confirmed the problem" (database-schema: any reviewed alert makes a step
   rejected). The fixtures cut the officer's step down per column (`check_page_helpers.dart`).
-- ⬜ **T6 Phone check on the A57** (the developer, about 20 min). Exact commands in the T5
+- ✅ **T6 Phone check on the A57** (the developer, about 20 min). Exact commands in the T5
   report. Scan a real custody record (Clement's or Mutale's) as a transporter and as an
   officer (Q6), with and without the network; screenshots for the thesis.
-- ⬜ **T7 Docs** (about 20 min). `decisions.md` "Verification app (1)…", `testing-log.md`,
+- ✅ **T7 Docs** (about 20 min). `decisions.md` "Verification app (1)…", `testing-log.md`,
   `progress.md`, `CLAUDE.md`, PR description.
 
 About 4 h 30 of Claude Code time plus the developer's 20 minutes. The schedule is about one
