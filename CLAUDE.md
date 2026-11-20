@@ -36,16 +36,50 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 20 Nov 2026, after Transporter handoff T7. Read this first in a new session, then
-`docs/progress.md` (the day plan and the current feature's subtasks), then `docs/decisions.md`.
+Updated 20 Nov 2026, after Buyer purchase T1. Read this first in a new session, then
+`docs/progress.md` (the day plan and the current feature's subtasks), then
+`docs/plans/buyer-purchase-plan.md`, then `docs/decisions.md`.
 
-- **Now: Transporter handoff, done (8/8), waiting for its PR** on
-  `feature/transporter-handoff` (pushed, tracks origin), `docs/plans/transporter-handoff-plan.md`
-  (approved 20 Nov, Q1–Q5 as proposed; Q3 changed in T2). App only (`mobile/`, `docs/`);
-  nothing deploys to Render. 1740 tests passed, 0 skipped. Decisions Handoff app (1)–(9),
-  plus two known limitations (the offline mineral pick; the summary in memory only).
-  **Next: the developer opens and merges the PR; then Buyer purchase** (new branch from
-  `main`, start-of-feature script, then "plan only").
+- **Now: Buyer purchase** on `feature/buyer-purchase` (created from `main` after PR #16;
+  **not pushed yet**: its first push needs `--set-upstream`, or Publish Branch),
+  `docs/plans/buyer-purchase-plan.md` (approved 20 Nov, Q1–Q5 as proposed). App only
+  (`mobile/`, `docs/`); nothing deploys to Render. 1/5 done, 1762 tests passed, 0 skipped.
+  - T1 (commit pending, by the developer: "feat(mobile): purchase payload and signed save
+    on a shared 8-line builder (buyer purchase T1)"): `steps/domain/later_step_payload.dart`
+    `buildLaterStepPayload(LaterStepType.handoff|purchase, …)`, the one 8-line builder;
+    `buildHandoffPayload` and `purchase/domain/purchase_payload.dart` `buildPurchasePayload`
+    call it. `purchase/data/record_purchase.dart` `RecordPurchase.save(user, qrCode,
+    mineral, weightMg, latitude, longitude, gpsAccuracyM)` and `recordPurchaseProvider`
+    (mineral as `mineral_hint` only). Repository `firstStepOn(qrCode, actorId, type)`;
+    `handedOffOn` calls it. New shared test fake `test/fakes/signing_channel.dart`
+    (`SigningChannel`, `refuse`, `signature`); the older tests keep their own copies.
+  - **Next: T2, the "Record purchase" screen** (about 75 min; spec in the plan's §4 and T2):
+    - a `CustodyStepKind` (`handoff`, `purchase`) carries what differs (words, the save,
+      the step type for `firstStepOn`, home and paths, the warning rules);
+      `CustodyController` and `TakeCustodyScreen` (`lib/features/handoff/presentation/`)
+      take it; files are not moved (Q4). **Every existing "Take custody" test must pass
+      unchanged**;
+    - `/buyer/purchase` (`AppRoutes.buyerPurchase`), the buyer home's "Record purchase"
+      tile wired (`buyer_home_screen.dart`), other roles kept out;
+    - Q1: the weight is never shown before Save (as for the transporter);
+    - Q2: the check shows this buyer's own accepted purchase (stage `purchased`) →
+      refused, like Q4, with the date;
+    - Q3: a 404 for a buyer → one sentence (handoff not sent yet, under review, or already
+      sold), the mineral chips, and one "Record anyway" tap before Save; held and mismatch
+      also need "Record anyway"; offline or a failed check → chips, "you can still record it";
+    - words: "Record purchase", "Record another purchase", "Back to home".
+  - Then T3 (`StepListKind.purchases` at `/buyer/purchases`, "Bought MC-…"; `/buyer/sync`;
+    "Reports" stays "Coming soon"), T4 phone check (also "Full chain on devices", Q5:
+    MC-2026-LSK-0007 accepted, 0008 waits behind its flagged handoff, one offline, a repeat
+    scan refused; a buyer account requested in the app and approved by the admin), T5 docs
+    and PR.
+  - Lesson: never put `git checkout` (or any forbidden git write) in a command, even to
+    restore a file after a mutation check; undo a mutation with a second `sed`.
+
+- **Done: Transporter handoff** (8/8), merged as PR #16 (`6eac7e9`),
+  `docs/plans/transporter-handoff-plan.md` (approved 20 Nov, Q1–Q5 as proposed; Q3 changed
+  in T2). 1740 tests passed, 0 skipped. Decisions Handoff app (1)–(9), plus two known
+  limitations (the offline mineral pick; the summary in memory only).
   - T1 (`962870a`): `handoff/domain/handoff_payload.dart` `buildHandoffPayload` (8 lines, no
     `mineral`), checked byte for byte against the spec example and the vectors.
   - T2 (`db3ee26`): `steps/data/save_signed_step.dart` `SignedStepSaver` (key check →
@@ -328,9 +362,9 @@ their known limitations):
 
 1. ~~Check M7 on the A57, then the pull request for `feature/miner-registration`~~ (merged as
    PR #10).
-2. The remaining role modules in the app: transporter handoff, buyer purchase, the officer's
-   alerts list and consignment check (Scope (2), (9)), and the admin screens and reports
-   (Scope (3)). The order by day is in `docs/progress.md`.
+2. The remaining role modules in the app: ~~transporter handoff~~ (PR #16), buyer
+   purchase, the officer's alerts list and consignment check (Scope (2), (9)), and the
+   admin screens and reports (Scope (3)). The order by day is in `docs/progress.md`.
 
 **Working rules that held all weekend:**
 
