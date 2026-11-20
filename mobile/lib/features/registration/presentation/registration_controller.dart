@@ -148,6 +148,12 @@ class RegistrationController extends Notifier<RegistrationState> {
     onSettled: () => state = state.copyWith(cameraMayStart: true),
   );
 
+  /// Saves since the screen opened, for "2 saved this time." (T5b). Not in
+  /// the state: "Register another" starts a fresh state. autoDispose resets
+  /// it when the screen is left.
+  int get savesThisVisit => _savesThisVisit;
+  int _savesThisVisit = 0;
+
   @override
   RegistrationState build() {
     ref.onDispose(_location.stop);
@@ -296,6 +302,7 @@ class RegistrationController extends Notifier<RegistrationState> {
     stopwatch.stop();
     if (!ref.mounted) return;
 
+    if (result is SaveDone) _savesThisVisit++;
     state = state.copyWith(
       saving: false,
       result: () => result,

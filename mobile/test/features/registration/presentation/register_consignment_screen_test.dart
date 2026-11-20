@@ -722,6 +722,33 @@ void main() {
       expect(enabled(tester, saveButton), isFalse);
     });
 
+    // T5b: two saves in a row were two sends of "1 sent" each (T6); the
+    // saved screen now counts this visit's saves.
+    testWidgets('"2 saved this time." from the second save; back to zero '
+        'after "Back to home"', (tester) async {
+      final count = find.textContaining('saved this time');
+      await open(tester);
+      await fillIn(tester);
+      await tapIt(tester, saveButton);
+      expect(count, findsNothing); // one save: nothing to add
+
+      await tapIt(tester, button(AppText.registerAnother));
+      await scan(tester, 'MC-2026-LSK-0002');
+      await typeWeight(tester, '2');
+      await tapIt(tester, saveButton);
+      expect(find.text(AppText.savedThisVisit(2)), findsOneWidget);
+
+      await tapIt(tester, button(AppText.backToHome));
+      expect(app.path, AppRoutes.miner);
+      await tapIt(tester, find.text(AppText.registerConsignment));
+      await scan(tester, 'MC-2026-LSK-0003');
+      await fix(tester);
+      await typeWeight(tester, '3');
+      await tapIt(tester, saveButton);
+      expect(find.textContaining(AppText.savedOnPhone), findsOneWidget);
+      expect(count, findsNothing);
+    });
+
     testWidgets('while saving: Saving…, and Save cannot be tapped again', (
       tester,
     ) async {
@@ -798,6 +825,20 @@ void main() {
         await fillIn(tester);
         await tapIt(tester, saveButton);
         expect(find.textContaining(AppText.savedOnPhone), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('two saved: $name', (tester) async {
+        await open(tester, size: size, textScale: scale);
+        await fillIn(tester);
+        await tapIt(tester, saveButton);
+        await tapIt(tester, button(AppText.registerAnother));
+        await scan(tester, 'MC-2026-LSK-0002');
+        await typeWeight(tester, '2');
+        await tapIt(tester, saveButton);
+        expect(find.text(AppText.savedThisVisit(2)), findsOneWidget);
+        await tester.ensureVisible(button(AppText.backToHome));
+        await tester.pump();
         expect(tester.takeException(), isNull);
       });
 

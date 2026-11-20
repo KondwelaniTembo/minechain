@@ -160,3 +160,80 @@ class SyncReport {
       'rejected: $rejected, waiting: $waiting, unmatched: $unmatched, '
       'stop: ${stop?.name})';
 }
+
+/// Every send that ended since the user last looked at "Send my work"
+/// (Transporter handoff T5b). Two saves in a row are two sends; showing only
+/// the last one said "1 sent" for two bags, and an automatic "nothing to
+/// send" hid a review message.
+///
+/// [combined] holds the totals: sent, under review and rejected are summed,
+/// and every problem line is kept, because each send answered different
+/// steps and those answers are final. What can still change (steps waiting,
+/// unmatched answers, the stop, the time taken) comes from the newest send
+/// only, because it says how things are now: a deferred step is sent again,
+/// and would be counted twice if summed.
+class SyncSummary {
+  const SyncSummary._(this.sends, this.combined, {required this.sameTrigger});
+
+  /// A summary of one send.
+  SyncSummary.of(SyncReport report) : this._(1, report, sameTrigger: true);
+
+  /// How many sends this summary holds; at least 1.
+  final int sends;
+
+  /// [SyncReport.startedAt] is the first send's start and
+  /// [SyncReport.trigger] the first send's trigger.
+  final SyncReport combined;
+
+  /// Every send had the same trigger, so the heading may name it
+  /// ("2 sends after you saved").
+  final bool sameTrigger;
+
+  /// [summary] with [newer] added. A send with nothing to send adds nothing,
+  /// so it never hides a summary that holds something.
+  static SyncSummary? add(SyncSummary? summary, SyncReport newer) {
+    if (newer.nothingToSend) return summary;
+    if (summary == null) return SyncSummary.of(newer);
+    final old = summary.combined;
+    return SyncSummary._(
+      summary.sends + 1,
+      SyncReport(
+        startedAt: old.startedAt,
+        trigger: old.trigger,
+        elapsed: newer.elapsed,
+        sent: old.sent + newer.sent,
+        underReview: old.underReview + newer.underReview,
+        rejected: old.rejected + newer.rejected,
+        waiting: newer.waiting,
+        unmatched: newer.unmatched,
+        problems: [...old.problems, ...newer.problems],
+        stop: newer.stop,
+        message: newer.message,
+        retrySoon: newer.retrySoon,
+      ),
+      sameTrigger: summary.sameTrigger && old.trigger == newer.trigger,
+    );
+  }
+
+  /// The same summary without its stop: the session is usable again, so
+  /// "Enter your password" or "You are signed out" is no longer true.
+  SyncSummary withoutStop() => SyncSummary._(
+    sends,
+    SyncReport(
+      startedAt: combined.startedAt,
+      trigger: combined.trigger,
+      elapsed: combined.elapsed,
+      sent: combined.sent,
+      underReview: combined.underReview,
+      rejected: combined.rejected,
+      waiting: combined.waiting,
+      unmatched: combined.unmatched,
+      problems: combined.problems,
+    ),
+    sameTrigger: sameTrigger,
+  );
+
+  @override
+  String toString() =>
+      'SyncSummary(sends: $sends, sameTrigger: $sameTrigger, $combined)';
+}

@@ -274,6 +274,10 @@ abstract final class AppText {
   static const String saving = 'Saving…';
   static const String savedOnPhone =
       'Saved on this phone. It will be sent when you are online.';
+
+  /// Under "Saved on this phone" from the second save in one visit (T5b).
+  static String savedThisVisit(int count) => '$count saved this time.';
+
   static const String registerAnother = 'Register another';
   static const String backToHome = 'Back to home';
   static const String saveKeyNotUsable =
@@ -328,6 +332,19 @@ abstract final class AppText {
   static String lastSendAt(DateTime localTime, String why) {
     String two(int n) => n.toString().padLeft(2, '0');
     return 'Last send, ${two(localTime.hour)}:${two(localTime.minute)} — $why';
+  }
+
+  /// The heading for two or more sends since the user last looked (T5b):
+  /// "Since 14:40 — sent 2 times after you saved". [why] is null when the
+  /// sends had different triggers. Not "2 sends" (read as a verb on the
+  /// emulator check) and not "2 sent", which the line below uses for
+  /// records.
+  static String sendsSince(DateTime localTime, int sends, String? why) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    final time = '${two(localTime.hour)}:${two(localTime.minute)}';
+    return why == null
+        ? 'Since $time — sent $sends times'
+        : 'Since $time — sent $sends times $why';
   }
 
   static const String sendYouTapped = 'you tapped Send now';

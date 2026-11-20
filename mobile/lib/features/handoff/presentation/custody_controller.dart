@@ -195,6 +195,12 @@ class CustodyController extends Notifier<CustodyState> {
     },
   );
 
+  /// Saves since the screen opened, for "2 saved this time." (T5b). Not in
+  /// the state: "Take custody of another" goes back to [CustodyScanning].
+  /// autoDispose resets it when the screen is left.
+  int get savesThisVisit => _savesThisVisit;
+  int _savesThisVisit = 0;
+
   @override
   CustodyState build() {
     ref.onDispose(_location.stop);
@@ -378,6 +384,7 @@ class CustodyController extends Notifier<CustodyState> {
     if (!ref.mounted) return;
     final current = state;
     if (current is! CustodyReady) return;
+    if (result is SaveDone) _savesThisVisit++;
     state = current.copyWith(
       saving: false,
       result: () => result,

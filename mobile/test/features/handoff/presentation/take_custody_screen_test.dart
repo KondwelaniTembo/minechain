@@ -575,6 +575,28 @@ void main() {
     }
   });
 
+  group('fits small screens and large text: two saved (T5b)', () {
+    for (final (name, size) in [
+      ('portrait', const Size(360, 640)),
+      ('landscape', const Size(640, 360)),
+    ]) {
+      testWidgets('$name, text 2.0', (tester) async {
+        await open(tester, size: size, textScale: 2.0);
+        await fillInCopper(tester);
+        await tapVisible(tester, saveButton);
+        await tapVisible(tester, button(AppText.takeAnotherCustody));
+        await scan(tester, 'MC-2026-LSK-0002');
+        await tapVisible(tester, find.text(AppText.copper));
+        await typeWeight(tester, '1.5');
+        await tapVisible(tester, saveButton);
+
+        expect(find.text(AppText.savedThisVisit(2)), findsOneWidget);
+        await tapVisible(tester, button(AppText.backToHome));
+        expect(tester.takeException(), isNull);
+      });
+    }
+  });
+
   group('T4: the GPS, one permission request at a time', () {
     testWidgets('not asked while the camera is on; asked once a code is '
         'accepted; kept for the next bag', (tester) async {
@@ -750,6 +772,35 @@ void main() {
       await tapVisible(tester, find.text(AppText.copper));
       expect(tester.widget<TextField>(weightField).controller!.text, isEmpty);
       expect((custodyState() as CustodyReady).weightText, isEmpty);
+    });
+
+    // T5b: the saved screen counts this visit's saves (found in T6).
+    testWidgets('"2 saved this time." from the second save; back to zero '
+        'after "Back to home"', (tester) async {
+      final count = find.textContaining('saved this time');
+      Future<void> saveAnother(String code) async {
+        await scan(tester, code);
+        await tapVisible(tester, find.text(AppText.copper));
+        await typeWeight(tester, '1.5');
+        await tapVisible(tester, saveButton);
+      }
+
+      await open(tester);
+      await fillInCopper(tester);
+      await tapVisible(tester, saveButton);
+      expect(count, findsNothing); // one save: nothing to add
+
+      await tapVisible(tester, button(AppText.takeAnotherCustody));
+      await saveAnother('MC-2026-LSK-0002');
+      expect(find.text(AppText.savedThisVisit(2)), findsOneWidget);
+      expect(await savedRows(), hasLength(2));
+
+      await tapVisible(tester, button(AppText.backToHome));
+      expect(app.path, AppRoutes.transporter);
+      await tapVisible(tester, find.text(AppText.takeCustody));
+      await saveAnother('MC-2026-LSK-0003');
+      expect(find.textContaining(AppText.savedOnPhone), findsOneWidget);
+      expect(count, findsNothing);
     });
 
     testWidgets('recorded meanwhile by this account: checked again at Save, '

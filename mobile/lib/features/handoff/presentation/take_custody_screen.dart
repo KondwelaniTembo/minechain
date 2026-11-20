@@ -124,6 +124,7 @@ class _BodyState extends ConsumerState<_Body> with WidgetsBindingObserver {
       return SavedView(
         duration: saveDuration,
         anotherLabel: AppText.takeAnotherCustody,
+        savedThisVisit: controller.savesThisVisit,
         onAnother: controller.scanAgain,
         onHome: () => backOrHome(context, AppRoutes.transporter),
       );

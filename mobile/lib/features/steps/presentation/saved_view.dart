@@ -28,10 +28,15 @@ class SavedView extends StatelessWidget {
     required this.anotherLabel,
     required this.onAnother,
     required this.onHome,
+    this.savedThisVisit = 1,
     super.key,
   });
 
   final Duration? duration;
+
+  /// Saves since the screen was opened (T5b), counted by its controller.
+  /// From 2 on, "2 saved this time." says the earlier bag was kept too.
+  final int savedThisVisit;
   final String anotherLabel;
   final VoidCallback onAnother;
   final VoidCallback onHome;
@@ -69,6 +74,13 @@ class SavedView extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
+              if (savedThisVisit > 1) ...[
+                const SizedBox(height: AppSizes.spaceS),
+                Text(
+                  AppText.savedThisVisit(savedThisVisit),
+                  textAlign: TextAlign.center,
+                ),
+              ],
               const SizedBox(height: AppSizes.spaceL),
               FilledButton(onPressed: onAnother, child: Text(anotherLabel)),
               const SizedBox(height: AppSizes.spaceS),

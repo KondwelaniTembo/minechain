@@ -119,6 +119,7 @@ class _FormState extends ConsumerState<_Form> with WidgetsBindingObserver {
       return SavedView(
         duration: form.saveDuration,
         anotherLabel: AppText.registerAnother,
+        savedThisVisit: controller.savesThisVisit,
         onAnother: () {
           _weight.clear();
           _showWeightProblems = false;
