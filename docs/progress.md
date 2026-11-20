@@ -4,8 +4,8 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 20 Nov 2026, after Consignment check T7, on `feature/consignment-check`
-(7/7). Next: the developer opens and merges the PR, then Transporter handoff (plan first).
+Last updated: 20 Nov 2026, after Transporter handoff T2, on `feature/transporter-handoff`
+(2/7). Consignment check merged as PR #15. Next: T3, Take custody: scan and check.
 
 ## (a) Whole project
 
@@ -37,9 +37,10 @@ Last updated: 20 Nov 2026, after Consignment check T7, on `feature/consignment-c
 
 ### Thu 19 Nov
 
-- ✅ Consignment check (7/7, plan approved 19 Nov): scan and verify, with the provenance
+- ✅ Consignment check (7/7, PR #15): scan and verify, with the provenance
   view (FR-04, Scope (9)), shared by transporter, buyer and officer
-- ⬜ Transporter handoff: scan, weigh, GPS, sign, cache, sync (FR-01, FR-02, FR-07)
+- ⬜ Transporter handoff (2/7, plan approved 20 Nov): scan, weigh, GPS, sign, cache, sync
+  (FR-01, FR-02, FR-07)
 
 ### Fri 20 Nov
 
@@ -75,9 +76,9 @@ Last updated: 20 Nov 2026, after Consignment check T7, on `feature/consignment-c
 
 ## (b) Today, Fri 20 Nov (from 11:30)
 
-1. ✅ Consignment check, carried over from Thu 19 (7/7; PR to open): ✅ two result-page
+1. ✅ Consignment check, carried over from Thu 19 (7/7; merged as PR #15): ✅ two result-page
    fixes (1587 tests passed); ✅ the rest of T6 (offline, a verified result); ✅ T7 docs
-2. ⬜ Transporter handoff, carried over from Thu 19 (about 4–5 h)
+2. ⬜ Transporter handoff, carried over from Thu 19 (about 4–5 h): 2/7
 3. ⬜ Buyer purchase and "My purchases" (about 3–4 h)
 4. ⬜ If time is left: Full chain on devices; Officer alerts. Otherwise both move to Sat 21,
    and FR-14 (dashboard) is the first cut there
@@ -85,33 +86,25 @@ Last updated: 20 Nov 2026, after Consignment check T7, on `feature/consignment-c
 Done on Thu 19 (session ended 20 Nov, 00:40): Hardening (PR #13), "My account" back arrow
 (PR #14), Consignment check T1–T5 (1584 tests passed, 0 skipped).
 
-## (c) Current feature: Consignment check — 7/7
+## (c) Current feature: Transporter handoff — 2/7
 
-Plan: `docs/plans/consignment-check-plan.md`, approved 19 Nov (Q1–Q5, Q7 as proposed; Q6
-before T6). Branch
-`feature/consignment-check`, created by the developer from `main` after PR #14.
+Plan: `docs/plans/transporter-handoff-plan.md`, approved 20 Nov (Q1–Q5 as proposed). Branch
+`feature/transporter-handoff`, created by the developer from `main` after PR #15. App only
+(`mobile/`, `docs/`); nothing deploys to Render.
 
-- ✅ T1 Domain: `ConsignmentView` read strictly (absent vs null kept apart), `verdictFor()`
-  worst first; 55 new tests
-- ✅ T2 Data: `ConsignmentCheckApi.byQr` and the repository; refusals pass through unchanged,
-  an unreadable 200 is `BadResponse`, no retry; 13 new tests
-- ✅ T3 Scan step, three paths, the home tiles wired; one request per scan, the failure
-  sentences and buttons; 26 new tests
-- ✅ T4 Result page: verdict banner first, the consignment, one card per step in the
-  server's order; only fields in the answer are drawn; 36 new tests
-- ✅ T5 Role differences: "weigh it first", location, the officer's review status, alert
-  counts and mismatch field names, each drawn from what the answer holds; 16 new tests
-- ✅ T6 Phone check on the A57 (the developer). Part done 20 Nov, 00:20, as transporter
-  the new transporter (new account): MC-2026-LSK-0001 showed "Under review", no steps listed (the
-  registration is not accepted, so a transporter is sent none) and "weigh it first". Found
-  two fixes, made 20 Nov (held with no steps: "Its custody steps are hidden while an
-  officer reviews it."; no "weigh it first" while held). Left: offline and "Try again"; a verified result on a fresh
-  registration made inside the demo zone. Officer check moved to Sat 21, after the admin's
-  "Create account" screen (no officer account can be made in the app yet)
-- ✅ T6, finished 20 Nov: the fixes on the A57, offline and "Try again", and a verified
-  result on a consignment registered on the emulator inside the demo zone
-- ✅ T7 Docs: `decisions.md` Verification app (1)–(10), three known limitations, two
-  future improvements; PR description drafted. Next: the developer opens and merges the PR
+- ✅ T1 Handoff payload: `buildHandoffPayload` (8 lines, no `mineral`), the shared grammar
+  checks; the spec's example and the handoff vectors byte for byte; 22 new tests
+- ✅ T2 Shared save: `SignedStepSaver` shared by registration and `RecordHandoff`
+  (registration tests unchanged); local schema version 2 adds `mineral_hint` (Q3 changed,
+  Handoff app (1)); `listOfTypeForActor`, `handedOffOn`; 39 new tests
+- ⬜ T3 Take custody: scan and check
+- ⬜ T4 Take custody: weight, GPS and save
+- ⬜ T5 My handoffs and Send my work
+- ⬜ T6 Phone check (the developer)
+- ⬜ T7 Docs and PR
+
+Consignment check (7/7) is merged as PR #15; its subtasks are in
+`docs/plans/consignment-check-plan.md`.
 
 Hardening (5/5, PR #13) and the "My account" back arrow (PR #14) are finished; their
 subtasks are in `docs/plans/hardening-plan.md` and `docs/decisions.md` Mobile (39).

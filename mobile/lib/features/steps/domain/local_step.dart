@@ -39,6 +39,7 @@ class NewLocalStep {
     required this.keyFingerprint,
     required this.gpsAccuracyM,
     required this.createdAt,
+    this.mineralHint,
   });
 
   final String stepId;
@@ -48,8 +49,12 @@ class NewLocalStep {
   final String type;
   final String qrCode;
 
-  /// Registrations only.
+  /// Registrations only: the copy of the payload's signed `mineral` line.
   final String? mineral;
+
+  /// Never a registration: the mineral the screen used for the weight's
+  /// unit, NOT signed, for display only (schema version 2).
+  final String? mineralHint;
 
   /// Whole milligrams, as the payload's text.
   final String weightMg;
@@ -103,6 +108,7 @@ class LocalStep {
     required this.firstDeferredAt,
     required this.syncedAt,
     required this.createdAt,
+    this.mineralHint,
   });
 
   final String stepId;
@@ -110,6 +116,9 @@ class LocalStep {
   final String type;
   final String qrCode;
   final String? mineral;
+
+  /// Unsigned, display only (see [NewLocalStep.mineralHint]).
+  final String? mineralHint;
   final String weightMg;
   final String latitude;
   final String longitude;
@@ -143,6 +152,7 @@ class LocalStep {
       type: row['type']! as String,
       qrCode: row['qr_code']! as String,
       mineral: row['mineral'] as String?,
+      mineralHint: row['mineral_hint'] as String?,
       weightMg: row['weight_mg']! as String,
       latitude: row['latitude']! as String,
       longitude: row['longitude']! as String,

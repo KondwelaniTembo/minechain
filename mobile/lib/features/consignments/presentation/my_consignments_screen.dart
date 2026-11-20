@@ -215,9 +215,12 @@ class _Item extends StatelessWidget {
 
 /// "Gold, 1.5 g": the unit follows the mineral (Q2), exact from the signed
 /// milligrams. A mineral or weight this app does not know (a damaged row)
-/// is shown as stored, in milligrams.
+/// is shown as stored, in milligrams; with no mineral at all, the weight
+/// alone, in milligrams.
 String _what(ConsignmentListItem item) {
-  final mineral = Mineral.fromApiName(item.mineral);
+  final stored = item.mineral;
+  if (stored == null) return '${item.weightMg} ${AppText.milligrams}';
+  final mineral = Mineral.fromApiName(stored);
   if (mineral != null) {
     final weight = weightInUnit(item.weightMg, mineral.unit);
     if (weight != null) {
@@ -229,7 +232,7 @@ String _what(ConsignmentListItem item) {
     }
   }
   return AppText.consignmentWhat(
-    mineral == null ? item.mineral : mineralName(mineral),
+    mineral == null ? stored : mineralName(mineral),
     item.weightMg,
     AppText.milligrams,
   );

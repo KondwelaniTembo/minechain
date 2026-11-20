@@ -43,8 +43,9 @@ class ConsignmentListItem {
   final String stepId;
   final String qrCode;
 
-  /// The API's name (`gold`); a registration always has one.
-  final String mineral;
+  /// The API's name (`gold`). A registration always has its signed one; a
+  /// later step has the unsigned display hint, or none (schema version 2).
+  final String? mineral;
 
   /// Whole milligrams, the signed text.
   final String weightMg;
@@ -79,7 +80,7 @@ class ConsignmentListItem {
     return ConsignmentListItem(
       stepId: row['step_id']! as String,
       qrCode: row['qr_code']! as String,
-      mineral: row['mineral']! as String,
+      mineral: row['mineral'] as String?,
       weightMg: row['weight_mg']! as String,
       syncState: SyncState.values.byName(row['sync_state']! as String),
       reviewStatus: row['review_status'] as String?,

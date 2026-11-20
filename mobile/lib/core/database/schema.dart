@@ -1,4 +1,4 @@
-// The local database's tables (plan §2, schema version 1) and how a file is
+// The local database's tables (plan §2; schema version 2) and how a file is
 // brought up to date.
 //
 // Migrations: SQLite keeps one whole number in every file's header,
@@ -76,8 +76,28 @@ const List<String> _schemaV1 = [
   ''',
 ];
 
+/// Version 2 (Transporter handoff T2, plan Q3 as built): an UNSIGNED
+/// display hint of the mineral for a step that has no `mineral` line, so
+/// "My handoffs" can show "Copper, 1.5 kg" in the right unit.
+///
+/// A column of its own, not `mineral`: `mineral` stays the row's copy of a
+/// signed field, and its CHECK (only registrations) is unchanged. A
+/// registration never has a hint; it has the signed mineral instead.
+///
+/// ADD COLUMN, not a rebuild: rows already on phones are not copied, and
+/// each gets NULL, which the CHECK allows.
+const List<String> _schemaV2 = [
+  '''
+  ALTER TABLE local_steps ADD COLUMN mineral_hint TEXT
+    CHECK (mineral_hint IS NULL
+           OR (type <> 'registration'
+               AND mineral_hint IN ('gold', 'copper', 'cobalt', 'manganese',
+                                    'emerald', 'amethyst')))
+  ''',
+];
+
 /// Migration N (counting from 1) takes a file from version N-1 to N.
-const List<List<String>> migrations = [_schemaV1];
+const List<List<String>> migrations = [_schemaV1, _schemaV2];
 
 /// The version this app writes.
 int get currentSchemaVersion => migrations.length;

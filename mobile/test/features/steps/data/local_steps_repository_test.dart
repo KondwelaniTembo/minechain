@@ -436,6 +436,206 @@ void main() {
     });
   });
 
+  // Transporter handoff T2: the unsigned mineral hint (schema version 2),
+  // the list by type, and Q4's "already took custody" lookup.
+  group('handoffs', () {
+    const transporter = '3f2b6c1e-0000-4000-8000-000000000201';
+    const otherTransporter = '3f2b6c1e-0000-4000-8000-000000000202';
+
+    /// A handoff with step id ending in [n], at [minute] past 08:00.
+    NewLocalStep handoff(
+      int n, {
+      String actor = transporter,
+      String qrCode = 'MC-DEMO-000001',
+      String? hint = 'copper',
+      int minute = 0,
+    }) => NewLocalStep(
+      stepId: '6f1d2c3a-0000-4000-8000-${n.toString().padLeft(12, '0')}',
+      actorId: actor,
+      type: 'handoff',
+      qrCode: qrCode,
+      mineral: null,
+      mineralHint: hint,
+      weightMg: '1495000',
+      latitude: '-15.418900',
+      longitude: '28.288700',
+      capturedAt: '2026-11-17T08:00:00.000Z',
+      payload: 'minechain-step/1/handoff\nstep_id=...\n',
+      signature: 'MEQCIF==',
+      keyFingerprint: '4d61912d42cf',
+      gpsAccuracyM: 4.0,
+      createdAt: DateTime.utc(2026, 11, 17, 8, minute),
+    );
+
+    test('the hint is stored apart from the signed mineral', () async {
+      await repository.insert(handoff(101));
+
+      final saved = (await repository.listForActor(transporter)).single;
+      expect(saved.type, 'handoff');
+      expect(saved.mineral, isNull);
+      expect(saved.mineralHint, 'copper');
+    });
+
+    test('a registration keeps its signed mineral and no hint', () async {
+      await repository.insert(step(1));
+
+      final saved = (await repository.listForActor(miner)).single;
+      expect(saved.mineral, 'gold');
+      expect(saved.mineralHint, isNull);
+    });
+
+    test('a hint on a registration is refused by the schema', () async {
+      final bad = NewLocalStep(
+        stepId: idOf(1),
+        actorId: miner,
+        type: 'registration',
+        qrCode: 'MC-DEMO-000001',
+        mineral: 'gold',
+        mineralHint: 'gold',
+        weightMg: '1500000',
+        latitude: '-15.419012',
+        longitude: '28.288105',
+        capturedAt: '2026-11-17T08:00:00.000Z',
+        payload: 'minechain-step/1/registration\n',
+        signature: 'MEQCIF==',
+        keyFingerprint: '4d61912d42cf',
+        gpsAccuracyM: null,
+        createdAt: DateTime.utc(2026, 11, 17, 8),
+      );
+      await expectLater(
+        repository.insert(bad),
+        throwsA(isA<LocalStepsFailure>()),
+      );
+      expect(await repository.listForActor(miner), isEmpty);
+    });
+
+    group('listOfTypeForActor', () {
+      test('only this actor\'s steps of that type, newest first', () async {
+        await repository.insert(handoff(101, minute: 1));
+        await repository.insert(handoff(102, minute: 4));
+        await repository.insert(handoff(103, actor: otherTransporter));
+        // The same account's registration is not a handoff.
+        await repository.insert(step(1, actor: transporter, minute: 9));
+
+        final list = await repository.listOfTypeForActor(
+          transporter,
+          'handoff',
+        );
+        expect(list.map((i) => i.stepId), [
+          handoff(102).stepId,
+          handoff(101).stepId,
+        ]);
+        expect(
+          (await repository.listOfTypeForActor(
+            transporter,
+            'registration',
+          )).map((i) => i.stepId),
+          [idOf(1)],
+        );
+        expect(
+          await repository.listOfTypeForActor(transporter, 'purchase'),
+          isEmpty,
+        );
+      });
+
+      test('a handoff\'s mineral is its hint; none is null', () async {
+        await repository.insert(handoff(101, minute: 2));
+        await repository.insert(handoff(102, hint: null, minute: 1));
+
+        final list = await repository.listOfTypeForActor(
+          transporter,
+          'handoff',
+        );
+        expect(list.map((i) => i.mineral), ['copper', null]);
+        expect(list.first.weightMg, '1495000');
+      });
+
+      test('listRegistrationsForActor is the registration list', () async {
+        await repository.insert(step(1));
+        await repository.insert(handoff(101, actor: miner));
+        expect(
+          (await repository.listRegistrationsForActor(miner))
+              .map((i) => i.stepId),
+          [idOf(1)],
+        );
+      });
+    });
+
+    group('handedOffOn (Q4)', () {
+      test('never: null', () async {
+        expect(
+          await repository.handedOffOn('MC-DEMO-000001', transporter),
+          isNull,
+        );
+      });
+
+      test('the earliest handoff of that code by that account', () async {
+        await repository.insert(handoff(101, minute: 7));
+        await repository.insert(handoff(102, minute: 3));
+        await repository.insert(handoff(103, qrCode: 'MC-DEMO-000002'));
+
+        expect(
+          await repository.handedOffOn('MC-DEMO-000001', transporter),
+          DateTime.utc(2026, 11, 17, 8, 3),
+        );
+      });
+
+      test('another account\'s handoff does not count', () async {
+        await repository.insert(handoff(101, actor: otherTransporter));
+        expect(
+          await repository.handedOffOn('MC-DEMO-000001', transporter),
+          isNull,
+        );
+      });
+
+      test('a registration of the code does not count', () async {
+        await repository.insert(step(1, actor: transporter));
+        expect(
+          await repository.handedOffOn('MC-DEMO-000001', transporter),
+          isNull,
+        );
+      });
+
+      test('a rejected handoff does not count; a flagged one does', () async {
+        await repository.insert(handoff(101, minute: 1));
+        await repository.applyResults([
+          StepRejected(
+            handoff(101).stepId,
+            code: 'SIGNATURE_INVALID',
+            message: 'x',
+          ),
+        ], at: at);
+        expect(
+          await repository.handedOffOn('MC-DEMO-000001', transporter),
+          isNull,
+        );
+
+        await repository.insert(handoff(102, minute: 5));
+        await repository.applyResults([
+          StepFlagged(
+            handoff(102).stepId,
+            code: 'QUANTITY_DISCREPANCY',
+            message: 'x',
+            reviewStatus: 'flagged',
+            transactionId: 'tx-2',
+          ),
+        ], at: at);
+        expect(
+          await repository.handedOffOn('MC-DEMO-000001', transporter),
+          DateTime.utc(2026, 11, 17, 8, 5),
+        );
+      });
+
+      test('the code is matched exactly, case included', () async {
+        await repository.insert(handoff(101));
+        expect(
+          await repository.handedOffOn('mc-demo-000001', transporter),
+          isNull,
+        );
+      });
+    });
+  });
+
   test('storedTime is fixed-width UTC with milliseconds', () {
     expect(
       storedTime(DateTime.utc(2026, 1, 2, 3, 4, 5, 6)),
