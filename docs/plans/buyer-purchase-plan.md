@@ -1,6 +1,7 @@
 # Buyer purchase plan
 
-Status: **approved 20 Nov 2026** (Q1–Q5 as proposed). T1 done.
+Status: **approved 20 Nov 2026** (Q1–Q5 as proposed). T1–T5 done; T4 phone check passed
+on the emulator and the A57 (20 Nov).
 
 Branch: `feature/buyer-purchase`, created by the developer from `main` after PR #16.
 
@@ -78,7 +79,7 @@ purchase" and "Back to home". The steps:
     header comes only from the enum. The spec has no written purchase example, so the
     positive vector is the reference. 22 new tests (payload 11, `RecordPurchase` 8,
     `firstStepOn` 3); the new tests share one Keystore fake, `test/fakes/signing_channel.dart`.
-- ⬜ **T2 The "Record purchase" screen** (about 75 min).
+- ✅ **T2 The "Record purchase" screen** (about 75 min).
   - A `CustodyStepKind` (`handoff`, `purchase`) carries what differs: words, the save,
     the step type for Q4, the home and paths, and the warning rules. `CustodyController`
     and `TakeCustodyScreen` take it. Every "Take custody" test passes unchanged.
@@ -89,12 +90,29 @@ purchase" and "Back to home". The steps:
     Q4 refused; held and mismatch need "Record anyway"; 404 needs it too (Q3); bought by
     this buyer refused (Q2); "Record another purchase" and "2 saved this time."; refusals
     store nothing; text 2.0 in portrait and landscape.
-- ⬜ **T3 My purchases and Send my work** (about 30 min).
+  - As built: `CustodyStepKind` is in `handoff/domain/custody_check.dart` (it carries the
+    `LaterStepType`); `needsRecordAnyway(warning, kind)` is true for every purchase
+    warning; `viewerPurchasedOn(view)` finds the buyer's own purchase for Q2, refused as
+    `ScanBoughtByYou` with the step's signed capture time. `CustodyController(kind)` has
+    two providers, `custodyControllerProvider` (handoff, unchanged for its tests) and
+    `purchaseControllerProvider`; `custodyControllerFor(kind)`. Q4 and the re-check at
+    Save use `firstStepOn(…, kind.stepType.type)`; Save calls `recordPurchaseProvider`
+    for a purchase. The screen's words by kind are a private `_KindWords` extension.
+    After a 404 the chips show once "Record anyway" is tapped (as for a held handoff).
+    Not in the plan, decided here and confirmed by the developer after T4 (20 Nov):
+    "already bought" with no purchase of this buyer also needs "Record anyway" (the
+    server would flag it high). 24 new tests.
+- ✅ **T3 My purchases and Send my work** (about 30 min).
   - `StepListKind.purchases` at `/buyer/purchases` ("Bought MC-…", the weight in the
     hint's unit); "Send my work" at `/buyer/sync`; both tiles wired; "Reports" stays
     "Coming soon" (Reports feature, Sat 21).
   - Router tests: each buyer tile opens its path, other roles are kept out.
-- ⬜ **T4 Phone check** (the developer, about 30 min; see Q5).
+  - As built: `StepListKind.purchases` (`AppText.boughtRecord`, `noPurchasesYet`,
+    `purchasesPhoneBusy`; the empty list's button opens "Record purchase");
+    `AppRoutes.buyerPurchases` and `buyerSync`. `homes_test.dart`: the buyer's "Coming
+    soon" case now taps "Reports" (changed by plan, its last tile is wired), and a new
+    "buyer tiles" group checks the four built tiles. 20 new tests.
+- ✅ **T4 Phone check** (the developer, about 30 min; see Q5).
   - A buyer account: request it in the app ("Request an account", role buyer), then
     approve it with the administrator's account requests screen.
   - On the emulator as that buyer:
@@ -104,8 +122,37 @@ purchase" and "Back to home". The steps:
       then the purchase waits (`STAGE_NOT_READY`) on "Send my work";
     - one purchase saved in airplane mode and sent afterwards;
     - 0007 scanned again: refused with the save time.
-- ⬜ **T5 Docs and PR** (about 20 min). `decisions.md` "Purchase app (1)…",
-  `testing-log.md`, `progress.md`, `CLAUDE.md`, the PR description.
+  - Results (20 Nov, 20:14–21:20, emulator as the buyer, the A57 as the transporter), all
+    as planned:
+    - account: the buyer requested it in the app; the admin approved it ("… can now log
+      in."); the first sign-in registered the device key;
+    - 0008: "Looking up …", then the 404 sentence and "Record anyway" with no chips; after
+      the tap, the chips (copper), GPS within 12 m, Save off until a weight was typed;
+      1.6 kg saved in 0.1 s; "Send my work" "1 still waiting to be sent" after the save
+      and after Send now (`STAGE_NOT_READY`: the A57 shows its handoff "under review",
+      more than 10% off the registration, so the consignment is held);
+    - 0007: "Mineral: Copper, Stage: On its way", no earlier weight anywhere (Q1); 1.9 kg
+      saved in 0.2 s, "1 sent to the server ✓"; "My purchases" "Bought MC-2026-LSK-0007,
+      Copper, 1.9 kg, Sent ✓", and 0008 waiting;
+    - "Check a consignment" on 0007: "Verified: every step matches the blockchain", stage
+      Bought, three steps (registered by the miner 2 kg, handed off to the transporter
+      1.9 kg, "Bought by you" 1.9 kg), each "Matches the blockchain" with its transaction.
+      This is "Full chain on devices" (Q5);
+    - 0007 again: "You recorded buying this consignment on 20 Nov, 20:43." (Q4);
+    - 0009 (emerald): the transporter took custody on the A57 at 3.9 g (stage Registered,
+      sent ✓); the buyer in airplane mode got the "No network" sentence, the chips and no
+      "Record anyway", saved 3.88 g, "Not sent: no internet connection"; with the network
+      back it was sent (6.1 s for the first send after airplane mode) and "My purchases"
+      shows it sent.
+  - Seen and explained, not defects: the 21:20 summary had no "still waiting" line
+    because an automatic send skips a deferred step during its backoff (Send now ignores
+    it); the emulator's GPS is one fixed point, so the purchase shows the registration's
+    coordinates; the saved screen's "It will be sent when you are online" is the shared
+    sentence of every role.
+  - Not checkable on a device: Q2 (the phone's own Q4 refusal comes first, and a key
+    belongs to one phone); covered by widget tests.
+- ✅ **T5 Docs and PR** (about 20 min). `decisions.md` "Purchase app (1)–(6)" and one known
+  limitation, `testing-log.md`, `progress.md`, `CLAUDE.md`, the PR description.
 
 About 2.5 h of Claude Code time plus the developer's 30 minutes.
 

@@ -36,16 +36,18 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 20 Nov 2026, after Buyer purchase T1. Read this first in a new session, then
-`docs/progress.md` (the day plan and the current feature's subtasks), then
-`docs/plans/buyer-purchase-plan.md`, then `docs/decisions.md`.
+Updated 20 Nov 2026, 21:30, after Buyer purchase T5 (feature done). Read this first in a new
+session, then `docs/progress.md` (the day plan and the current feature's subtasks), then the
+current feature's plan, then `docs/decisions.md`.
 
-- **Now: Buyer purchase** on `feature/buyer-purchase` (created from `main` after PR #16;
-  **not pushed yet**: its first push needs `--set-upstream`, or Publish Branch),
-  `docs/plans/buyer-purchase-plan.md` (approved 20 Nov, Q1–Q5 as proposed). App only
-  (`mobile/`, `docs/`); nothing deploys to Render. 1/5 done, 1762 tests passed, 0 skipped.
-  - T1 (commit pending, by the developer: "feat(mobile): purchase payload and signed save
-    on a shared 8-line builder (buyer purchase T1)"): `steps/domain/later_step_payload.dart`
+- **Now: Buyer purchase done (5/5), waiting for the developer's commits and PR** on
+  `feature/buyer-purchase` (created from `main` after PR #16; pushed, tracks
+  `origin/feature/buyer-purchase`), `docs/plans/buyer-purchase-plan.md` (approved 20 Nov,
+  Q1–Q5 as proposed). App only (`mobile/`, `docs/`); nothing deploys to Render. 1806 tests
+  passed, 0 skipped. T2–T5 are **not committed**: two commits, code (T2+T3, because four
+  files changed in both) then docs; the file lists are in `docs/progress.md`.
+  - T1 (`9ca43c0`, CLAUDE.md in `49ce746` under the same message):
+    `steps/domain/later_step_payload.dart`
     `buildLaterStepPayload(LaterStepType.handoff|purchase, …)`, the one 8-line builder;
     `buildHandoffPayload` and `purchase/domain/purchase_payload.dart` `buildPurchasePayload`
     call it. `purchase/data/record_purchase.dart` `RecordPurchase.save(user, qrCode,
@@ -53,26 +55,30 @@ Updated 20 Nov 2026, after Buyer purchase T1. Read this first in a new session, 
     (mineral as `mineral_hint` only). Repository `firstStepOn(qrCode, actorId, type)`;
     `handedOffOn` calls it. New shared test fake `test/fakes/signing_channel.dart`
     (`SigningChannel`, `refuse`, `signature`); the older tests keep their own copies.
-  - **Next: T2, the "Record purchase" screen** (about 75 min; spec in the plan's §4 and T2):
-    - a `CustodyStepKind` (`handoff`, `purchase`) carries what differs (words, the save,
-      the step type for `firstStepOn`, home and paths, the warning rules);
-      `CustodyController` and `TakeCustodyScreen` (`lib/features/handoff/presentation/`)
-      take it; files are not moved (Q4). **Every existing "Take custody" test must pass
-      unchanged**;
-    - `/buyer/purchase` (`AppRoutes.buyerPurchase`), the buyer home's "Record purchase"
-      tile wired (`buyer_home_screen.dart`), other roles kept out;
-    - Q1: the weight is never shown before Save (as for the transporter);
-    - Q2: the check shows this buyer's own accepted purchase (stage `purchased`) →
-      refused, like Q4, with the date;
-    - Q3: a 404 for a buyer → one sentence (handoff not sent yet, under review, or already
-      sold), the mineral chips, and one "Record anyway" tap before Save; held and mismatch
-      also need "Record anyway"; offline or a failed check → chips, "you can still record it";
-    - words: "Record purchase", "Record another purchase", "Back to home".
-  - Then T3 (`StepListKind.purchases` at `/buyer/purchases`, "Bought MC-…"; `/buyer/sync`;
-    "Reports" stays "Coming soon"), T4 phone check (also "Full chain on devices", Q5:
-    MC-2026-LSK-0007 accepted, 0008 waits behind its flagged handoff, one offline, a repeat
-    scan refused; a buyer account requested in the app and approved by the admin), T5 docs
-    and PR.
+  - T2: `CustodyStepKind` (`handoff`, `purchase`) in
+    `handoff/domain/custody_check.dart`; `needsRecordAnyway(warning, kind)` (every purchase
+    warning), `viewerPurchasedOn(view)` (Q2). `CustodyController(kind)` with
+    `custodyControllerProvider` (handoff, unchanged) and `purchaseControllerProvider`,
+    `custodyControllerFor(kind)`; `ScanBoughtByYou`. `TakeCustodyScreen(kind:)`, words in
+    a private `_KindWords` extension; `/buyer/purchase`. 91 handoff tests unchanged; 24 new
+    in `test/features/purchase/presentation/record_purchase_screen_test.dart`.
+  - T3: `StepListKind.purchases` ("Bought MC-…") at `/buyer/purchases`,
+    `/buyer/sync`; all buyer tiles but "Reports" wired. `homes_test.dart`: the buyer's
+    "Coming soon" case taps "Reports" (changed by plan) and a "buyer tiles" group; 16 new
+    in `my_purchases_screen_test.dart`.
+  - T4 phone check passed (20 Nov, emulator as buyer and admin, A57 as transporter):
+    0008 404 → "Record anyway" → waits (`STAGE_NOT_READY`, its handoff under review);
+    0007 accepted and "Verified" with three steps on the chain (this is "Full chain on
+    devices"); 0007 again refused; 0009 handoff on the A57, purchase in airplane mode,
+    sent afterwards. Results in the plan's T4 and `testing-log.md`.
+  - T5: `decisions.md` Purchase app (1)–(6) and one known limitation; Purchase app (5)
+    ("already bought" by someone else also needs "Record anyway") confirmed by the
+    developer after T4.
+  - **Next:** the developer runs the two-commit script, opens the PR and merges it; then
+    the start-of-feature script for **Officer alerts** (`feature/officer-alerts`, Sat 21),
+    which starts with "plan only". Its test case: 0008's flagged handoff; clearing it
+    should let the buyer's waiting 1.6 kg purchase in, which is itself more than 10% off
+    the 2 kg registration, so a second alert is expected.
   - Lesson: never put `git checkout` (or any forbidden git write) in a command, even to
     restore a file after a mutation check; undo a mutation with a second `sed`.
 
@@ -362,8 +368,8 @@ their known limitations):
 
 1. ~~Check M7 on the A57, then the pull request for `feature/miner-registration`~~ (merged as
    PR #10).
-2. The remaining role modules in the app: ~~transporter handoff~~ (PR #16), buyer
-   purchase, the officer's alerts list and consignment check (Scope (2), (9)), and the
+2. The remaining role modules in the app: ~~transporter handoff~~ (PR #16), ~~buyer
+   purchase~~ (done 20 Nov, PR pending), the officer's alerts list and consignment check (Scope (2), (9)), and the
    admin screens and reports (Scope (3)). The order by day is in `docs/progress.md`.
 
 **Working rules that held all weekend:**
