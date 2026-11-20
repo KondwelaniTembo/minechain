@@ -1,6 +1,8 @@
 // The buyer's home (plan section 4.2). Placeholder tiles for now: each says
 // "Coming soon" until its module is built.
-// "Check a consignment" is built (consignment check plan).
+// "Check a consignment" is built (consignment check plan), and "Record
+// purchase" (buyer purchase plan, T2), "My purchases" and "Send my work"
+// (T3). "Reports" waits for the Reports feature (Sat 21).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,12 +41,12 @@ class BuyerHomeScreen extends ConsumerWidget {
         HomeAction(
           icon: Icons.point_of_sale,
           label: AppText.recordPurchase,
-          onTap: soon,
+          onTap: () => context.push(AppRoutes.buyerPurchase),
         ),
         HomeAction(
           icon: Icons.receipt_long,
           label: AppText.myPurchases,
-          onTap: soon,
+          onTap: () => context.push(AppRoutes.buyerPurchases),
         ),
         HomeAction(
           icon: Icons.table_chart,
@@ -54,7 +56,7 @@ class BuyerHomeScreen extends ConsumerWidget {
         HomeAction(
           icon: Icons.cloud_upload,
           label: AppText.sendMyWork,
-          onTap: soon,
+          onTap: () => context.push(AppRoutes.buyerSync),
         ),
       ],
     );

@@ -55,6 +55,16 @@ abstract final class AppRoutes {
   static const String transporterHandoffs = '/transporter/handoffs';
   static const String transporterSync = '/transporter/sync';
 
+  /// "Record purchase" (buyer purchase plan, T2): "Take custody" for the
+  /// buyer. Under /buyer, so the redirect's role rule keeps it for buyers
+  /// only.
+  static const String buyerPurchase = '/buyer/purchase';
+
+  /// "My purchases" and the buyer's "Send my work" (buyer purchase T3): the
+  /// miner's two screens again, under /buyer for the same role rule.
+  static const String buyerPurchases = '/buyer/purchases';
+  static const String buyerSync = '/buyer/sync';
+
   /// The administrator's list of pending account requests. Under /admin, so
   /// the redirect's role rule keeps it for administrators only.
   static const String adminRequests = '/admin/requests';

@@ -449,10 +449,11 @@ void main() {
       String qrCode = 'MC-DEMO-000001',
       String? hint = 'copper',
       int minute = 0,
+      String type = 'handoff',
     }) => NewLocalStep(
       stepId: '6f1d2c3a-0000-4000-8000-${n.toString().padLeft(12, '0')}',
       actorId: actor,
-      type: 'handoff',
+      type: type,
       qrCode: qrCode,
       mineral: null,
       mineralHint: hint,
@@ -630,6 +631,49 @@ void main() {
         await repository.insert(handoff(101));
         expect(
           await repository.handedOffOn('mc-demo-000001', transporter),
+          isNull,
+        );
+      });
+    });
+
+    // Buyer purchase T1: the same lookup for any step type. handedOffOn is
+    // now firstStepOn(..., 'handoff'); the group above still covers it.
+    group('firstStepOn', () {
+      const buyer = '3f2b6c1e-0000-4000-8000-000000000003';
+
+      test('a purchase is found by its type only', () async {
+        await repository.insert(
+          handoff(201, actor: buyer, type: 'purchase', minute: 7),
+        );
+        expect(
+          await repository.firstStepOn('MC-DEMO-000001', buyer, 'purchase'),
+          DateTime.utc(2026, 11, 17, 8, 7),
+        );
+        expect(
+          await repository.firstStepOn('MC-DEMO-000001', buyer, 'handoff'),
+          isNull,
+        );
+      });
+
+      test("a transporter's handoff is not this buyer's purchase", () async {
+        await repository.insert(handoff(101));
+        expect(
+          await repository.firstStepOn('MC-DEMO-000001', buyer, 'purchase'),
+          isNull,
+        );
+      });
+
+      test('a rejected purchase does not count', () async {
+        await repository.insert(handoff(201, actor: buyer, type: 'purchase'));
+        await repository.applyResults([
+          StepRejected(
+            handoff(201).stepId,
+            code: 'SIGNATURE_INVALID',
+            message: 'x',
+          ),
+        ], at: at);
+        expect(
+          await repository.firstStepOn('MC-DEMO-000001', buyer, 'purchase'),
           isNull,
         );
       });

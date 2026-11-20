@@ -7,6 +7,13 @@
 // The transporter's view is the blind one (Verification (6)): no weight is
 // ever shown here, so the transporter types what their own scale says.
 //
+// "Record purchase" (buyer purchase plan, T2) is this page for the buyer,
+// with kind: CustodyStepKind.purchase. The words, the home, the warnings
+// and the save differ (see _KindWords); the flow is the same. The buyer is
+// not shown earlier weights either (Q1), although the server would send
+// them: their figure is their own measurement, so the 10% rule stays a real
+// comparison.
+//
 // Before the form, the same two gates as registration (SavedWorkGate).
 
 import 'package:flutter/material.dart';
@@ -31,26 +38,74 @@ import '../domain/custody_check.dart';
 import 'custody_controller.dart';
 
 class TakeCustodyScreen extends StatelessWidget {
-  const TakeCustodyScreen({super.key});
+  const TakeCustodyScreen({this.kind = CustodyStepKind.handoff, super.key});
+
+  /// Take custody (a handoff) or Record purchase.
+  final CustodyStepKind kind;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        leading: BackButton(
-          onPressed: () => backOrHome(context, AppRoutes.transporter),
-        ),
-        title: const Text(AppText.takeCustody),
+        leading: BackButton(onPressed: () => backOrHome(context, kind.home)),
+        title: Text(kind.title),
       ),
-      body: const SafeArea(
-        child: SavedWorkGate(homePath: AppRoutes.transporter, child: _Body()),
+      body: SafeArea(
+        child: SavedWorkGate(
+          homePath: kind.home,
+          child: _Body(kind: kind),
+        ),
       ),
     );
   }
 }
 
+/// What the page says and where it goes back to, by kind.
+extension _KindWords on CustodyStepKind {
+  String get title => switch (this) {
+    CustodyStepKind.handoff => AppText.takeCustody,
+    CustodyStepKind.purchase => AppText.recordPurchase,
+  };
+
+  String get home => switch (this) {
+    CustodyStepKind.handoff => AppRoutes.transporter,
+    CustodyStepKind.purchase => AppRoutes.buyer,
+  };
+
+  String get anotherLabel => switch (this) {
+    CustodyStepKind.handoff => AppText.takeAnotherCustody,
+    CustodyStepKind.purchase => AppText.recordAnotherPurchase,
+  };
+
+  /// Q4: already recorded on this phone, in the phone's own time.
+  String alreadyRecorded(DateTime localTime) => switch (this) {
+    CustodyStepKind.handoff => AppText.alreadyTookCustody(localTime),
+    CustodyStepKind.purchase => AppText.alreadyBoughtHere(localTime),
+  };
+
+  String warning(CustodyWarning warning) => switch ((this, warning)) {
+    (CustodyStepKind.handoff, CustodyWarning.mismatch) =>
+      AppText.custodyMismatch,
+    (CustodyStepKind.handoff, CustodyWarning.underReview) =>
+      AppText.custodyUnderReview,
+    (CustodyStepKind.handoff, CustodyWarning.alreadyBought) =>
+      AppText.custodyAlreadyBought,
+    (CustodyStepKind.handoff, CustodyWarning.notOnServer) =>
+      AppText.custodyNotOnServer,
+    (CustodyStepKind.purchase, CustodyWarning.mismatch) =>
+      AppText.purchaseMismatch,
+    (CustodyStepKind.purchase, CustodyWarning.underReview) =>
+      AppText.purchaseUnderReview,
+    (CustodyStepKind.purchase, CustodyWarning.alreadyBought) =>
+      AppText.purchaseAlreadyBought,
+    (CustodyStepKind.purchase, CustodyWarning.notOnServer) =>
+      AppText.purchaseNotOnServer,
+  };
+}
+
 class _Body extends ConsumerStatefulWidget {
-  const _Body();
+  const _Body({required this.kind});
+  final CustodyStepKind kind;
 
   @override
   ConsumerState<_Body> createState() => _BodyState();
@@ -94,15 +149,18 @@ class _BodyState extends ConsumerState<_Body> with WidgetsBindingObserver {
     }
   }
 
+  NotifierProvider<CustodyController, CustodyState> get _provider =>
+      custodyControllerFor(widget.kind);
+
   void _weightEdited(String text) {
-    ref.read(custodyControllerProvider.notifier).weightChanged(text);
+    ref.read(_provider.notifier).weightChanged(text);
     if (_showWeightProblems) setState(() => _showWeightProblems = false);
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) return;
-    final controller = ref.read(custodyControllerProvider.notifier);
+    final controller = ref.read(_provider.notifier);
     // ask: false, as on registration: closing any permission dialog also
     // "resumes" the app, and only the buttons may ask.
     if (controller.locationBlocked) controller.startLocation(ask: false);
@@ -111,22 +169,23 @@ class _BodyState extends ConsumerState<_Body> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     // Each bag starts with an empty weight field.
-    ref.listen(custodyControllerProvider, (previous, next) {
+    final kind = widget.kind;
+    ref.listen(_provider, (previous, next) {
       if (next is! CustodyReady) {
         _weight.clear();
         _showWeightProblems = false;
       }
     });
-    final state = ref.watch(custodyControllerProvider);
-    final controller = ref.read(custodyControllerProvider.notifier);
+    final state = ref.watch(_provider);
+    final controller = ref.read(_provider.notifier);
 
     if (state case CustodyReady(saved: true, :final saveDuration)) {
       return SavedView(
         duration: saveDuration,
-        anotherLabel: AppText.takeAnotherCustody,
+        anotherLabel: kind.anotherLabel,
         savedThisVisit: controller.savesThisVisit,
         onAnother: controller.scanAgain,
-        onHome: () => backOrHome(context, AppRoutes.transporter),
+        onHome: () => backOrHome(context, kind.home),
       );
     }
 
@@ -138,6 +197,7 @@ class _BodyState extends ConsumerState<_Body> with WidgetsBindingObserver {
           constraints: const BoxConstraints(maxWidth: 560),
           child: switch (state) {
             CustodyScanning(:final notice) => _Scanning(
+              kind: kind,
               notice: notice,
               onCode: controller.onScanned,
             ),
@@ -168,7 +228,12 @@ class _BodyState extends ConsumerState<_Body> with WidgetsBindingObserver {
 // ---- Scanning ----------------------------------------------------------------
 
 class _Scanning extends ConsumerWidget {
-  const _Scanning({required this.notice, required this.onCode});
+  const _Scanning({
+    required this.kind,
+    required this.notice,
+    required this.onCode,
+  });
+  final CustodyStepKind kind;
   final ScanNotice? notice;
   final ValueChanged<String> onCode;
 
@@ -178,7 +243,8 @@ class _Scanning extends ConsumerWidget {
     final text = switch (notice) {
       null => null,
       ScanNotOurs() => AppText.notOurRecord,
-      ScanAlreadyTaken(:final on) => AppText.alreadyTookCustody(on.toLocal()),
+      ScanAlreadyTaken(:final on) => kind.alreadyRecorded(on.toLocal()),
+      ScanBoughtByYou(:final on) => AppText.boughtByYou(on.toLocal()),
       ScanPhoneBusy() => AppText.custodyPhoneBusy,
     };
     return Column(
@@ -280,16 +346,11 @@ class _Ready extends StatelessWidget {
         ],
         for (final warning in form.warnings) ...[
           StatusLine(
-            icon: needsRecordAnyway(warning)
+            icon: needsRecordAnyway(warning, form.kind)
                 ? Icons.report_problem
                 : Icons.info_outline,
-            error: needsRecordAnyway(warning),
-            text: switch (warning) {
-              CustodyWarning.mismatch => AppText.custodyMismatch,
-              CustodyWarning.underReview => AppText.custodyUnderReview,
-              CustodyWarning.alreadyBought => AppText.custodyAlreadyBought,
-              CustodyWarning.notOnServer => AppText.custodyNotOnServer,
-            },
+            error: needsRecordAnyway(warning, form.kind),
+            text: form.kind.warning(warning),
           ),
           const SizedBox(height: AppSizes.spaceS),
         ],

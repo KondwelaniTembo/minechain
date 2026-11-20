@@ -7,11 +7,30 @@
 // blocks the handoff (Q2, option A). Only the two that mean "something is
 // already wrong with this consignment" ask for one extra "Record anyway".
 //
+// "Record purchase" (buyer purchase plan, Q4) is the same page for the
+// licensed buyer, chosen by [CustodyStepKind]. Its rules are stricter,
+// because money may change hands: every warning needs "Record anyway"
+// (Q3), and the buyer's own accepted purchase is refused outright (Q2).
+//
 // Plain Dart, no Flutter.
 
 import '../../registration/domain/mineral.dart';
+import '../../steps/domain/later_step_payload.dart';
 import '../../verification/domain/consignment_view.dart';
 import '../../verification/domain/verdict.dart';
+
+/// Which custody step the page records: the transporter's handoff ("Take
+/// custody") or the buyer's purchase ("Record purchase").
+enum CustodyStepKind {
+  handoff(LaterStepType.handoff),
+  purchase(LaterStepType.purchase);
+
+  const CustodyStepKind(this.stepType);
+
+  /// The step this page signs, and the type the "already recorded on this
+  /// phone" refusal (Q4) looks for.
+  final LaterStepType stepType;
+}
 
 /// Why the consignment could not be checked. Each is "you can still record
 /// it": the step is signed and kept on the phone, and checked when sent.
@@ -89,8 +108,35 @@ List<CustodyWarning> custodyWarnings(CustodyCheck check) => switch (check) {
   CustodyUnchecked() => const [],
 };
 
-/// Whether [warning] needs one "Record anyway" tap before Save (Q2): only
-/// a mismatch and a hold. "Already bought" and "not on the server yet" are
-/// notes only.
-bool needsRecordAnyway(CustodyWarning warning) =>
-    warning == CustodyWarning.mismatch || warning == CustodyWarning.underReview;
+/// Whether [warning] needs one "Record anyway" tap before Save.
+///
+/// A handoff (Q2 of the handoff plan): only a mismatch and a hold.
+/// "Already bought" and "not on the server yet" are notes only.
+///
+/// A purchase: every warning. A 404 may mean the bag is held or already
+/// sold to someone else (buyer purchase Q3), and "already bought" (by
+/// someone else, since the buyer's own purchase is refused) would be
+/// flagged high by the server.
+bool needsRecordAnyway(
+  CustodyWarning warning, [
+  CustodyStepKind kind = CustodyStepKind.handoff,
+]) => switch (kind) {
+  CustodyStepKind.handoff =>
+    warning == CustodyWarning.mismatch || warning == CustodyWarning.underReview,
+  CustodyStepKind.purchase => true,
+};
+
+/// When the viewer's own accepted purchase was captured, if the server's
+/// answer holds one (buyer purchase Q2): a buyer sees a `purchased`
+/// consignment only when it is theirs. The earliest, in the phone's signed
+/// time (UTC); null when there is none.
+DateTime? viewerPurchasedOn(ConsignmentView view) {
+  DateTime? first;
+  for (final step in view.steps) {
+    if (step.type != StepType.purchase || !step.byYou) continue;
+    if (first == null || step.capturedAt.isBefore(first)) {
+      first = step.capturedAt;
+    }
+  }
+  return first;
+}

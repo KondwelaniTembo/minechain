@@ -129,7 +129,14 @@ class LocalStepsRepository {
   /// transporter on the same phone is a different custodian. A handoff the
   /// server rejected does not count, as for [registeredOn].
   Future<DateTime?> handedOffOn(String qrCode, String actorId) =>
-      _db.run((db) => _handedOffOn(db, qrCode, actorId));
+      firstStepOn(qrCode, actorId, 'handoff');
+
+  /// When [actorId] first saved a [type] step for [qrCode] on this phone, or
+  /// null if never: the "already recorded" refusal of "Take custody" (Q4)
+  /// and "Record purchase" (buyer purchase plan). Only this account's steps
+  /// count, and a step the server rejected does not, as for [registeredOn].
+  Future<DateTime?> firstStepOn(String qrCode, String actorId, String type) =>
+      _db.run((db) => _firstStepOn(db, qrCode, actorId, type));
 
   /// Writes down the server's answers, all in one transaction. Only rows
   /// still `queued` or `deferred` change: an answer never moves a synced,
@@ -246,18 +253,23 @@ DateTime? _registeredOn(Database db, String qrCode) {
   }
 }
 
-DateTime? _handedOffOn(Database db, String qrCode, String actorId) {
+DateTime? _firstStepOn(
+  Database db,
+  String qrCode,
+  String actorId,
+  String type,
+) {
   try {
     final rows = db.select(
-      "SELECT min(created_at) AS first FROM local_steps "
-      "WHERE qr_code = ? AND type = 'handoff' AND actor_id = ? "
+      'SELECT min(created_at) AS first FROM local_steps '
+      'WHERE qr_code = ? AND type = ? AND actor_id = ? '
       "AND sync_state <> 'rejected'",
-      [qrCode, actorId],
+      [qrCode, type, actorId],
     );
     final first = rows.single['first'] as String?;
     return first == null ? null : DateTime.parse(first);
   } on SqliteException catch (e) {
-    throw LocalStepsFailure('handed-off-on', busy: isBusyOrLocked(e));
+    throw LocalStepsFailure('first-step-on', busy: isBusyOrLocked(e));
   }
 }
 

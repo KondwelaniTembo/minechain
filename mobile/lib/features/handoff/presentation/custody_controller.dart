@@ -16,6 +16,13 @@
 // Never a dead end (Q2): offline, a slow answer, a server error or an ended
 // session all lead to "could not be checked, you can still record it".
 //
+// The same controller serves the buyer's "Record purchase" (buyer purchase
+// plan, Q4), by [CustodyStepKind]: the purchase's Q4 looks for this
+// buyer's purchases, the check also refuses the buyer's own accepted
+// purchase (Q2), every warning needs "Record anyway" (Q3), and Save signs
+// a purchase. Each kind has its own provider, so the two pages never share
+// a scan.
+//
 // Nothing here is logged; the states' toString() print no QR code, place or
 // weight.
 
@@ -38,9 +45,12 @@ import '../../steps/data/local_steps_repository.dart';
 import '../../steps/presentation/location_tracker.dart';
 import '../../sync/data/sync_service.dart';
 import '../../sync/domain/sync_report.dart';
+import '../../purchase/data/record_purchase.dart' show recordPurchaseProvider;
 import '../../verification/data/consignment_check_repository.dart';
 import '../data/record_handoff.dart';
 import '../domain/custody_check.dart';
+
+export '../domain/custody_check.dart' show CustodyStepKind;
 
 sealed class CustodyState {
   const CustodyState();
@@ -60,6 +70,13 @@ final class ScanNotOurs extends ScanNotice {
 /// on [on] (UTC). Q4.
 final class ScanAlreadyTaken extends ScanNotice {
   const ScanAlreadyTaken(this.on);
+  final DateTime on;
+}
+
+/// The server says this buyer has already bought it, captured [on] (UTC).
+/// Buyer purchase Q2; never for a handoff.
+final class ScanBoughtByYou extends ScanNotice {
+  const ScanBoughtByYou(this.on);
   final DateTime on;
 }
 
@@ -92,6 +109,7 @@ final class CustodyReady extends CustodyState {
   const CustodyReady({
     required this.qrCode,
     required this.check,
+    this.kind = CustodyStepKind.handoff,
     this.chosenMineral,
     this.recordAnyway = false,
     this.location = const LocationStarting(),
@@ -103,6 +121,9 @@ final class CustodyReady extends CustodyState {
 
   final String qrCode;
   final CustodyCheck check;
+
+  /// Which step is recorded: it decides which warnings need "Record anyway".
+  final CustodyStepKind kind;
 
   /// The transporter's choice from the chips, when the server did not say.
   final Mineral? chosenMineral;
@@ -131,9 +152,10 @@ final class CustodyReady extends CustodyState {
 
   List<CustodyWarning> get warnings => custodyWarnings(check);
 
-  /// A held or mismatching consignment, not yet confirmed (Q2).
+  /// A held or mismatching consignment, not yet confirmed (Q2); for a
+  /// purchase, any warning (buyer purchase Q3).
   bool get waitingForRecordAnyway =>
-      !recordAnyway && warnings.any(needsRecordAnyway);
+      !recordAnyway && warnings.any((w) => needsRecordAnyway(w, kind));
 
   /// The mineral is settled and no "Record anyway" is waiting: the weight
   /// and Save may be shown.
@@ -169,6 +191,7 @@ final class CustodyReady extends CustodyState {
   }) => CustodyReady(
     qrCode: qrCode,
     check: check,
+    kind: kind,
     chosenMineral: chosenMineral ?? this.chosenMineral,
     recordAnyway: recordAnyway ?? this.recordAnyway,
     location: location ?? this.location,
@@ -185,6 +208,11 @@ final class CustodyReady extends CustodyState {
 }
 
 class CustodyController extends Notifier<CustodyState> {
+  CustodyController([this.kind = CustodyStepKind.handoff]);
+
+  /// What this page records.
+  final CustodyStepKind kind;
+
   late final LocationTracker _location = LocationTracker(
     source: () => ref.read(locationSourceProvider),
     clock: () => ref.read(clockProvider),
@@ -225,7 +253,7 @@ class CustodyController extends Notifier<CustodyState> {
     final DateTime? earlier;
     try {
       final steps = await ref.read(localStepsRepositoryProvider.future);
-      earlier = await steps.handedOffOn(raw, user.id);
+      earlier = await steps.firstStepOn(raw, user.id, kind.stepType.type);
     } on Object {
       // Busy, or a database problem the screen's gate shows by itself.
       if (ref.mounted) state = const CustodyScanning(ScanPhoneBusy());
@@ -243,7 +271,21 @@ class CustodyController extends Notifier<CustodyState> {
 
     final check = await _askServer(raw);
     if (!ref.mounted || state is! CustodyChecking) return;
-    state = CustodyReady(qrCode: raw, check: check, location: _location.status);
+    // Q2: the buyer's own accepted purchase is refused like Q4. The server
+    // would flag a second one high, and it can only be a mistake.
+    if (kind == CustodyStepKind.purchase && check is CustodyChecked) {
+      final bought = viewerPurchasedOn(check.view);
+      if (bought != null) {
+        state = CustodyScanning(ScanBoughtByYou(bought));
+        return;
+      }
+    }
+    state = CustodyReady(
+      qrCode: raw,
+      check: check,
+      kind: kind,
+      location: _location.status,
+    );
   }
 
   Future<CustodyCheck> _askServer(String qrCode) async {
@@ -340,7 +382,11 @@ class CustodyController extends Notifier<CustodyState> {
     final DateTime? earlier;
     try {
       final steps = await ref.read(localStepsRepositoryProvider.future);
-      earlier = await steps.handedOffOn(form.qrCode, user.id);
+      earlier = await steps.firstStepOn(
+        form.qrCode,
+        user.id,
+        kind.stepType.type,
+      );
     } on Object catch (error) {
       // A busy moment says "try Save again"; any other failure is the
       // storage problem.
@@ -358,17 +404,33 @@ class CustodyController extends Notifier<CustodyState> {
     }
 
     final stopwatch = Stopwatch()..start();
-    final result = await ref
-        .read(recordHandoffProvider)
-        .save(
-          user: user,
-          qrCode: form.qrCode,
-          mineral: mineral,
-          weightMg: weight.milligrams,
-          latitude: fix.latitude,
-          longitude: fix.longitude,
-          gpsAccuracyM: fix.accuracyM,
-        );
+    // The two saves take the same fields; only the signed header differs.
+    final result = await switch (kind) {
+      CustodyStepKind.handoff =>
+        ref
+            .read(recordHandoffProvider)
+            .save(
+              user: user,
+              qrCode: form.qrCode,
+              mineral: mineral,
+              weightMg: weight.milligrams,
+              latitude: fix.latitude,
+              longitude: fix.longitude,
+              gpsAccuracyM: fix.accuracyM,
+            ),
+      CustodyStepKind.purchase =>
+        ref
+            .read(recordPurchaseProvider)
+            .save(
+              user: user,
+              qrCode: form.qrCode,
+              mineral: mineral,
+              weightMg: weight.milligrams,
+              latitude: fix.latitude,
+              longitude: fix.longitude,
+              gpsAccuracyM: fix.accuracyM,
+            ),
+    };
     stopwatch.stop();
     _finish(result, stopwatch.elapsed);
     if (result is SaveDone && ref.mounted) {
@@ -411,3 +473,18 @@ final custodyControllerProvider =
     NotifierProvider.autoDispose<CustodyController, CustodyState>(
       CustodyController.new,
     );
+
+/// "Record purchase" (buyer purchase plan): the same controller for the
+/// buyer, with its own state.
+final purchaseControllerProvider =
+    NotifierProvider.autoDispose<CustodyController, CustodyState>(
+      () => CustodyController(CustodyStepKind.purchase),
+    );
+
+/// The provider for [kind]'s page.
+NotifierProvider<CustodyController, CustodyState> custodyControllerFor(
+  CustodyStepKind kind,
+) => switch (kind) {
+  CustodyStepKind.handoff => custodyControllerProvider,
+  CustodyStepKind.purchase => purchaseControllerProvider,
+};

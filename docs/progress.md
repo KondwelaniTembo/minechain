@@ -4,8 +4,8 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 20 Nov 2026, after Transporter handoff T7, on `feature/transporter-handoff`
-(8/8, waiting for the PR). Consignment check merged as PR #15. Next: buyer purchase.
+Last updated: 20 Nov 2026, 21:30, after Buyer purchase T5, on `feature/buyer-purchase` (5/5).
+Next: the developer commits (two commits), opens and merges the PR; then Officer alerts (Sat 21).
 
 ## (a) Whole project
 
@@ -44,13 +44,18 @@ Last updated: 20 Nov 2026, after Transporter handoff T7, on `feature/transporter
 
 ### Fri 20 Nov
 
-- ⬜ Buyer purchase and "My purchases" (Scope (8))
-- ⬜ Full chain on devices: miner → transporter → buyer, synced and anchored
-- ⬜ Officer alerts: list, detail, "Confirm problem" and "Clear, no problem"
-  (FR-08, Scope (2), (5))
+- ✅ Buyer purchase and "My purchases" (Scope (8)), 5/5; PR to be opened by the developer
+- ✅ Full chain on devices: miner → transporter → buyer, synced and anchored (MC-2026-LSK-0007
+  "Verified", three steps on the chain, 20 Nov; buyer purchase T4, Q5)
+- ➡️ Officer alerts: moved to Sat 21
 
 ### Sat 21 Nov
 
+- ⬜ Officer alerts (from Fri 20): list, detail, "Confirm problem" and "Clear, no problem"
+  (FR-08, Scope (2), (5)). Test case ready: MC-2026-LSK-0008's handoff is under review
+  (more than 10% off); clearing it should let the buyer's waiting purchase in, and that
+  purchase (1.6 kg against a 2 kg registration) is itself more than 10% off, so expect a
+  second alert
 - ⬜ Admin accounts: list, create with activation code, edit name, suspend and reactivate,
   delete, reset a device key and a password (FR-10, FR-12, Scope (3), (6)); includes
   resetting the demo accounts' device key (Fred) and password (Mutale)
@@ -78,45 +83,50 @@ Last updated: 20 Nov 2026, after Transporter handoff T7, on `feature/transporter
 
 1. ✅ Consignment check, carried over from Thu 19 (7/7; merged as PR #15): ✅ two result-page
    fixes (1587 tests passed); ✅ the rest of T6 (offline, a verified result); ✅ T7 docs
-2. ✅ Transporter handoff, carried over from Thu 19: 8/8 (T5b added); PR to open
-3. ⬜ Buyer purchase and "My purchases" (about 3–4 h)
-4. ⬜ If time is left: Full chain on devices; Officer alerts. Otherwise both move to Sat 21,
-   and FR-14 (dashboard) is the first cut there
+2. ✅ Transporter handoff, carried over from Thu 19: 8/8 (T5b added); merged as PR #16
+3. ✅ Buyer purchase and "My purchases": 5/5; its phone check also covered
+   "Full chain on devices" (Q5). Commits and PR by the developer
+4. ✅ Full chain on devices (inside Buyer purchase T4); ➡️ Officer alerts moved to Sat 21,
+   where FR-14 (dashboard) is the first cut
 
 Done on Thu 19 (session ended 20 Nov, 00:40): Hardening (PR #13), "My account" back arrow
 (PR #14), Consignment check T1–T5 (1584 tests passed, 0 skipped).
 
-## (c) Current feature: Transporter handoff — 8/8
+## (c) Current feature: Buyer purchase — 5/5
 
-Plan: `docs/plans/transporter-handoff-plan.md`, approved 20 Nov (Q1–Q5 as proposed). Branch
-`feature/transporter-handoff`, created by the developer from `main` after PR #15. App only
+Plan: `docs/plans/buyer-purchase-plan.md`, approved 20 Nov (Q1–Q5 as proposed). Branch
+`feature/buyer-purchase`, created by the developer from `main` after PR #16. App only
 (`mobile/`, `docs/`); nothing deploys to Render.
 
-- ✅ T1 Handoff payload: `buildHandoffPayload` (8 lines, no `mineral`), the shared grammar
-  checks; the spec's example and the handoff vectors byte for byte; 22 new tests
-- ✅ T2 Shared save: `SignedStepSaver` shared by registration and `RecordHandoff`
-  (registration tests unchanged); local schema version 2 adds `mineral_hint` (Q3 changed,
-  Handoff app (1)); `listOfTypeForActor`, `handedOffOn`; 39 new tests
-- ✅ T3 Take custody: scan and check: `/transporter/custody`, the tile wired; Q4 on the
-  phone first; one check per scan; 404, offline, failed and ended-session sentences, the
-  chips; Q2's warnings and "Record anyway"; shared gate and chips; 30 new tests
-- ✅ T4 Take custody: weight, GPS and save: the location moved into a shared
-  `LocationTracker` (registration tests unchanged), started only once a code is accepted;
-  the weight in the mineral's unit; Save with Q4 checked again; every refusal stores
-  nothing; the send after a save; shared location view, weight field and saved view;
-  18 new tests
-- ✅ T5 My handoffs and Send my work: `/transporter/handoffs` (the list screen by
-  `StepListKind`, "Took custody of …", the weight in the hint's unit) and
-  `/transporter/sync`; both tiles wired; "Send my work" goes back to the user's own home;
-  21 new tests
-- ✅ T6 Phone check (the developer, 20 Nov 14:38–15:01, emulator and A57): accepted, flagged
-  and offline handoffs all as planned. Found: "Send my work" shows only the last send
-- ✅ T5b What the sends came to (added after T6, approved: both parts): the summary on
-  "Send my work" since you last looked, and "2 saved this time." on both saved screens
-  (Handoff app (8), (9)); 23 new tests, 1740 passed. ✅ Emulator re-check fine; the heading
-  then became "sent 2 times"
-- ✅ T7 Docs and PR: decisions Handoff app (1)–(9) and two known limitations, the PR
-  description
+- ✅ T1 Purchase payload and save: one 8-line builder for handoff and purchase
+  (`later_step_payload.dart`, handoff tests unchanged); `buildPurchasePayload` against the
+  purchase vectors byte for byte; `RecordPurchase`; `firstStepOn`; 22 new tests, 1762 passed
+- ✅ T2 The "Record purchase" screen (`CustodyStepKind`, `/buyer/purchase`, Q1–Q3); the
+  91 handoff tests unchanged; 24 new, 1786 passed
+- ✅ T3 My purchases and Send my work (`/buyer/purchases`, `/buyer/sync`); the buyer's
+  "Coming soon" case now taps "Reports" (changed by plan); 20 new, 1806 passed
+- T2 and T3 ran without stopping (the developer away, 20 Nov), so neither is committed.
+  Files by subtask:
+  - T2 only: `mobile/lib/features/handoff/domain/custody_check.dart`,
+    `mobile/lib/features/handoff/presentation/custody_controller.dart`,
+    `mobile/lib/features/handoff/presentation/take_custody_screen.dart`,
+    `mobile/test/features/purchase/presentation/record_purchase_screen_test.dart`;
+  - T3 only: `mobile/lib/features/consignments/presentation/my_consignments_screen.dart`,
+    `mobile/test/features/homes_test.dart`,
+    `mobile/test/features/consignments/presentation/my_purchases_screen_test.dart`;
+  - both: `mobile/lib/core/router/app_router.dart`, `mobile/lib/core/router/routes.dart`,
+    `mobile/lib/core/text/app_text.dart`,
+    `mobile/lib/features/buyer/presentation/buyer_home_screen.dart`. So T2 alone would
+    not build, and T2 and T3 go in one code commit;
+  - docs (T2, T3, T5): `docs/plans/buyer-purchase-plan.md`, `docs/progress.md`,
+    `docs/testing-log.md`, `docs/decisions.md`, `CLAUDE.md`: the second commit.
+- ✅ T4 Phone check, also "Full chain on devices" (Q5): emulator (buyer, admin) and A57
+  (transporter), 20 Nov 20:14–21:20, all as planned (results in the plan)
+- ✅ T5 Docs and PR: decisions Purchase app (1)–(6) ((5) confirmed by the developer), one
+  known limitation, the T4 results, CLAUDE.md, the PR text
+
+Transporter handoff (8/8) is merged as PR #16; its subtasks are in
+`docs/plans/transporter-handoff-plan.md`.
 
 Consignment check (7/7) is merged as PR #15; its subtasks are in
 `docs/plans/consignment-check-plan.md`.
@@ -124,8 +134,10 @@ Consignment check (7/7) is merged as PR #15; its subtasks are in
 Hardening (5/5, PR #13) and the "My account" back arrow (PR #14) are finished; their
 subtasks are in `docs/plans/hardening-plan.md` and `docs/decisions.md` Mobile (39).
 
-**Schedule (20 Nov, 00:40): behind by about one day.**
+**Schedule (20 Nov, 21:30): behind by about one feature.**
 - Thu 19 finished Wednesday's Hardening and the back arrow, and Consignment check T1–T5.
-- Carried to Fri 20: the end of Consignment check and all of Transporter handoff.
-- Likely carried to Sat 21: Full chain on devices and Officer alerts. FR-14 is the first
-  feature to cut if Saturday runs short.
+- Fri 20 finished Consignment check, Transporter handoff, Buyer purchase and the full
+  chain on devices.
+- Carried to Sat 21: Officer alerts. Suggested Saturday order, Musts first: Officer alerts,
+  Admin accounts, Reports, GPS zones, the FR-16 decision, the dashboard (FR-14, the first
+  cut), the end-to-end test.

@@ -3,6 +3,7 @@
 // alone (decision Mobile (34)). Since Transporter handoff T5 the same
 // screen is the transporter's "My handoffs": [StepListKind] holds what
 // differs (the step type, the words, the home and the way to add one).
+// Buyer purchase T3 adds the buyer's "My purchases" the same way.
 //
 // Shown per record: the QR code, the mineral and weight, when it was saved,
 // and the state in the words of "Send my work". A handoff's mineral is the
@@ -47,6 +48,18 @@ enum StepListKind {
     addPath: AppRoutes.transporterCustody,
     addIcon: Icons.local_shipping,
     homePath: AppRoutes.transporter,
+  ),
+  // Buyer purchase T3: the buyer's purchases, the mineral from the hint as
+  // for a handoff.
+  purchases(
+    type: 'purchase',
+    title: AppText.myPurchases,
+    empty: AppText.noPurchasesYet,
+    busy: AppText.purchasesPhoneBusy,
+    addLabel: AppText.recordPurchase,
+    addPath: AppRoutes.buyerPurchase,
+    addIcon: Icons.point_of_sale,
+    homePath: AppRoutes.buyer,
   );
 
   const StepListKind({
@@ -78,6 +91,7 @@ enum StepListKind {
   String heading(String qrCode) => switch (this) {
     registrations => qrCode,
     handoffs => AppText.tookCustodyOf(qrCode),
+    purchases => AppText.boughtRecord(qrCode),
   };
 }
 
