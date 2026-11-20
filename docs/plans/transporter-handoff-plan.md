@@ -106,11 +106,52 @@ NFR-06 counts taps after the scan: weight (typing), Save. The mineral chip only 
   weight shown in the unit of the stored mineral hint. `/transporter/sync`: the existing
   screen, with its one miner-only link made role-aware. Both tiles wired; router tests that
   other roles cannot open the paths.
-- ⬜ **T6 Phone check** (the developer, about 30 min). Exact commands in the T5 report. On
+- ✅ **T6 Phone check** (the developer, 20 Nov, 14:38–15:01). Exact commands in the T5 report. On
   the emulator, Mutale registers a new consignment inside the demo zone and sends it; on the
   A57 the transporter takes custody with a weight within 10% (accepted; the check then shows
   the weights, because they have handed off), and of a second bag with one 20% lighter
   (flagged, "under review"); one handoff saved in airplane mode and sent afterwards.
+  - Result: everything as planned. MC-2026-LSK-0007 at 1.9 kg was accepted, anchored and
+    "Verified", with the transporter's own weight shown. MC-2026-LSK-0008 at 1.6 kg was saved
+    in airplane mode (0.1 s) and waited on the phone. "Send my work" then said "no internet".
+    After Send now it came back "under review" with the 10% message. Scanning either bag
+    again was refused with the save time. Before the scan, airplane mode gave the "No
+    network" notice and the chips, as Q1 and Q3 intend.
+  - Seen, as designed:
+    - The check for 0008 lists only the registration: the held handoff is not listed (the
+      known limitation of 20 Nov after Verification app (10)).
+    - The handoff on 0007 says "Outside every licensed zone": the zone rule applies to
+      registrations only (Anomaly rules), so it is information, not a flag.
+  - Found: "Send my work" shows only the **last** send. Two saves in a row became two sends
+    of "1 sent" each, and the screen said "1 sent". At 14:57, an automatic "nothing to
+    send" replaced the 14:56 report that had the review message. This is fixed by T5b.
+- ⬜ **T5b What the sends came to** (added 20 Nov after T6, approved by the developer:
+  option 1, both parts; about 60 min). App only.
+  - **(a) Send my work sums up the sends since you last looked.** The sync service keeps,
+    besides `last`, a summary of every send that ended since the summary was last cleared:
+    - It holds the number of sends, the first start time, how many were sent to the server,
+      under review and rejected, every problem line, and the newest stop. The stop is
+      worded from the newest send only, because it says how things are now.
+    - A send with nothing to send adds nothing, so it never hides a summary that holds
+      something.
+    - The summary is cleared when the user taps Send now (a fresh summary starts) and when
+      the user leaves "Send my work".
+    - The heading reads, for example, "Since 14:40 — 2 sends after you saved". With one
+      send, it stays the heading used today.
+    - The counts at the top are unchanged.
+  - **(b) The saved screen counts this visit's saves.** "Saved on this phone …" gains
+    "2 saved this time." from the second save on, for "Register another" and "Take custody
+    of another". The count lives in the screen's own controller, so "Back to home" (or the
+    back arrow) starts again at zero.
+  - Tests:
+    - two saves, two sends, one summary of 2;
+    - an automatic "nothing to send" after a review does not hide it;
+    - Send now starts a fresh summary;
+    - leaving and coming back clears it;
+    - the count on both saved screens, and back to zero after "Back to home";
+    - text 2.0.
+  - A short phone re-check on the emulator: register two bags in a row, then open
+    "Send my work".
 - ⬜ **T7 Docs and PR** (about 20 min). `decisions.md` "Handoff app (1)…", `testing-log.md`,
   `progress.md`, `CLAUDE.md`, the PR description.
 

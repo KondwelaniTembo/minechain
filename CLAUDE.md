@@ -36,12 +36,12 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 20 Nov 2026, after Transporter handoff T5. Read this first in a new session, then
+Updated 20 Nov 2026, after Transporter handoff T6. Read this first in a new session, then
 `docs/progress.md` (the day plan and the current feature's subtasks), then `docs/decisions.md`.
 
 - **Now: Transporter handoff** on `feature/transporter-handoff` (pushed, tracks origin),
   `docs/plans/transporter-handoff-plan.md` (approved 20 Nov, Q1–Q5 as proposed; Q3 changed
-  in T2). App only (`mobile/`, `docs/`); nothing deploys to Render. 5/7 done, 1717 tests
+  in T2). App only (`mobile/`, `docs/`); nothing deploys to Render. 6/8 done (T5b added), 1717 tests
   passed, 0 skipped. Decisions Handoff app (1)–(7).
   - T1 (`962870a`): `handoff/domain/handoff_payload.dart` `buildHandoffPayload` (8 lines, no
     `mineral`), checked byte for byte against the spec example and the vectors.
@@ -70,11 +70,20 @@ Updated 20 Nov 2026, after Transporter handoff T5. Read this first in a new sess
     `handedOffOn`, then `recordHandoffProvider`, then `syncNow(afterSave)`. Shared widgets:
     `LocationStatusView`, `WeightField` / `weightErrorText`, `SavedView` / `saveProblemText`
     (`steps/presentation/`), `core/widgets/status_line.dart` `StatusLine`.
-  - T5 (not committed yet): `MyConsignmentsScreen(kind: StepListKind.handoffs)` at
+  - T5 (`d877290`): `MyConsignmentsScreen(kind: StepListKind.handoffs)` at
     `/transporter/handoffs` ("Took custody of …", weight in the hint's unit), `myStepsProvider`
     (family by step type), `SendWorkScreen` at `/transporter/sync` with its back arrow to
     `homeOf(role)`; transporter tiles all wired; `homes_test.dart` `tilesOpenTheirPages`.
-  - **Next: T6** phone check (developer; commands in the T5 report), then T7 docs and PR.
+  - T6 phone check done (20 Nov, emulator and A57): accepted, flagged and offline handoffs
+    all as planned (results in the plan's T6). It found that "Send my work" shows only the
+    last send. Two saves in a row read "1 sent", and an automatic "nothing to send" hid a
+    review message.
+  - **Next: T5b** (approved, option 1, both parts; spec in the plan's T5b):
+    - the sync service keeps a summary of every send since the user last looked, shown on
+      "Send my work" ("Since 14:40 — 2 sends after you saved"); an empty send adds nothing;
+      the summary is cleared by Send now and by leaving the screen;
+    - both saved screens add "2 saved this time." from the second save in one visit.
+    - Then a short emulator re-check, then T7 docs and PR.
   - Lessons from this feature: a new branch's first push needs
     `git push --set-upstream origin <branch>`; `dart format` takes file paths only, never a
     folder (a folder-wide run on `lib/core` re-wrapped five network and storage files in T3,
