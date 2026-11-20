@@ -195,6 +195,46 @@ void main() {
     });
   });
 
+  // Added after the A57 check of 20 Nov: a transporter scanned a consignment
+  // whose registration is under review and saw "Under review", "weigh it
+  // first" and nothing else.
+  group('held with no step listed', () {
+    testWidgets('blind transporter: says the steps are hidden, and does not '
+        'ask them to weigh', (tester) async {
+      await showAnswer(
+        tester,
+        answerFor(Viewer.blindTransporter, [], stage: 'registered', held: true),
+        role: Viewer.blindTransporter.role,
+      );
+      expect(find.text(verdictText(Verdict.underReview)), findsOneWidget);
+      expect(find.text(AppText.stepsHiddenWhileHeld), findsOneWidget);
+      expect(find.text(AppText.weighFirst), findsNothing);
+      expect(find.byType(Card), findsNothing);
+    });
+
+    testWidgets('held with steps listed: no "hidden" line, and still no '
+        '"weigh it first"', (tester) async {
+      await showAnswer(
+        tester,
+        answerFor(Viewer.blindTransporter, [registration], held: true),
+        role: Viewer.blindTransporter.role,
+      );
+      expect(find.text(AppText.stepsHiddenWhileHeld), findsNothing);
+      expect(find.text(AppText.weighFirst), findsNothing);
+      expect(find.byType(Card), findsOneWidget);
+    });
+
+    testWidgets('no step and not held ("nothing to check"): no "hidden" '
+        'line', (tester) async {
+      await showAnswer(
+        tester,
+        answerFor(Viewer.otherBuyer, [], stage: 'in_transit'),
+      );
+      expect(find.text(verdictText(Verdict.nothingToCheck)), findsOneWidget);
+      expect(find.text(AppText.stepsHiddenWhileHeld), findsNothing);
+    });
+  });
+
   group('officer', () {
     testWidgets('flagged and rejected steps are listed, with their review '
         'status and alerts', (tester) async {

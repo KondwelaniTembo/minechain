@@ -621,6 +621,8 @@ abstract final class AppText {
   static const String weighFirst =
       'Weigh it before you take custody: the weight is hidden until you '
       'record yours.';
+  static const String stepsHiddenWhileHeld =
+      'Its custody steps are hidden while an officer reviews it.';
   static String locationLine(String latitude, String longitude) =>
       'Location: $latitude, $longitude';
 

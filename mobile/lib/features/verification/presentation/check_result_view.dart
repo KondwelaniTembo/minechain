@@ -90,6 +90,14 @@ class CheckResultView extends StatelessWidget {
         VerdictBanner(verdict: verdictFor(view)),
         const SizedBox(height: AppSizes.spaceM),
         _ConsignmentBlock(view),
+        // Held with nothing listed: everyone but an officer is sent only
+        // accepted steps, so a consignment whose registration is under
+        // review comes with none. Without this line the page just looked
+        // empty under "Under review" (A57 check, 20 Nov).
+        if (view.held && view.steps.isEmpty) ...[
+          const SizedBox(height: AppSizes.spaceS),
+          const _IconLine(Icons.visibility_off, AppText.stepsHiddenWhileHeld),
+        ],
         if (view.steps.isNotEmpty) ...[
           const SizedBox(height: AppSizes.spaceM),
           Semantics(
@@ -167,7 +175,9 @@ class _ConsignmentBlock extends StatelessWidget {
         // A transporter who has not weighed yet sees no weight and no hash
         // (the hash leads to the on-chain weight), so they measure without
         // knowing the expected figure and the 10% rule cannot be gamed.
-        if (view.weightsHidden) ...[
+        // Not while held: the line would invite them to take custody of a
+        // consignment an officer is reviewing (A57 check, 20 Nov).
+        if (view.weightsHidden && !view.held) ...[
           const SizedBox(height: AppSizes.spaceS),
           _IconLine(
             Icons.scale,
