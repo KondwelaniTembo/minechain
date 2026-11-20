@@ -433,6 +433,14 @@ abstract final class AppText {
       'The phone was busy and could not show your handoffs. Your work is '
       'safe on this phone.';
 
+  // "My purchases" (buyer purchase plan, T3).
+  static String boughtRecord(String code) => 'Bought $code';
+  static const String noPurchasesYet =
+      'You have not recorded buying any consignment yet.';
+  static const String purchasesPhoneBusy =
+      'The phone was busy and could not show your purchases. Your work is '
+      'safe on this phone.';
+
   // Why a send stopped. Every one says the work is still on the phone,
   // because it is: a stop never changes a saved record.
   static const String notSentOffline =
@@ -653,6 +661,12 @@ abstract final class AppText {
         '${two(localTime.hour)}:${two(localTime.minute)}.';
   }
 
+  /// "20 Nov, 16:10", in the time given.
+  static String _dayAndTime(DateTime t) {
+    String two(int n) => n.toString().padLeft(2, '0');
+    return '${t.day} ${_months[t.month - 1]}, ${two(t.hour)}:${two(t.minute)}';
+  }
+
   static const String custodyPhoneBusy =
       'The phone was busy for a moment. Scan the custody record again.';
   static String custodyChecking(String code) => 'Looking up $code…';
@@ -694,6 +708,35 @@ abstract final class AppText {
   static const String handoffWeightHint =
       'Weigh the bag and type what your own scale says.';
   static const String takeAnotherCustody = 'Take custody of another';
+
+  // ---- Record purchase (buyer purchase plan, T2) ----
+  // The page and its weighing words are Take custody's; these differ.
+
+  /// Q4: this buyer already recorded buying the bag on this phone.
+  static String alreadyBoughtHere(DateTime localTime) =>
+      'You recorded buying this consignment on ${_dayAndTime(localTime)}.';
+
+  /// Q2: the server holds this buyer's own accepted purchase.
+  static String boughtByYou(DateTime localTime) =>
+      'You bought this consignment on ${_dayAndTime(localTime)}.';
+
+  static const String purchaseMismatch =
+      'This record does not match the blockchain. Officers have been told, '
+      'and the consignment is held. You can still record the purchase.';
+  static const String purchaseUnderReview =
+      'Under review: an officer is checking a problem with this '
+      'consignment. You can still record the purchase.';
+  static const String purchaseAlreadyBought =
+      'The server says this consignment is already bought. A second '
+      'purchase is flagged for an officer when it is sent.';
+
+  /// Q3: a 404 for a buyer covers three cases the server keeps apart on
+  /// purpose, so the sentence names all three.
+  static const String purchaseNotOnServer =
+      "The server does not show you this consignment yet. The transporter's "
+      'handoff may not have been sent, or it may be under review or already '
+      'sold. You can still record it; it is checked when it is sent.';
+  static const String recordAnotherPurchase = 'Record another purchase';
 
   // Role differences (T5).
   static const String weighFirst =

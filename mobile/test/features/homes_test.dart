@@ -135,12 +135,18 @@ void main() {
       // with the router test after this loop. Nor for the transporter since
       // Transporter handoff T5 wired its last two tiles (changed by plan);
       // "transporter tiles" below checks each of its tiles instead.
+      //
+      // The buyer's last tile, "Send my work", is wired since Buyer
+      // purchase T3 (changed by plan), so its case taps "Reports", the one
+      // buyer tile still to come (Reports feature); "buyer tiles" below
+      // checks the four that are built.
       if (role != Role.miner && role != Role.transporter) {
+        final soon = role == Role.buyer ? AppText.reports : labels.last;
         testWidgets('a tile says "Coming soon"', (tester) async {
           await pumpHome(tester, screen, signedInAs(role));
-          await tester.ensureVisible(tile(labels.last));
+          await tester.ensureVisible(tile(soon));
           await tester.pump();
-          await tester.tap(tile(labels.last));
+          await tester.tap(tile(soon));
           await tester.pump();
           expect(find.text(AppText.comingSoon), findsOneWidget);
         });
@@ -310,6 +316,17 @@ void main() {
         (AppText.sendMyWork, AppRoutes.transporterSync),
       ],
     );
+  });
+
+  // Buyer purchase T3: the four built buyer tiles, the same way. "Reports"
+  // is left out: it still says "Coming soon" (checked above).
+  group('buyer tiles', () {
+    tilesOpenTheirPages(Role.buyer, AppRoutes.buyer, const BuyerHomeScreen(), [
+      (AppText.checkConsignment, AppRoutes.buyerCheck),
+      (AppText.recordPurchase, AppRoutes.buyerPurchase),
+      (AppText.myPurchases, AppRoutes.buyerPurchases),
+      (AppText.sendMyWork, AppRoutes.buyerSync),
+    ]);
   });
 }
 

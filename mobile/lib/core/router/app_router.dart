@@ -22,6 +22,8 @@ import '../../features/auth/presentation/register_screen.dart';
 import '../../features/auth/presentation/splash_screen.dart';
 import '../../features/buyer/presentation/buyer_home_screen.dart';
 import '../../features/consignments/presentation/my_consignments_screen.dart';
+import '../../features/handoff/presentation/custody_controller.dart'
+    show CustodyStepKind;
 import '../../features/handoff/presentation/take_custody_screen.dart';
 import '../../features/miner/presentation/miner_home_screen.dart';
 import '../../features/officer/presentation/officer_home_screen.dart';
@@ -174,6 +176,23 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: AppRoutes.transporterSync,
+        builder: (context, state) => const SendWorkScreen(),
+      ),
+      // "Take custody" for the buyer (buyer purchase plan, Q4). Under /buyer,
+      // so redirect rule 4 sends every other role home.
+      GoRoute(
+        path: AppRoutes.buyerPurchase,
+        builder: (context, state) =>
+            const TakeCustodyScreen(kind: CustodyStepKind.purchase),
+      ),
+      // The miner's list and sync screens for the buyer (T3).
+      GoRoute(
+        path: AppRoutes.buyerPurchases,
+        builder: (context, state) =>
+            const MyConsignmentsScreen(kind: StepListKind.purchases),
+      ),
+      GoRoute(
+        path: AppRoutes.buyerSync,
         builder: (context, state) => const SendWorkScreen(),
       ),
       // Under /admin, so redirect rule 4 sends every other role home. The
