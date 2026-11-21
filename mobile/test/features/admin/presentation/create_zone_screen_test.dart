@@ -488,6 +488,46 @@ void main() {
     }
   });
 
+  group('the remove button sits on the corner\'s line (T6b)', () {
+    // Wide enough for "Corner 1" and its coordinates on one line in the test
+    // font, whose letters are all as wide as they are tall; the A57 fits
+    // them in 360 dp. At large text the two wrap, which is checked for
+    // overflow only, below.
+    const wide = Size(480, 800);
+
+    /// How far the remove icon's middle is from the corner text's middle.
+    double offset(WidgetTester tester, int number, String text) {
+      final icon = find.descendant(
+        of: corner(number),
+        matching: find.byIcon(Icons.remove_circle_outline),
+      );
+      return (tester.getCenter(icon).dy -
+              tester.getCenter(inCorner(number, text)).dy)
+          .abs();
+    }
+
+    testWidgets('level with the coordinates', (tester) async {
+      await openCreate(tester, size: wide);
+      await typeTriangle(tester);
+      expect(offset(tester, 1, AppText.cornerNumber(1)), lessThan(1));
+      expect(offset(tester, 1, '-13.45, 25.82'), lessThan(1));
+      expect(offset(tester, 3, '-13.49, 25.81'), lessThan(1));
+    });
+
+    testWidgets('still level with the coordinates when an error is under '
+        'them', (tester) async {
+      zones.answers['create'] = (_) =>
+          boundaryRefusal({'boundary.3': 'repeats the first corner'});
+      await openCreate(tester, size: wide);
+      await typeName(tester, 'Kafue Gorge');
+      await typeTriangle(tester);
+      await typeCorner(tester, '-13.45, 25.82');
+      await tapOnForm(tester, button(AppText.createZone).last);
+      expect(inCorner(4, 'repeats the first corner'), findsOneWidget);
+      expect(offset(tester, 4, '-13.45, 25.82'), lessThan(1));
+    });
+  });
+
   group('fits small screens and large text', () {
     for (final (name, size, scale) in sizes) {
       testWidgets('four corners, the sketch and a message: $name', (

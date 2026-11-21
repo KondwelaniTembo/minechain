@@ -182,7 +182,12 @@ FR-11 for the system administrator, the app's side of Scope (3) and (7). From th
     beside it, which shows the mistake at a glance.
   - Left for daylight on 22 Nov: step 2 (the walked "Phone check site", at a second filling
     station) and step 3 (a registration matched to it), taken into the end-to-end test.
-  - Steps 5 and 6 (rename, online deactivate and reactivate): see the testing log.
+  - Steps 5 and 6 (rename, the name-taken refusal, online deactivate and reactivate): done,
+    as expected. Found: the remove button on "Create zone" sat lower than its corner's
+    line.
+- ✅ **T6b Corner row** (found in T6): with a remove button, the corner's line is the
+  button's 48 dp high with the text centred, so the icon sits level with it; an error
+  stays underneath. The zone page's rows are unchanged. 2 new tests.
 - ⬜ **T7 Docs and PR** (about 20 min). `decisions.md` GPS zones app (1)–(n) and the known
   limitations; `testing-log.md`, `progress.md`, `CLAUDE.md`; the PR description in chat.
 

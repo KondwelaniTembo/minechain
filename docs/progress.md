@@ -125,9 +125,11 @@ Plan: `docs/plans/gps-zones-plan.md`, approved 21 Nov (Q1–Q6 as proposed). Bra
   "Typed Check Zone" from seven Google Maps pins, the swapped corner's server message,
   airplane mode on Deactivate, all as planned. The walked zone and a registration matched
   to it move to daylight on 22 Nov, inside the end-to-end test
+- ✅ T6 part 2: rename, the name-taken refusal, online deactivate and reactivate fine
+- ✅ T6b Corner row: the remove button level with its corner; 2 new, 2337 passed
 - ✅ T7 Docs and PR: decisions GPS zones app (1)–(8), five known limitations, one future
   improvement; the PR text in chat
-- Commits: (1) code, T1–T5; (2) docs
+- Commits: (1) code, T1–T5 (`08cd99a`); (2) docs (`f159f07`); (3) T6b with its docs
 
 ### Admin accounts — 8/8, merged as PR #19 (`e3af2bd`)
 

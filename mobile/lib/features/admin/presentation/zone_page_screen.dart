@@ -204,22 +204,35 @@ class CornerRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Wrap: at large text the number and the coordinates go onto
-                // two lines instead of being cut.
-                Wrap(
-                  spacing: AppSizes.spaceM,
-                  children: [
-                    Text(
-                      AppText.cornerNumber(number),
-                      style: theme.textTheme.labelLarge,
+                // With a button beside it, the line is at least the button's
+                // 48 dp touch height, with the text centred in it, so the
+                // text and the icon sit on one line (T6b, seen on the A57:
+                // the icon sat lower). An error goes below that line, so the
+                // button stays level with the corner, not with the error.
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: trailing == null ? 0 : kMinInteractiveDimension,
+                  ),
+                  child: Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    // Wrap: at large text the number and the coordinates go
+                    // onto two lines instead of being cut.
+                    child: Wrap(
+                      spacing: AppSizes.spaceM,
+                      children: [
+                        Text(
+                          AppText.cornerNumber(number),
+                          style: theme.textTheme.labelLarge,
+                        ),
+                        Text(
+                          cornerText(corner),
+                          style: const TextStyle(
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(
-                      cornerText(corner),
-                      style: const TextStyle(
-                        fontFeatures: [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
                 if (error != null)
                   Text(

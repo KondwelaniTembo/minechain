@@ -42,9 +42,9 @@ then `docs/progress.md` (the day plan and the current feature's subtasks), then
 
 - **Done: GPS zones** (7/7) on `feature/gps-zones` (from `main` after PR #19),
   `docs/plans/gps-zones-plan.md`, approved 21 Nov (Q1–Q6 as proposed). App only; nothing
-  deploys. 2335 tests passed, 0 skipped. Decisions GPS zones app (1)–(8), five known
-  limitations. Two commits (code T1–T5, docs) with the script in chat; the branch's first
-  push needs `--set-upstream`. Next: the PR, then Reports.
+  deploys. 2337 tests passed, 0 skipped. Decisions GPS zones app (1)–(8), five known
+  limitations. Commits `08cd99a` (code), `f159f07` (docs), then T6b (the remove button
+  level with its corner line) in one more commit. Next: the PR, then Reports.
   - T6 phone check (21 Nov, A57, production): "Typed Check Zone" (7 corners, typed from
     Google Maps pins at a filling station) created and active; the swapped corner's
     server message; airplane mode on Deactivate. **Carried to 22 Nov, daylight:** the
