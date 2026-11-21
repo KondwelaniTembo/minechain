@@ -4,9 +4,8 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 21 Nov 2026, after Officer alerts T6, on `feature/officer-alerts` (7/7).
-Next: the developer commits (two commits, script in chat), pushes with `--set-upstream`,
-opens and merges the PR; then Admin accounts.
+Last updated: 21 Nov 2026, after Admin accounts T7 on `feature/admin-accounts` (8/8).
+Next: the short T6b re-check, the two commits and the PR; then GPS zones.
 
 ## (a) Whole project
 
@@ -54,10 +53,11 @@ opens and merges the PR; then Admin accounts.
 
 - ✅ Officer alerts (from Fri 20, 7/7): list, detail, "Confirm problem" and "Clear, no
   problem" (FR-08, Scope (2), (5)); phone check on MC-2026-LSK-0008: handoff cleared and on
-  the chain, purchase flagged and confirmed (rejected). PR to open
-- ⬜ Admin accounts: list, create with activation code, edit name, suspend and reactivate,
-  delete, reset a device key and a password (FR-10, FR-12, Scope (3), (6)); includes
-  resetting the demo accounts' device key (Fred) and password (Mutale)
+  the chain, purchase flagged and confirmed (rejected). Merged as PR #18
+- ✅ Admin accounts (8/8): list, create with activation code, edit name, suspend and
+  reactivate, delete, reset a device key (FR-10, FR-12, Scope (3), (6)); Fred's device
+  key reset on production. A password reset is not built: the API has none (Q1, a
+  known limitation). PR to open
 - ⬜ GPS zones: list, create, rename, deactivate (FR-11, Scope (7))
 - ⬜ Reports: download the CSV and share it from the phone (FR-09, FR-13)
 - ⬜ Dashboard (FR-14, kept under Scope (4); the first feature to cut if time runs short)
@@ -91,7 +91,33 @@ opens and merges the PR; then Admin accounts.
 Done on Thu 19 (session ended 20 Nov, 00:40): Hardening (PR #13), "My account" back arrow
 (PR #14), Consignment check T1–T5 (1584 tests passed, 0 skipped).
 
-## (c) Current feature: Officer alerts — 7/7
+## (c) Current feature: Admin accounts — 8/8
+
+Plan: `docs/plans/admin-accounts-plan.md`, approved 21 Nov (Q1–Q6 as proposed; Q1: no
+password reset, a known limitation). Branch `feature/admin-accounts`, created by the
+developer from `main` after PR #18. App only (`mobile/`, `docs/`); nothing deploys to
+Render.
+
+- ✅ T1 Accounts data: `AdminAccount`, `ActivationCode`, the eight calls, four sentences,
+  `fake_accounts_server.dart`; 48 new
+- ✅ T2 Accounts list: `/admin/accounts`, five chips, cards, paging, the tile wired; 33 new
+- ✅ T3 Account page: `actionsFor`, the details and the buttons by status; 24 new
+- ✅ T4 The five actions and the shared `ReasonDialog` ("Account requests" unchanged); the
+  opened account moved to a provider (found by a test); 26 new
+- ✅ T5 Create account and the code page, "New activation code"; 25 new; full run 2144
+  passed, 0 skipped
+- T1–T5 ran without stopping, as the developer asked, so none is committed. Every code
+  file is new or touched by several subtasks (`app_text.dart`, `routes.dart`,
+  `app_router.dart`), so T1–T5 go in one code commit; the docs in a second after T6.
+- ✅ T6 Phone check (the developer, 21 Nov, emulator and A57): all as planned; three
+  rough edges found
+- ✅ T6b Fixes: "My account" refresh, the password asked for inside an open dialog, the
+  code on one line; 15 new, 2159 passed
+- ✅ T7 Docs and PR: decisions Admin accounts app (1)–(8), three known limitations, two
+  future improvements; the PR text in chat
+- Commits: (1) code, T1–T5 and T6b; (2) docs
+
+### Officer alerts — 7/7, merged as PR #18 (`c24254a`)
 
 Plan: `docs/plans/officer-alerts-plan.md`, approved 20 Nov (Q1–Q6 as proposed). Branch
 `feature/officer-alerts`, created by the developer from `main` after PR #17. App only

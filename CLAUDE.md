@@ -36,14 +36,33 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 21 Nov 2026, after Officer alerts T6 (7/7). Read this first in a new session,
+Updated 21 Nov 2026, after Admin accounts T7 (8/8). Read this first in a new session,
 then `docs/progress.md` (the day plan and the current feature's subtasks), then
 `docs/decisions.md`.
 
-- **Next: Admin accounts** (FR-10, FR-12, Scope (3), (6)), then GPS zones, Reports, the
-  FR-16 decision, the dashboard (first cut) and the end-to-end test; order in
-  `docs/progress.md`. Start with a plan in `docs/plans/`, after the developer merges the
-  officer alerts PR and gives the start-of-feature script's branch.
+- **Done: Admin accounts** (8/8, T6b added) on `feature/admin-accounts`,
+  `docs/plans/admin-accounts-plan.md` (approved 21 Nov, Q1–Q6 as proposed). 2159 tests
+  passed, 0 skipped. Decisions Admin accounts app (1)–(8), three known limitations (no
+  password reset, Q1). App only; nothing deploys. Next: the short T6b re-check, two
+  commits (script in chat, code then docs), the PR; then GPS zones.
+  - T6 phone check (21 Nov): `officer_check` created, activated on the A57, renamed and
+    deleted (it stays in "Deleted"); Fred's key reset on production, his new key
+    `3056af24` on the A57 (shared with Clement: one key per account). Not done: a step
+    signed by Fred's new key.
+  - T6b: `AuthController.refreshAccount()` and "My account"'s refresh button and pull
+    down; `_withPassword` (the password asked for over an open dialog, then the same text
+    sent again); the code on one line.
+  - Built in `features/admin/`: `domain/admin_account.dart`, `domain/account_actions.dart`
+    (`actionsFor`); `presentation/accounts_list_controller.dart`, `accounts_screen.dart`,
+    `account_words.dart`, `account_page_controller.dart` (with `openedAccountProvider`),
+    `account_page_screen.dart`, `create_account_screen.dart`, `activation_code_view.dart`,
+    `reason_dialog.dart` (shared with "Account requests"). Routes `/admin/accounts`,
+    `/admin/accounts/account`, `/admin/accounts/new`. Tests use
+    `test/fakes/fake_accounts_server.dart` and `account_page_helpers.dart`.
+  - Lesson: a page must not rely on go_router's `extra`; a redirect re-run (the token
+    running out) rebuilds the page without it. Keep such state in a provider.
+- **Then:** GPS zones, Reports, the FR-16 decision, the dashboard (first cut) and the
+  end-to-end test; order in `docs/progress.md`.
 
 - **Done: Officer alerts** (7/7) on `feature/officer-alerts`, `docs/plans/officer-alerts-plan.md`
   (approved 20 Nov, Q1–Q6 as proposed). App only (`mobile/`, `docs/`); nothing deploys to
