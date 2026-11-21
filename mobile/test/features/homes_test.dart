@@ -356,6 +356,26 @@ void main() {
       expect(find.text(AppText.comingSoon), findsOneWidget);
     });
   });
+
+  // Admin accounts T2: "Accounts" is wired; the three tiles still to come
+  // (GPS zones, Anchoring, Reports) still say "Coming soon".
+  group('admin tiles', () {
+    tilesOpenTheirPages(Role.admin, AppRoutes.admin, const AdminHomeScreen(), [
+      (AppText.accountRequests, AppRoutes.adminRequests),
+      (AppText.accounts, AppRoutes.adminAccounts),
+    ]);
+
+    for (final label in [AppText.gpsZones, AppText.anchoring]) {
+      testWidgets('"$label" still says "Coming soon"', (tester) async {
+        await pumpHome(tester, const AdminHomeScreen(), signedInAs(Role.admin));
+        await tester.ensureVisible(tile(label));
+        await tester.pump();
+        await tester.tap(tile(label));
+        await tester.pump();
+        expect(find.text(AppText.comingSoon), findsOneWidget);
+      });
+    }
+  });
 }
 
 /// One test per tile of [role]'s home ([home] at [homePath]): the tile

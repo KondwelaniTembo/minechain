@@ -4,6 +4,11 @@
 // Like the login screen, this screen decides nothing. It shows the user from
 // AuthController's state and calls logOut(); the router moves to /login by
 // itself when the state becomes SignedOut.
+//
+// Admin accounts T6b: it asks the server for the account again (GET
+// /auth/me) when it first opens, from the refresh button and on a pull
+// down, because an administrator may have renamed it. Before, a new name
+// showed only after the next sign-in (found in the T6 phone check).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,11 +35,30 @@ String roleLabel(Role role) => switch (role) {
   Role.admin => AppText.adminTitle,
 };
 
-class AccountScreen extends ConsumerWidget {
+class AccountScreen extends ConsumerStatefulWidget {
   const AccountScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AccountScreen> createState() => _AccountScreenState();
+}
+
+class _AccountScreenState extends ConsumerState<AccountScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // After the first frame: a provider may not change while widgets build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _refresh();
+    });
+  }
+
+  /// Reads the account from the server again. A failure keeps what is shown;
+  /// the controller decides everything else (a refused session signs out).
+  Future<void> _refresh() =>
+      ref.read(authControllerProvider.notifier).refreshAccount();
+
+  @override
+  Widget build(BuildContext context) {
     final auth = ref.watch(authControllerProvider);
     // Both "signed in" states have a user. Any other state only shows for a
     // moment, while the router is already moving to /login or /start.
@@ -57,35 +81,50 @@ class AccountScreen extends ConsumerWidget {
                   .goBranch(AppNavigationShell.homeBranch),
         ),
         title: const Text(AppText.myAccount),
+        actions: [
+          // The same as pulling the page down, for people who cannot easily
+          // make that gesture, or do not know it. Only with a usable token:
+          // while the password is needed, the notice below asks for it.
+          IconButton(
+            tooltip: AppText.refreshAccount,
+            icon: const Icon(Icons.refresh),
+            onPressed: auth is SignedIn ? _refresh : null,
+          ),
+        ],
       ),
       body: SafeArea(
         child: user == null
             ? const SizedBox.shrink()
-            : SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSizes.spaceM),
-                child: Center(
-                  child: ConstrainedBox(
-                    // On a turned phone the content stays a readable width
-                    // instead of stretching across the whole screen.
-                    constraints: const BoxConstraints(maxWidth: 560),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (auth is SignedInNeedsPassword) ...[
-                          const _NeedsPasswordCard(),
-                          const SizedBox(height: AppSizes.spaceM),
+            : RefreshIndicator(
+                onRefresh: _refresh,
+                child: SingleChildScrollView(
+                  // Scrollable even when short, so it can always be pulled.
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(AppSizes.spaceM),
+                  child: Center(
+                    child: ConstrainedBox(
+                      // On a turned phone the content stays a readable width
+                      // instead of stretching across the whole screen.
+                      constraints: const BoxConstraints(maxWidth: 560),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (auth is SignedInNeedsPassword) ...[
+                            const _NeedsPasswordCard(),
+                            const SizedBox(height: AppSizes.spaceM),
+                          ],
+                          _AccountDetails(user),
+                          const SizedBox(height: AppSizes.spaceL),
+                          // Tonal, not the strong copper button: logging out is
+                          // something to find, not the screen's main action, and
+                          // the dialog asks again before anything happens.
+                          FilledButton.tonalIcon(
+                            onPressed: () => _confirmLogOut(context, ref),
+                            icon: const Icon(Icons.logout),
+                            label: const Text(AppText.logOut),
+                          ),
                         ],
-                        _AccountDetails(user),
-                        const SizedBox(height: AppSizes.spaceL),
-                        // Tonal, not the strong copper button: logging out is
-                        // something to find, not the screen's main action, and
-                        // the dialog asks again before anything happens.
-                        FilledButton.tonalIcon(
-                          onPressed: () => _confirmLogOut(context, ref),
-                          icon: const Icon(Icons.logout),
-                          label: const Text(AppText.logOut),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ),

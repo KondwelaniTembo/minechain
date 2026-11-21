@@ -13,6 +13,9 @@ import 'package:go_router/go_router.dart';
 
 import '../../features/account/presentation/account_screen.dart';
 import '../../features/admin/presentation/account_requests_screen.dart';
+import '../../features/admin/presentation/account_page_screen.dart';
+import '../../features/admin/presentation/accounts_screen.dart';
+import '../../features/admin/presentation/create_account_screen.dart';
 import '../../features/admin/presentation/admin_home_screen.dart';
 import '../../features/alerts/presentation/alert_detail_screen.dart';
 import '../../features/alerts/presentation/alerts_screen.dart';
@@ -215,6 +218,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.adminRequests,
         builder: (context, state) => const AccountRequestsScreen(),
+      ),
+      // The administrator's accounts (admin accounts plan). Under /admin for
+      // the same role rule; the home pushes the list, and the list pushes an
+      // account or "Create account", so each back arrow returns one page.
+      GoRoute(
+        path: AppRoutes.adminAccounts,
+        builder: (context, state) => const AccountsScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.adminCreateAccount,
+        builder: (context, state) => const CreateAccountScreen(),
+      ),
+      // One account, opened from its card (openedAccountProvider): there is
+      // no read-one endpoint, so a page opened without one says so and
+      // offers the list.
+      GoRoute(
+        path: AppRoutes.adminAccount,
+        builder: (context, state) => const AccountPageScreen(),
       ),
     ],
     // No path, query or other text from the address is logged.

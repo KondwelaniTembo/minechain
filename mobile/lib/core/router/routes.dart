@@ -77,6 +77,14 @@ abstract final class AppRoutes {
   /// the redirect's role rule keeps it for administrators only.
   static const String adminRequests = '/admin/requests';
 
+  /// The administrator's accounts (admin accounts plan): the list (T2), one
+  /// account (T3), opened from the list through openedAccountProvider
+  /// (there is no GET /admin/users/{id} to read it by its id), and "Create
+  /// account" (T5). All under /admin, for the same role rule.
+  static const String adminAccounts = '/admin/accounts';
+  static const String adminAccount = '/admin/accounts/account';
+  static const String adminCreateAccount = '/admin/accounts/new';
+
   /// The signed-in user's own account and Log out. Open to every role, so it
   /// is not under a home's path.
   static const String account = '/account';

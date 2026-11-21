@@ -123,6 +123,27 @@ class FakeAuthController extends AuthController {
   @override
   Future<void> checkExpiry() async => expiryChecks++;
 
+  /// How many times refreshAccount ran ("My account", admin accounts T6b).
+  int accountRefreshes = 0;
+
+  /// What refreshAccount turns the user into, as GET /auth/me would; null
+  /// keeps the user as it is.
+  User? refreshedUser;
+
+  @override
+  Future<void> refreshAccount() async {
+    accountRefreshes++;
+    final fresh = refreshedUser;
+    final current = state;
+    if (fresh != null && current is SignedIn) {
+      state = SignedIn(
+        user: fresh,
+        token: current.token,
+        expiresAt: current.expiresAt,
+      );
+    }
+  }
+
   /// Lets a test move the state, as the real controller would.
   void setState(AuthState next) => state = next;
 }

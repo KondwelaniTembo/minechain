@@ -242,6 +242,49 @@ void main() {
     }
   });
 
+  // Admin accounts T6b: an administrator may rename the account, and the
+  // phone check found the new name showed only after the next sign-in.
+  group('reading the account again', () {
+    testWidgets('once when it opens', (tester) async {
+      await pumpAccount(tester, signedInAs(Role.officer));
+      expect(auth.accountRefreshes, 1);
+    });
+
+    testWidgets('the refresh button shows the renamed account', (tester) async {
+      await pumpAccount(tester, signedInAs(Role.officer));
+      auth.refreshedUser = (User.fromJson(
+        userJson(role: 'officer', fullName: 'Check Officer Two'),
+      ) as UserParsed).user;
+
+      await tester.tap(find.byTooltip(AppText.refreshAccount));
+      await tester.pumpAndSettle();
+
+      expect(auth.accountRefreshes, 2);
+      expect(find.text('Check Officer Two'), findsOneWidget);
+      expect(find.text('Mutale Banda'), findsNothing);
+    });
+
+    testWidgets('pulling the page down reads it again', (tester) async {
+      await pumpAccount(tester, signedInAs(Role.miner));
+      await tester.fling(find.text('Mutale Banda'), const Offset(0, 400), 1000);
+      await tester.pumpAndSettle();
+      expect(auth.accountRefreshes, 2);
+    });
+
+    testWidgets('while the password is needed the button is off', (
+      tester,
+    ) async {
+      await pumpAccount(tester, SignedInNeedsPassword(userOf(Role.miner)));
+      final button = tester.widget<IconButton>(
+        find.ancestor(
+          of: find.byIcon(Icons.refresh),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(button.onPressed, isNull);
+    });
+  });
+
   group('Log out', () {
     testWidgets('asks first; Cancel does nothing', (tester) async {
       await pumpAccount(tester, signedInAs(Role.buyer));

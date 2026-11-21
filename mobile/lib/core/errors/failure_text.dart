@@ -58,6 +58,14 @@ String? _ourTextFor(String code) {
     // Officer alerts. STEP_CANNOT_BE_CLEARED is left to the server's
     // message on purpose: it names which of the three cases this is.
     ApiCodes.alertNotFound => AppText.alertNotFound,
+    // Admin accounts. INVALID_STATUS_TRANSITION and LAST_ACTIVE_ADMIN are
+    // left to the server's message: it names the account's actual status.
+    // USERNAME_TAKEN goes under the username field on the forms that send
+    // one, so it is not here.
+    ApiCodes.userNotFound => AppText.accountNotFound,
+    ApiCodes.cannotSuspendSelf => AppText.cannotSuspendSelf,
+    ApiCodes.cannotDeleteSelf => AppText.cannotDeleteSelf,
+    ApiCodes.noPublicKey => AppText.noDeviceKeyToReset,
     _ => null,
   };
 }
