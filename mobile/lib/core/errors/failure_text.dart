@@ -66,6 +66,11 @@ String? _ourTextFor(String code) {
     ApiCodes.cannotSuspendSelf => AppText.cannotSuspendSelf,
     ApiCodes.cannotDeleteSelf => AppText.cannotDeleteSelf,
     ApiCodes.noPublicKey => AppText.noDeviceKeyToReset,
+    // GPS zones. ZONE_NAME_TAKEN goes under the name field on the forms
+    // that send one (its server sentence explains that inactive zones keep
+    // their names), so it is not here; INVALID_STATUS_TRANSITION keeps the
+    // server's sentence, as for accounts.
+    ApiCodes.zoneNotFound => AppText.zoneNotFound,
     _ => null,
   };
 }

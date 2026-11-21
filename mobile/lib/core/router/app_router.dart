@@ -17,6 +17,9 @@ import '../../features/admin/presentation/account_page_screen.dart';
 import '../../features/admin/presentation/accounts_screen.dart';
 import '../../features/admin/presentation/create_account_screen.dart';
 import '../../features/admin/presentation/admin_home_screen.dart';
+import '../../features/admin/presentation/create_zone_screen.dart';
+import '../../features/admin/presentation/zone_page_screen.dart';
+import '../../features/admin/presentation/zones_screen.dart';
 import '../../features/alerts/presentation/alert_detail_screen.dart';
 import '../../features/alerts/presentation/alerts_screen.dart';
 import '../../features/auth/domain/auth_state.dart';
@@ -236,6 +239,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.adminAccount,
         builder: (context, state) => const AccountPageScreen(),
+      ),
+      // The administrator's GPS zones (GPS zones plan). Under /admin for the
+      // same role rule; the home pushes the list, and the list pushes a zone
+      // or "Create zone", so each back arrow returns one page.
+      GoRoute(
+        path: AppRoutes.adminZones,
+        builder: (context, state) => const ZonesScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.adminCreateZone,
+        builder: (context, state) => const CreateZoneScreen(),
+      ),
+      // One zone, opened from its card (openedZoneProvider): there is no
+      // read-one endpoint, so a page opened without one says so and offers
+      // the list.
+      GoRoute(
+        path: AppRoutes.adminZone,
+        builder: (context, state) => const ZonePageScreen(),
       ),
     ],
     // No path, query or other text from the address is logged.

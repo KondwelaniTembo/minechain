@@ -4,8 +4,8 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 21 Nov 2026, after Admin accounts T7 on `feature/admin-accounts` (8/8).
-Next: the short T6b re-check, the two commits and the PR; then GPS zones.
+Last updated: 21 Nov 2026, after GPS zones T6 (part) and T7 on `feature/gps-zones` (7/7).
+Next: the two commits and the PR; then Reports. The walked zone goes into the end-to-end test.
 
 ## (a) Whole project
 
@@ -57,12 +57,15 @@ Next: the short T6b re-check, the two commits and the PR; then GPS zones.
 - ✅ Admin accounts (8/8): list, create with activation code, edit name, suspend and
   reactivate, delete, reset a device key (FR-10, FR-12, Scope (3), (6)); Fred's device
   key reset on production. A password reset is not built: the API has none (Q1, a
-  known limitation). PR to open
-- ⬜ GPS zones: list, create, rename, deactivate (FR-11, Scope (7))
+  known limitation). Merged as PR #19 (`e3af2bd`)
+- ✅ GPS zones (7/7): list, create (walked or typed corners, a sketch), rename, deactivate,
+  reactivate (FR-11, Scope (7)). The walked zone is checked in daylight on 22 Nov, with the
+  end-to-end test
 - ⬜ Reports: download the CSV and share it from the phone (FR-09, FR-13)
 - ⬜ Dashboard (FR-14, kept under Scope (4); the first feature to cut if time runs short)
 - ⬜ FR-16 decision: the signed PDF certificate, build or cut (Scope (4))
-- ⬜ End-to-end test of every role
+- ⬜ End-to-end test of every role (it starts with the walked "Phone check site" zone and a
+  registration inside it, GPS zones T6 steps 2 and 3)
 
 ### Sun 22 Nov, until 10:00
 
@@ -78,7 +81,17 @@ Next: the short T6b re-check, the two commits and the PR; then GPS zones.
 - ✅ Scope (4): FR-14 kept (17 Nov); FR-16 is decided on Sat 21 Nov.
 - ✅ Day plan: approved by the developer on 18 Nov.
 
-## (b) Today, Fri 20 Nov (from 11:30)
+## (b) Today, Sat 21 Nov
+
+1. ✅ Officer alerts (7/7), merged as PR #18
+2. ✅ Admin accounts (8/8), merged as PR #19
+3. ✅ GPS zones (7/7; walked zone on 22 Nov)
+4. ⬜ Reports
+5. ⬜ The FR-16 decision
+6. ⬜ Dashboard (FR-14, the first cut)
+7. ⬜ End-to-end test of every role
+
+### Fri 20 Nov (from 11:30)
 
 1. ✅ Consignment check, carried over from Thu 19 (7/7; merged as PR #15): ✅ two result-page
    fixes (1587 tests passed); ✅ the rest of T6 (offline, a verified result); ✅ T7 docs
@@ -91,7 +104,34 @@ Next: the short T6b re-check, the two commits and the PR; then GPS zones.
 Done on Thu 19 (session ended 20 Nov, 00:40): Hardening (PR #13), "My account" back arrow
 (PR #14), Consignment check T1–T5 (1584 tests passed, 0 skipped).
 
-## (c) Current feature: Admin accounts — 8/8
+## (c) Current feature: GPS zones — 7/7
+
+Plan: `docs/plans/gps-zones-plan.md`, approved 21 Nov (Q1–Q6 as proposed). Branch
+`feature/gps-zones`, created by the developer from `main` after PR #19. App only
+(`mobile/`, `docs/`); nothing deploys to Render. T1–T5 run without stopping (CLAUDE.md,
+"Flow per feature").
+
+- ✅ T1 Zones data: `GpsZone`, `parseCorner`, the five calls, `fake_zones_server.dart`
+- ✅ T2 Zones list: `/admin/zones`, two chips, the no-active-zone card, the tile wired
+- ✅ T3 Zone page: details, corners, the shape sketch, buttons by status
+- ✅ T4 Rename, deactivate (with the last-zone warning), reactivate
+- ✅ T5 Create zone: typed corners and "Add my location", the live sketch, the server's
+  messages on the right corner. A race found by the session test (the router's redirect
+  re-run put the page back); fix A, approved by the developer: close after the end of the
+  frame. Full run 2335 passed, 0 skipped
+- T1–T5 ran without stopping, so none is committed: one code commit (T1–T5), then a docs
+  commit after T6
+- ✅ T6 Phone check (the developer, 21 Nov, A57, production): the lists, the zone page,
+  "Typed Check Zone" from seven Google Maps pins, the swapped corner's server message,
+  airplane mode on Deactivate, all as planned. The walked zone and a registration matched
+  to it move to daylight on 22 Nov, inside the end-to-end test
+- ✅ T6 part 2: rename, the name-taken refusal, online deactivate and reactivate fine
+- ✅ T6b Corner row: the remove button level with its corner; 2 new, 2337 passed
+- ✅ T7 Docs and PR: decisions GPS zones app (1)–(8), five known limitations, one future
+  improvement; the PR text in chat
+- Commits: (1) code, T1–T5 (`08cd99a`); (2) docs (`f159f07`); (3) T6b with its docs
+
+### Admin accounts — 8/8, merged as PR #19 (`e3af2bd`)
 
 Plan: `docs/plans/admin-accounts-plan.md`, approved 21 Nov (Q1–Q6 as proposed; Q1: no
 password reset, a known limitation). Branch `feature/admin-accounts`, created by the

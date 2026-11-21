@@ -37,6 +37,8 @@ void main() {
       ApiCodes.cannotSuspendSelf: AppText.cannotSuspendSelf,
       ApiCodes.cannotDeleteSelf: AppText.cannotDeleteSelf,
       ApiCodes.noPublicKey: AppText.noDeviceKeyToReset,
+      // GPS zones plan, T1.
+      ApiCodes.zoneNotFound: AppText.zoneNotFound,
     };
     handled.forEach((code, sentence) {
       test(code, () => expect(failureText(refused(code)), sentence));
@@ -82,6 +84,18 @@ void main() {
       expect(
         failureText(refused(ApiCodes.lastActiveAdmin, message: last)),
         last,
+      );
+    });
+
+    test("ZONE_NAME_TAKEN shows the server's sentence: it explains that "
+        'inactive zones keep their names', () {
+      const taken =
+          'A GPS zone with this name already exists. Names are compared '
+          'ignoring letter case and include inactive zones. Choose another '
+          'name, or rename the other zone first.';
+      expect(
+        failureText(refused(ApiCodes.zoneNameTaken, message: taken)),
+        taken,
       );
     });
 

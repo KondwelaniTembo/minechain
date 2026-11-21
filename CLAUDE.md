@@ -36,11 +36,35 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 21 Nov 2026, after Admin accounts T7 (8/8). Read this first in a new session,
+Updated 21 Nov 2026, after GPS zones T7 (7/7). Read this first in a new session,
 then `docs/progress.md` (the day plan and the current feature's subtasks), then
 `docs/decisions.md`.
 
-- **Done: Admin accounts** (8/8, T6b added) on `feature/admin-accounts`,
+- **Done: GPS zones** (7/7) on `feature/gps-zones` (from `main` after PR #19),
+  `docs/plans/gps-zones-plan.md`, approved 21 Nov (Q1–Q6 as proposed). App only; nothing
+  deploys. 2337 tests passed, 0 skipped. Decisions GPS zones app (1)–(8), five known
+  limitations. Commits `08cd99a` (code), `f159f07` (docs), then T6b (the remove button
+  level with its corner line) in one more commit. Next: the PR, then Reports.
+  - T6 phone check (21 Nov, A57, production): "Typed Check Zone" (7 corners, typed from
+    Google Maps pins at a filling station) created and active; the swapped corner's
+    server message; airplane mode on Deactivate. **Carried to 22 Nov, daylight:** the
+    walked "Phone check site" at a second filling station and a registration matched to
+    it (plan §6 steps 2–3), as the start of the end-to-end test. Never deactivate "ZCAS
+    Campus (demo)" on production.
+  - Built in `features/admin/`: `domain/gps_zone.dart`, `corner_input.dart`
+    (`parseCorner`, `cornerFromReading`, `cornerIndexOfField`), `zone_actions.dart`;
+    `data/admin_zones_api.dart`, `admin_zones_repository.dart`;
+    `presentation/zones_list_controller.dart` (with `knownActiveZonesProvider` and
+    `openedZoneProvider`), `zones_screen.dart`, `zone_words.dart`,
+    `zone_page_controller.dart`, `zone_page_screen.dart` (`CornerRow`, the dialogs),
+    `zone_shape_view.dart` (the sketch), `create_zone_controller.dart`,
+    `create_zone_screen.dart`. Routes `/admin/zones`, `/admin/zones/zone`,
+    `/admin/zones/new`. Tests use `test/fakes/fake_zones_server.dart` and
+    `zone_page_helpers.dart`.
+  - Lesson: a screen that closes itself right after a password re-prompt must wait for
+    the end of the frame, or the router's redirect re-run puts it back. And
+    `debugPrint` captured in a test is put back inside the test, not in a tear-down.
+- **Done: Admin accounts** (8/8, T6b added), merged as PR #19 (`e3af2bd`),
   `docs/plans/admin-accounts-plan.md` (approved 21 Nov, Q1–Q6 as proposed). 2159 tests
   passed, 0 skipped. Decisions Admin accounts app (1)–(8), three known limitations (no
   password reset, Q1). App only; nothing deploys. Next: the short T6b re-check, two
@@ -421,7 +445,8 @@ their known limitations):
 
 - Autopilot: see "Working agreement (autopilot)" below for what Claude Code runs itself,
   what it never does, and what it asks about first.
-- One sub-step at a time, and stop after each. "Plan only" first on new or risky work.
+- "Plan only" first on new or risky work. Once a plan is approved, its subtasks run one
+  after another; the stops are listed in "Flow per feature".
 - Refusal tests take a function that starts the action, not a promise already started.
 - Values from signed payloads stay as text, never JavaScript floats.
 - Rejected and deferred items (sync steps, refused tokens and roles) are never audited.
@@ -484,8 +509,20 @@ subtask.
    full `flutter test` → fix failures (stop and report after two failed fix attempts on the
    same problem) → secret checks on the working tree (git diff and untracked files: no
    `api.json`, `.env`, keystores, private keys or the Render host name) → append the test
-   numbers to `docs/testing-log.md` → update `docs/progress.md` → STOP with the subtask
-   report. Wait for "next" before the next subtask.
+   numbers to `docs/testing-log.md` → update `docs/progress.md` → a short note (what was
+   done, the test numbers, the files) → **straight on to the next subtask**, with no
+   "next" needed (asked for by the developer on 21 Nov, after doing it this way in Buyer
+   purchase, Officer alerts and Admin accounts).
+3. **Stop only** when one of these comes up:
+   - the phone check: every code subtask is done and the full `flutter test` passes;
+   - something under "Ask first" (a package, `backend/`, signing, keys, auth, a design
+     decision not in the plan);
+   - two failed fix attempts on the same problem;
+   - the feature's last subtask (docs and PR text).
+   At each stop, give the full subtask report below for every subtask since the last stop.
+   The developer's part is the phone checks and Git and GitHub.
+4. Subtasks that run without a commit between them go in one code commit, plus a docs
+   commit after the phone check; the report lists the files by subtask.
 
 **Subtask report**, always in this order and short:
 
