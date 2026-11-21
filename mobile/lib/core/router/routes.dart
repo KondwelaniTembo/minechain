@@ -85,6 +85,14 @@ abstract final class AppRoutes {
   static const String adminAccount = '/admin/accounts/account';
   static const String adminCreateAccount = '/admin/accounts/new';
 
+  /// The administrator's GPS zones (GPS zones plan): the list (T2), one zone
+  /// opened from its card (T3; like an account, it has no read-one
+  /// endpoint), and "Create zone" (T5). All under /admin, for the same role
+  /// rule.
+  static const String adminZones = '/admin/zones';
+  static const String adminZone = '/admin/zones/zone';
+  static const String adminCreateZone = '/admin/zones/new';
+
   /// The signed-in user's own account and Log out. Open to every role, so it
   /// is not under a home's path.
   static const String account = '/account';

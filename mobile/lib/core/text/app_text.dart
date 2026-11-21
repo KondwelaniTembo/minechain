@@ -742,6 +742,140 @@ abstract final class AppText {
   static String accountCreated(String username) =>
       'Account $username created. It is waiting to be activated.';
 
+  // ---- GPS zones (features/admin/, GPS zones plan) ----
+
+  // T1: the refusal with our own sentence. ZONE_NAME_TAKEN and
+  // INVALID_STATUS_TRANSITION keep the server's.
+  static const String zoneNotFound =
+      'This GPS zone could not be found. Go back to the list and refresh it.';
+
+  // The list (T2).
+  static const String loadingZones = 'Loading GPS zones…';
+  static const String zonesShowing = 'Show zones that are';
+  static const String zonesActive = 'Active';
+  static const String zonesInactive = 'Inactive';
+  static const String zonesNeedPassword =
+      'Your session has expired. Enter your password to see the GPS zones.';
+  static const String createZone = 'Create zone';
+  static const String noActiveZone =
+      'No zone is active. Every new registration is flagged as outside a '
+      'licensed zone until you create or reactivate one.';
+
+  /// Above the list, [status] in lower case: "2 active zones.", "1 inactive
+  /// zone.", or "Showing 20 of 45 active zones.".
+  static String zonesCount({
+    required String status,
+    required int shown,
+    required int total,
+  }) {
+    if (shown < total) return 'Showing $shown of $total $status zones.';
+    return total == 1 ? '1 $status zone.' : '$total $status zones.';
+  }
+
+  static String noZones(String status) => 'No $status zones.';
+  static String zoneCorners(int count) =>
+      count == 1 ? '1 corner' : '$count corners';
+
+  // One zone's page (T3).
+  static const String zoneTitle = 'GPS zone';
+  static const String zoneIsActive =
+      'Active: new registrations are checked against it.';
+  static const String zoneIsInactive =
+      'Inactive: new registrations are not checked against it.';
+  static String zoneCreatedAt(DateTime localTime) =>
+      'Created ${_dayAndTime(localTime)}';
+  static String zoneChangedAt(DateTime localTime) =>
+      'Changed ${_dayAndTime(localTime)}';
+  static const String zoneShape = 'Shape';
+  static const String zoneSketchNote = 'A sketch, not a map. North is up.';
+  static String zoneSketchLabel(int corners) =>
+      'A sketch of the zone with $corners corners, north up.';
+  static String cornerNumber(int number) => 'Corner $number';
+  static const String zoneFixedBoundary =
+      'The boundary and licence number cannot be changed. To change them, '
+      'rename this zone, create a new one with its name, then deactivate '
+      'this one.';
+  static const String zonePageGone = 'Open this zone from the GPS zones list.';
+  static const String backToZones = 'Back to GPS zones';
+  static const String renameZone = 'Rename';
+  static const String deactivateZone = 'Deactivate';
+  static const String reactivateZone = 'Reactivate';
+  static const String zoneCornersHeading = 'Corners';
+
+  // The actions (T4).
+  static const String renameZoneTitle = 'Rename zone';
+  static const String renameZoneExplanation =
+      'Only the name changes. Alerts already raised keep the name they were '
+      'raised with.';
+  static const String zoneName = 'Zone name';
+  static const String zoneNameTooShort = 'Write at least 3 characters.';
+  static String zoneRenamedDone(String name) => 'The zone is now called $name.';
+
+  static const String deactivateZoneQuestion = 'Deactivate this zone?';
+  static String deactivateZoneExplanation(String name) =>
+      'Registrations synced after this are no longer matched to $name. Steps '
+      'already stored keep their zone.';
+  static const String onlyActiveZone =
+      'This is the only active zone. After this, every new registration is '
+      'flagged.';
+  static const String deactivateZoneHint = 'For example: Licence revoked';
+  static String zoneDeactivatedDone(String name) => '$name is inactive.';
+
+  static const String noActiveZoneTitle = 'No zone is active';
+  static const String iUnderstand = 'I understand';
+
+  static const String reactivateZoneQuestion = 'Reactivate this zone?';
+  static String reactivateZoneExplanation(String name) =>
+      'Registrations synced after this are checked against $name again.';
+  static String zoneReactivatedDone(String name) => '$name is active again.';
+
+  // Creating a zone (T5).
+  static const String createZoneIntro =
+      'A licensed extraction area. Registrations synced from now on are '
+      'checked against it. Its boundary and licence number cannot be changed '
+      'later.';
+  static const String zoneLicenceNumber = 'Licence number (optional)';
+  static const String zoneLicenceHint = 'It cannot be changed later.';
+  static const String zoneCornersHint =
+      'Add the corners in order around the edge, latitude first. Do not '
+      'repeat the first corner at the end.';
+  static const String noCornersYet = 'No corners yet. A zone needs at least 3.';
+  static const String maxCornersReached = 'A zone has at most 100 corners.';
+  static const String addMyLocation = 'Add my location';
+  static const String addMyLocationHint =
+      'Stand at each corner of the site in turn and tap "Add my location".';
+  static const String stopLocating = 'Stop';
+  static const String zoneLocationOff =
+      'Turn on Location to add where you stand as a corner.';
+  static const String zoneLocationNeeded =
+      'The app needs your location to add where you stand as a corner. It is '
+      'used only when you tap "Add my location".';
+  static const String typeACorner = 'Type a corner';
+  static const String typeCornerTitle = 'Type a corner';
+  static const String typeCornerExplanation =
+      'Latitude first, then longitude, as Google Maps shows a dropped pin.';
+  static const String cornerFieldLabel = 'Latitude, longitude';
+  static const String cornerFieldHint = '-15.418327, 28.289494';
+  static const String addCorner = 'Add';
+  static const String cornerNotTwoNumbers =
+      'Write the latitude, then the longitude, with a comma between them. '
+      'For example: -15.418327, 28.289494';
+  static const String cornerLatitudeRange =
+      'The latitude must be between -90 and 90.';
+  static const String cornerLongitudeRange =
+      'The longitude must be between -180 and 180.';
+  static const String cornerTooManyDecimals =
+      'Use at most 6 decimal places (about 10 cm).';
+  static String removeCorner(int number) => 'Remove corner $number';
+  static String zoneCreated(String name) =>
+      'Zone $name created. Registrations synced from now on are checked '
+      'against it.';
+  static const String leaveZoneQuestion = 'Leave without creating the zone?';
+  static const String leaveZoneExplanation =
+      'The name and corners you entered will be lost.';
+  static const String stay = 'Stay';
+  static const String leave = 'Leave';
+
   // ---- Server status banner (core/widgets/server_status_banner.dart) ----
 
   static const String serverWaking =

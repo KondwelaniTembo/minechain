@@ -357,15 +357,17 @@ void main() {
     });
   });
 
-  // Admin accounts T2: "Accounts" is wired; the three tiles still to come
-  // (GPS zones, Anchoring, Reports) still say "Coming soon".
+  // Admin accounts T2: "Accounts" is wired. GPS zones T2 (changed by plan):
+  // "GPS zones" is wired too, so it left the "Coming soon" loop below; the
+  // two tiles still to come (Anchoring, Reports) still say "Coming soon".
   group('admin tiles', () {
     tilesOpenTheirPages(Role.admin, AppRoutes.admin, const AdminHomeScreen(), [
       (AppText.accountRequests, AppRoutes.adminRequests),
       (AppText.accounts, AppRoutes.adminAccounts),
+      (AppText.gpsZones, AppRoutes.adminZones),
     ]);
 
-    for (final label in [AppText.gpsZones, AppText.anchoring]) {
+    for (final label in [AppText.anchoring, AppText.reports]) {
       testWidgets('"$label" still says "Coming soon"', (tester) async {
         await pumpHome(tester, const AdminHomeScreen(), signedInAs(Role.admin));
         await tester.ensureVisible(tile(label));
