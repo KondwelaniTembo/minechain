@@ -32,6 +32,11 @@ void main() {
       ApiCodes.weakPassword: AppText.weakPassword,
       ApiCodes.activationInvalid: AppText.activationInvalid,
       ApiCodes.alertNotFound: AppText.alertNotFound,
+      // Admin accounts (T1).
+      ApiCodes.userNotFound: AppText.accountNotFound,
+      ApiCodes.cannotSuspendSelf: AppText.cannotSuspendSelf,
+      ApiCodes.cannotDeleteSelf: AppText.cannotDeleteSelf,
+      ApiCodes.noPublicKey: AppText.noDeviceKeyToReset,
     };
     handled.forEach((code, sentence) {
       test(code, () => expect(failureText(refused(code)), sentence));
@@ -59,6 +64,24 @@ void main() {
       expect(
         failureText(refused(ApiCodes.stepCannotBeCleared, message: message)),
         message,
+      );
+    });
+
+    test('INVALID_STATUS_TRANSITION and LAST_ACTIVE_ADMIN show the '
+        "server's sentence: it names the account's actual status", () {
+      const wrong =
+          'Only an active account can be suspended. This account is '
+          'suspended.';
+      expect(
+        failureText(refused(ApiCodes.invalidStatusTransition, message: wrong)),
+        wrong,
+      );
+      const last =
+          'At least one other active administrator must remain, so this '
+          'account cannot be deleted.';
+      expect(
+        failureText(refused(ApiCodes.lastActiveAdmin, message: last)),
+        last,
       );
     });
 

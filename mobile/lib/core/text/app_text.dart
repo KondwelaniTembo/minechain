@@ -27,6 +27,9 @@ abstract final class AppText {
   static const String comingSoon = 'Coming soon';
   static const String myAccount = 'My account';
 
+  /// The refresh button's tooltip on "My account" (admin accounts T6b).
+  static const String refreshAccount = 'Refresh my details';
+
   // ---- Navigation bar (core/widgets/app_navigation.dart, Mobile (37)) ----
   // One short word each: the bar has little room, and the page's own title
   // ("My account") says the rest.
@@ -573,6 +576,171 @@ abstract final class AppText {
   static const String requestAlreadyHandled =
       'Someone else has already dealt with this request. The list has been '
       'updated.';
+
+  // ---- Accounts (features/admin/, admin accounts plan) ----
+
+  // The refusals of api.md's shared table that get our own sentence (T1).
+  // INVALID_STATUS_TRANSITION and LAST_ACTIVE_ADMIN keep the server's: it
+  // names the action and the account's actual status.
+  static const String accountNotFound =
+      'This account could not be found. Go back to the list and refresh it.';
+  static const String cannotSuspendSelf =
+      'You cannot suspend your own account.';
+  static const String cannotDeleteSelf = 'You cannot delete your own account.';
+  static const String noDeviceKeyToReset =
+      'This account has no device key to reset.';
+
+  // The list (T2).
+  static const String loadingAccounts = 'Loading accounts…';
+  static const String accountsShowing = 'Show accounts that are';
+  static const String accountsActive = 'Active';
+  static const String accountsSuspended = 'Suspended';
+  static const String accountsInvited = 'Invited';
+  static const String accountsRejected = 'Rejected';
+  static const String accountsDeleted = 'Deleted';
+  static const String accountsNeedPassword =
+      'Your session has expired. Enter your password to see the accounts.';
+  static const String createAccount = 'Create account';
+
+  /// Above the list, [status] in lower case: "12 active accounts.",
+  /// "1 invited account.", or "Showing 20 of 45 active accounts.".
+  static String accountsCount({
+    required String status,
+    required int shown,
+    required int total,
+  }) {
+    if (shown < total) return 'Showing $shown of $total $status accounts.';
+    return total == 1 ? '1 $status account.' : '$total $status accounts.';
+  }
+
+  static String noAccounts(String status) => 'No $status accounts.';
+  static String suspendedBecause(String reason) => 'Suspended: $reason';
+  static String rejectedBecause(String reason) => 'Rejected: $reason';
+  static String deletedBecause(String reason) => 'Deleted: $reason';
+  static String codeValidUntil(DateTime localTime) =>
+      'Activation code valid until ${_dayAndTime(localTime)}';
+  static const String codeExpired =
+      'Activation code expired: give them a new one.';
+  static const String noCodeLeft =
+      'No activation code: too many wrong tries. Give them a new one.';
+
+  // One account's page (T3).
+  static const String accountTitle = 'Account';
+  static const String accountIsActive = 'Active: can sign in.';
+  static const String accountIsSuspended =
+      'Suspended: cannot sign in until reactivated.';
+  static const String accountIsInvited =
+      'Invited: waiting to be activated with its code.';
+  static const String accountIsPending =
+      'Waiting for approval under Account requests.';
+  static const String accountIsRejected =
+      'Rejected: the request was refused. This is final.';
+  static const String accountIsDeleted =
+      'Deleted: can never sign in again. This is final.';
+  static String createdOn(DateTime date) =>
+      'Created ${date.day} ${_months[date.month - 1]} ${date.year}';
+  static String approvedOn(DateTime date) =>
+      'Approved ${date.day} ${_months[date.month - 1]} ${date.year}';
+  static String reasonLine(String reason) => 'Reason: $reason';
+  static String accountDeviceKey(String shortFingerprint) =>
+      'Device key: registered ($shortFingerprint)';
+  static const String accountNoDeviceKey = 'Device key: none registered';
+  static const String lostPhoneHint =
+      'Lost or replaced phone? Suspend the account, reset its device key, '
+      'then reactivate it.';
+  static const String yourOwnAccount =
+      'This is your account. You cannot suspend or delete it.';
+  static const String accountIsFinal =
+      'This account is final: nothing about it can be changed.';
+  static const String accountPageGone =
+      'Open this account from the Accounts list.';
+  static const String backToAccounts = 'Back to Accounts';
+  static const String editName = 'Edit name';
+  static const String suspendAccount = 'Suspend';
+  static const String reactivateAccount = 'Reactivate';
+  static const String resetDeviceKey = 'Reset device key';
+  static const String newActivationCode = 'New activation code';
+  static const String deleteAccount = 'Delete account';
+
+  // The actions (T4).
+  static const String suspendQuestion = 'Suspend this account?';
+  static String suspendExplanation(String name) =>
+      '$name will not be able to use MineChain until the account is '
+      'reactivated.';
+  static const String suspendHint = 'For example: Lost device reported';
+  static String suspendedDone(String name) => '$name is suspended.';
+
+  static const String resetKeyQuestion = 'Reset the device key?';
+  static String resetKeyExplanation(String name) =>
+      "Removes the device key of $name's lost or replaced phone. Records it "
+      'already signed keep verifying. Reactivate the account when the person '
+      'has the new phone.';
+  static const String resetKeyHint = 'For example: Phone replaced';
+  static const String resetKey = 'Reset key';
+  static String resetKeyDone(String name) =>
+      "$name's device key is removed. Reactivate the account when they have "
+      'the new phone.';
+
+  static const String deleteQuestion = 'Delete this account?';
+  static String deleteExplanation(String name) =>
+      'Deleting cannot be undone. $name can never sign in again, and the '
+      'username stays taken. Every record they made is kept.';
+  static const String deleteHint = 'For example: Left the cooperative';
+  static const String deleteForGood = 'Delete for good';
+  static String deletedDone(String name) => "$name's account is deleted.";
+
+  static const String reactivateQuestion = 'Reactivate this account?';
+  static String reactivateExplanation(String name) =>
+      '$name will be able to sign in again.';
+  static const String reactivateAfterReset =
+      'Their device key was reset: signing in on the new phone registers its '
+      'key.';
+  static String reactivatedDone(String name) => '$name is active again.';
+
+  static const String editNameTitle = 'Edit full name';
+  static const String editNameExplanation =
+      'Only the full name can change. The username, role and licence number '
+      'never do.';
+  static const String enterAccountFullName = 'Enter the full name.';
+  static String renamedDone(String name) => 'The name is now $name.';
+
+  // Creating an account and its code (T5).
+  static const String createAccountIntro =
+      'For a regulatory officer or another administrator. Miners, '
+      'transporters and buyers ask for their own accounts.';
+  static const String newAccountRole = 'Role';
+  static const String officerRoleHint =
+      'Reviews alerts and checks consignments.';
+  static const String adminRoleHint =
+      'Manages accounts, GPS zones and the system.';
+  static const String chooseNewAccountRole = 'Choose the role.';
+  static const String enterAccountUsername = 'Choose a username.';
+  static const String usernameRulesHint =
+      '3 to 32 letters, digits, _ . or -. It can never be changed.';
+
+  static const String newCodeQuestion = 'Give a new activation code?';
+  static const String newCodeExplanation =
+      'The old code stops working at once. The new one works for 72 hours.';
+  static const String giveNewCode = 'New code';
+
+  static const String activationCodeTitle = 'Activation code';
+  static String activationCodeFor(String username) =>
+      'Activation code for $username';
+  static String codeValidFor(DateTime localTime) =>
+      'Valid until ${_dayAndTime(localTime)} (72 hours).';
+  static String codeShownOnce(String name) =>
+      'This code is shown only once. Give it to $name yourself, in person or '
+      'by phone. They open the app, tap "I have an activation code", and '
+      'choose their own password.';
+  static const String codeDone = 'Done';
+  static const String leaveWithoutCodeQuestion = 'Leave without the code?';
+  static const String leaveWithoutCodeExplanation =
+      'It cannot be shown again. If it is lost, give a new code from the '
+      "account's page.";
+  static const String stayOnCode = 'Stay';
+  static const String leaveCode = 'Leave';
+  static String accountCreated(String username) =>
+      'Account $username created. It is waiting to be activated.';
 
   // ---- Server status banner (core/widgets/server_status_banner.dart) ----
 

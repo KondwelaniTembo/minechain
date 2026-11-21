@@ -190,26 +190,30 @@ void main() {
       );
     });
 
-    test('an account with an unknown role -> not possible, nothing saved',
-        () async {
-      final h = Harness(
-        server: FakeServer(
-          onLogin: (_) async =>
-              http.Response(loginAnswer(user: userJson(role: 'auditor')), 200),
-        ),
-      );
-      final outcome = await h.auth.logIn('mutale_banda', fakePassword);
-      expect(outcome, isA<LoginNotPossible>());
-      expect(
-        h.state,
-        isA<SignedOut>().having(
-          (s) => s.reason,
-          'reason',
-          AuthReasons.unsupportedRole,
-        ),
-      );
-      expect(h.store.values, isEmpty);
-    });
+    test(
+      'an account with an unknown role -> not possible, nothing saved',
+      () async {
+        final h = Harness(
+          server: FakeServer(
+            onLogin: (_) async => http.Response(
+              loginAnswer(user: userJson(role: 'auditor')),
+              200,
+            ),
+          ),
+        );
+        final outcome = await h.auth.logIn('mutale_banda', fakePassword);
+        expect(outcome, isA<LoginNotPossible>());
+        expect(
+          h.state,
+          isA<SignedOut>().having(
+            (s) => s.reason,
+            'reason',
+            AuthReasons.unsupportedRole,
+          ),
+        );
+        expect(h.store.values, isEmpty);
+      },
+    );
 
     test('a second logIn while one runs is ignored', () async {
       final answer = Completer<http.Response>();
@@ -225,6 +229,77 @@ void main() {
     });
   });
 
+  // Admin accounts T6b: "My account" asks for the account again.
+  group('refreshAccount', () {
+    test(
+      'signed in: the user from GET /auth/me replaces the saved one',
+      () async {
+        final h = Harness(
+          server: FakeServer(
+            onMe: (_) async => http.Response(
+              meAnswer(user: userJson(fullName: 'Mutale K. Banda')),
+              200,
+            ),
+          ),
+        );
+        saveSession(h.store, expiresAt: now.add(const Duration(minutes: 30)));
+        await h.auth.restore();
+        await settle();
+        h.server.requests.clear();
+        h.server.onMe = (_) async => http.Response(
+          meAnswer(user: userJson(fullName: 'Mutale Banda Chanda')),
+          200,
+        );
+
+        await h.auth.refreshAccount();
+
+        expect((h.state as SignedIn).user.fullName, 'Mutale Banda Chanda');
+        expect(h.server.requests.single.url.path, '/auth/me');
+        expect(
+          h.server.requests.single.headers['authorization'],
+          'Bearer $fakeToken',
+        );
+      },
+    );
+
+    test('no network: the saved user stays', () async {
+      final h = Harness();
+      saveSession(h.store, expiresAt: now.add(const Duration(minutes: 30)));
+      await h.auth.restore();
+      await settle();
+      h.server.onMe = (_) async => throw http.ClientException('offline');
+
+      await h.auth.refreshAccount();
+
+      expect((h.state as SignedIn).user.fullName, 'Mutale Banda');
+    });
+
+    test('a deleted account (TOKEN_INVALID) is signed out', () async {
+      final h = Harness();
+      saveSession(h.store, expiresAt: now.add(const Duration(minutes: 30)));
+      await h.auth.restore();
+      await settle();
+      h.server.onMe = (_) async =>
+          http.Response(errorAnswer(ApiCodes.tokenInvalid), 401);
+
+      await h.auth.refreshAccount();
+      await settle();
+
+      expect(h.state, isA<SignedOut>());
+    });
+
+    test('while the password is needed nothing is sent', () async {
+      final h = Harness();
+      saveSession(h.store, expiresAt: now.subtract(const Duration(minutes: 1)));
+      await h.auth.restore();
+
+      await h.auth.refreshAccount();
+
+      expect(h.state, isA<SignedInNeedsPassword>());
+      expect(h.server.requests, isEmpty);
+    });
+  });
+
   group('restore at start-up', () {
     test('nothing saved -> SignedOut', () async {
       final h = Harness();
@@ -234,27 +309,31 @@ void main() {
       expect(h.server.requests, isEmpty);
     });
 
-    test('a valid token -> SignedIn at once, then the user is refreshed',
-        () async {
-      final h = Harness(
-        server: FakeServer(
-          onMe: (_) async => http.Response(
-            meAnswer(user: userJson(fullName: 'Mutale K. Banda')),
-            200,
+    test(
+      'a valid token -> SignedIn at once, then the user is refreshed',
+      () async {
+        final h = Harness(
+          server: FakeServer(
+            onMe: (_) async => http.Response(
+              meAnswer(user: userJson(fullName: 'Mutale K. Banda')),
+              200,
+            ),
           ),
-        ),
-      );
-      saveSession(h.store, expiresAt: now.add(const Duration(minutes: 30)));
+        );
+        saveSession(h.store, expiresAt: now.add(const Duration(minutes: 30)));
 
-      await h.auth.restore();
-      expect(h.state, isA<SignedIn>());
-      expect((h.state as SignedIn).user.fullName, 'Mutale Banda');
+        await h.auth.restore();
+        expect(h.state, isA<SignedIn>());
+        expect((h.state as SignedIn).user.fullName, 'Mutale Banda');
 
-      await settle();
-      expect((h.state as SignedIn).user.fullName, 'Mutale K. Banda');
-      expect(h.server.requests.single.headers['authorization'],
-          'Bearer $fakeToken');
-    });
+        await settle();
+        expect((h.state as SignedIn).user.fullName, 'Mutale K. Banda');
+        expect(
+          h.server.requests.single.headers['authorization'],
+          'Bearer $fakeToken',
+        );
+      },
+    );
 
     test('the refresh failing (no network) keeps the session', () async {
       final h = Harness(
@@ -268,39 +347,46 @@ void main() {
       expect(h.state, isA<SignedIn>());
     });
 
-    test('an expired token -> needs password, token forgotten, user kept',
-        () async {
-      final h = Harness();
-      saveSession(h.store, expiresAt: now.subtract(const Duration(minutes: 1)));
+    test(
+      'an expired token -> needs password, token forgotten, user kept',
+      () async {
+        final h = Harness();
+        saveSession(
+          h.store,
+          expiresAt: now.subtract(const Duration(minutes: 1)),
+        );
 
-      await h.auth.restore();
+        await h.auth.restore();
 
-      expect(h.state, isA<SignedInNeedsPassword>());
-      expect(h.store.values.keys, [SessionKeys.user]);
-      expect(h.server.requests, isEmpty);
-    });
+        expect(h.state, isA<SignedInNeedsPassword>());
+        expect(h.store.values.keys, [SessionKeys.user]);
+        expect(h.server.requests, isEmpty);
+      },
+    );
 
-    test('a saved user with an unknown role -> SignedOut with the reason',
-        () async {
-      final h = Harness();
-      saveSession(
-        h.store,
-        user: userJson(role: 'auditor'),
-        expiresAt: now.add(const Duration(minutes: 30)),
-      );
+    test(
+      'a saved user with an unknown role -> SignedOut with the reason',
+      () async {
+        final h = Harness();
+        saveSession(
+          h.store,
+          user: userJson(role: 'auditor'),
+          expiresAt: now.add(const Duration(minutes: 30)),
+        );
 
-      await h.auth.restore();
+        await h.auth.restore();
 
-      expect(
-        h.state,
-        isA<SignedOut>().having(
-          (s) => s.reason,
-          'reason',
-          AuthReasons.unsupportedRole,
-        ),
-      );
-      expect(h.store.values, isEmpty);
-    });
+        expect(
+          h.state,
+          isA<SignedOut>().having(
+            (s) => s.reason,
+            'reason',
+            AuthReasons.unsupportedRole,
+          ),
+        );
+        expect(h.store.values, isEmpty);
+      },
+    );
 
     test('the refresh answered 401 TOKEN_INVALID -> full logout', () async {
       final h = Harness(
@@ -331,8 +417,7 @@ void main() {
       return h;
     }
 
-    test('TOKEN_EXPIRED -> needs password, user kept, token cleared',
-        () async {
+    test('TOKEN_EXPIRED -> needs password, user kept, token cleared', () async {
       final h = await signedIn();
       h.announce(ApiCodes.tokenExpired);
       await settle();
@@ -404,17 +489,19 @@ void main() {
       expect(sent['username'], 'mutale_banda');
     });
 
-    test('a wrong password -> still needs password, failure returned',
-        () async {
-      final h = await needingPassword(
-        server: FakeServer(
-          onLogin: (_) async =>
-              http.Response(errorAnswer(ApiCodes.invalidCredentials), 401),
-        ),
-      );
-      expect(await h.auth.reauthenticate('wrong'), isA<LoginFailed>());
-      expect(h.state, isA<SignedInNeedsPassword>());
-    });
+    test(
+      'a wrong password -> still needs password, failure returned',
+      () async {
+        final h = await needingPassword(
+          server: FakeServer(
+            onLogin: (_) async =>
+                http.Response(errorAnswer(ApiCodes.invalidCredentials), 401),
+          ),
+        );
+        expect(await h.auth.reauthenticate('wrong'), isA<LoginFailed>());
+        expect(h.state, isA<SignedInNeedsPassword>());
+      },
+    );
 
     test('a suspended account (403 at login) -> full logout', () async {
       final h = await needingPassword(
@@ -521,8 +608,7 @@ void main() {
       }
     }
 
-    test('success -> RegisterSent, still signed out, nothing saved',
-        () async {
+    test('success -> RegisterSent, still signed out, nothing saved', () async {
       final h = Harness();
       await h.auth.restore();
       final announced = <User>[];
@@ -579,8 +665,7 @@ void main() {
       password: 'copper hill solwezi',
     );
 
-    test('the body is exactly the documented fields, code as typed',
-        () async {
+    test('the body is exactly the documented fields, code as typed', () async {
       final h = Harness();
       await h.auth.restore();
       await activate(h);
@@ -615,29 +700,31 @@ void main() {
       expect(announced, hasLength(1));
     });
 
-    test('ACTIVATION_INVALID -> failure, still signed out, nothing saved',
-        () async {
-      final h = Harness(
-        server: FakeServer(
-          onActivate: (_) async =>
-              http.Response(errorAnswer(ApiCodes.activationInvalid), 401),
-        ),
-      );
-      await h.auth.restore();
+    test(
+      'ACTIVATION_INVALID -> failure, still signed out, nothing saved',
+      () async {
+        final h = Harness(
+          server: FakeServer(
+            onActivate: (_) async =>
+                http.Response(errorAnswer(ApiCodes.activationInvalid), 401),
+          ),
+        );
+        await h.auth.restore();
 
-      final outcome = await activate(h);
+        final outcome = await activate(h);
 
-      expect(
-        outcome,
-        isA<LoginFailed>().having(
-          (o) => (o.failure as ServerRefused).code,
-          'code',
-          ApiCodes.activationInvalid,
-        ),
-      );
-      expect(h.state, isA<SignedOut>());
-      expect(h.store.values, isEmpty);
-    });
+        expect(
+          outcome,
+          isA<LoginFailed>().having(
+            (o) => (o.failure as ServerRefused).code,
+            'code',
+            ApiCodes.activationInvalid,
+          ),
+        );
+        expect(h.state, isA<SignedOut>());
+        expect(h.store.values, isEmpty);
+      },
+    );
   });
 
   group('checkExpiry (the phone clock, no request)', () {

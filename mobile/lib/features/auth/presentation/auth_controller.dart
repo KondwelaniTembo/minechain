@@ -346,6 +346,17 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
+  /// Reads the account from the server again (GET /auth/me), for "My
+  /// account" when it opens and when it is refreshed (admin accounts T6b:
+  /// an administrator may have renamed it; before, the new name showed only
+  /// after the next sign-in). Only while signed in with a usable token; a
+  /// failure keeps the saved copy, and a refusal is handled as for any
+  /// request, so a suspended or deleted account is signed out.
+  Future<void> refreshAccount() async {
+    final current = state;
+    if (current is SignedIn) await _refreshUser(current);
+  }
+
   /// Gets the server's current copy of the user, without blocking anything.
   /// A refusal (401, 403) is handled by the SessionEvents listener; any
   /// other failure (no network, server asleep) just keeps the saved copy.

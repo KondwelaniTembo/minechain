@@ -15,8 +15,6 @@ import '../../../core/errors/failure_text.dart';
 import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/sizes.dart';
-import '../../../core/widgets/field_errors_mixin.dart';
-import '../../../core/widgets/form_message.dart';
 import '../../account/presentation/account_screen.dart' show roleLabel;
 import '../../auth/domain/auth_state.dart';
 import '../../auth/domain/user.dart';
@@ -24,11 +22,12 @@ import '../../auth/presentation/auth_controller.dart';
 import '../../auth/presentation/password_prompt.dart';
 import '../domain/account_request.dart';
 import 'account_requests_controller.dart';
+import 'reason_dialog.dart';
 
 /// The reject reason's limits (api.md, POST /admin/users/{id}/reject:
-/// "3–500 characters" after trimming).
-const int rejectReasonMin = 3;
-const int rejectReasonMax = 500;
+/// "3–500 characters" after trimming), the same as every reason's.
+const int rejectReasonMin = reasonMin;
+const int rejectReasonMax = reasonMax;
 
 class AccountRequestsScreen extends ConsumerWidget {
   const AccountRequestsScreen({super.key});
@@ -142,15 +141,34 @@ Future<void> _reject(
   if (!await _signedInFirst(context, ref) || !context.mounted) return;
 
   // The dialog sends the request itself, so the server's field errors can
-  // be shown under its field while it stays open.
+  // be shown under its field while it stays open. Read before the dialog:
+  // the screen keeps the controller alive meanwhile.
+  final controller = ref.read(accountRequestsControllerProvider.notifier);
   final outcome = await showDialog<RequestAction>(
     context: context,
-    builder: (_) => _RejectDialog(request),
+    builder: (_) => ReasonDialog<RequestAction>(
+      title: AppText.rejectQuestion,
+      explanation: AppText.rejectExplanation(request.fullName),
+      actionLabel: AppText.reject,
+      hint: AppText.rejectReasonHint,
+      send: (reason) => controller.reject(request, reason),
+      problemOf: _rejectProblem,
+    ),
   );
   if (outcome != null && context.mounted) {
     _report(context, outcome, AppText.rejected(request.fullName));
   }
 }
+
+/// What keeps the reject dialog open: only a refusal. Done, already handled,
+/// needs-password and ignored all close it, as before.
+ReasonProblem? _rejectProblem(RequestAction outcome) => switch (outcome) {
+  RequestActionFailed(:final failure, :final fieldErrors) =>
+    fieldErrors['reason'] != null
+        ? ReasonProblem(underField: fieldErrors['reason'])
+        : ReasonProblem(underDialog: failureText(failure)),
+  _ => null,
+};
 
 // ---- The body for each state ---------------------------------------------
 
@@ -465,148 +483,6 @@ class _ApproveDialog extends StatelessWidget {
           child: const Text(AppText.approve),
         ),
       ],
-    );
-  }
-}
-
-/// The API's name for the one field, as in its `details`.
-const _reasonField = 'reason';
-
-/// "Reject this request?" with the reason. It sends the request itself and
-/// closes with the outcome once there is nothing more to fix here.
-class _RejectDialog extends ConsumerStatefulWidget {
-  const _RejectDialog(this.request);
-
-  final AccountRequest request;
-
-  @override
-  ConsumerState<_RejectDialog> createState() => _RejectDialogState();
-}
-
-class _RejectDialogState extends ConsumerState<_RejectDialog>
-    with FieldErrorsMixin<_RejectDialog> {
-  final _reason = TextEditingController();
-  bool _sending = false;
-
-  /// A failure that is not about the field, shown under it.
-  String? _failure;
-
-  @override
-  void dispose() {
-    _reason.dispose();
-    super.dispose();
-  }
-
-  Future<void> _send() async {
-    if (_sending) return;
-    // Counted after trimming, as the server counts it.
-    if (_reason.text.trim().length < rejectReasonMin) {
-      setState(() {
-        setFieldErrors({_reasonField: AppText.rejectReasonTooShort});
-        _failure = null;
-      });
-      return;
-    }
-
-    setState(() {
-      _sending = true;
-      setFieldErrors(const {});
-      _failure = null;
-    });
-    final outcome = await ref
-        .read(accountRequestsControllerProvider.notifier)
-        .reject(widget.request, _reason.text);
-    if (!mounted) return;
-
-    switch (outcome) {
-      case RequestActionFailed(:final failure, :final fieldErrors):
-        // Stay open: the reason can be fixed, or sending tried again.
-        setState(() {
-          _sending = false;
-          final reasonError = fieldErrors[_reasonField];
-          if (reasonError != null) {
-            setFieldErrors({_reasonField: reasonError});
-          } else {
-            _failure = failureText(failure);
-          }
-        });
-      case RequestActionDone() ||
-          RequestAlreadyHandled() ||
-          RequestNeedsPassword() ||
-          RequestActionIgnored():
-        Navigator.of(context).pop(outcome);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PopScope(
-      // No closing while the request runs, so its answer has a dialog to
-      // come back to.
-      canPop: !_sending,
-      child: AlertDialog(
-        scrollable: true,
-        title: const Text(AppText.rejectQuestion),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(AppText.rejectExplanation(widget.request.fullName)),
-            const SizedBox(height: AppSizes.spaceM),
-            TextField(
-              controller: _reason,
-              enabled: !_sending,
-              autofocus: true,
-              minLines: 2,
-              maxLines: 5,
-              // maxLength shows the "12/500" counter under the field and
-              // stops typing at 500.
-              maxLength: rejectReasonMax,
-              textCapitalization: TextCapitalization.sentences,
-              onChanged: (_) => clearFieldError(_reasonField),
-              decoration: InputDecoration(
-                labelText: AppText.rejectReason,
-                hintText: AppText.rejectReasonHint,
-                errorText: fieldError(_reasonField),
-                errorMaxLines: 3,
-                hintMaxLines: 3,
-              ),
-            ),
-            const SizedBox(height: AppSizes.spaceS),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const ExcludeSemantics(child: Icon(Icons.warning_amber)),
-                const SizedBox(width: AppSizes.spaceS),
-                const Expanded(child: Text(AppText.rejectReasonWarning)),
-              ],
-            ),
-            if (_failure != null) ...[
-              const SizedBox(height: AppSizes.spaceM),
-              FormMessage(_failure!),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: _sending ? null : () => Navigator.of(context).pop(),
-            child: const Text(AppText.cancel),
-          ),
-          FilledButton(
-            onPressed: _sending ? null : _send,
-            child: _sending
-                ? const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _SmallSpinner(),
-                      SizedBox(width: AppSizes.spaceS),
-                      Flexible(child: Text(AppText.sending)),
-                    ],
-                  )
-                : const Text(AppText.reject),
-          ),
-        ],
-      ),
     );
   }
 }
