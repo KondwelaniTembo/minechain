@@ -1,7 +1,7 @@
 // The administrator's home (plan section 4.2). "Account requests" opens its
 // screen (plan A1), "Accounts" its list (admin accounts plan, T2) and "GPS
-// zones" theirs (GPS zones plan, T2); the other tiles say "Coming soon"
-// until their module is built.
+// zones" theirs (GPS zones plan, T2), "Reports" the transactions report
+// (reports plan, T3); "Anchoring" says "Coming soon" until it is built.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -50,7 +50,8 @@ class AdminHomeScreen extends ConsumerWidget {
         HomeAction(
           icon: Icons.table_chart,
           label: AppText.reports,
-          onTap: soon,
+          // push(): a task page over the home (reports plan, T3).
+          onTap: () => context.push(AppRoutes.adminReports),
         ),
       ],
     );

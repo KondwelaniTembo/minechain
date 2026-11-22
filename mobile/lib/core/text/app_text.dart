@@ -1317,6 +1317,96 @@ abstract final class AppText {
   static String stillHeld(String qrCode) =>
       '$qrCode is still held: another alert on it is open.';
 
+  // ---- Reports (features/reports/, reports plan) ----
+
+  // Refusals and problems (T1). TOO_MANY_REQUESTS keeps the server's own
+  // sentence ("Too many report downloads…"): the shared one is about login
+  // tries.
+  static const String reportTooLarge =
+      'This report has more than 10,000 rows. Choose a shorter period or add '
+      'a filter.';
+  static const String reportPersonNotFound =
+      "This person's account could not be found on the server.";
+  static const String reportConsignmentNotFound =
+      'This consignment could not be found on the server.';
+  static const String reportNotSaved =
+      'The phone could not save the file. Free some space, then try again.';
+  static const String reportPeriodRefused =
+      'The server did not accept this period. Check the days and try again.';
+  static String reportTryAgainIn(Duration wait) {
+    final minutes = (wait.inSeconds / 60).ceil().clamp(1, 1440);
+    return minutes == 1
+        ? 'You can download again in about 1 minute.'
+        : 'You can download again in about $minutes minutes.';
+  }
+
+  static const String periodToBeforeFrom =
+      '"To" must be the same day as "From" or later.';
+  static const String periodTooLong = 'Choose a period of at most 366 days.';
+
+  // Sharing (T2).
+  static const String shareAgain = 'Share again';
+  static const String reportShared = 'Shared.';
+  static const String reportNotShared = 'Not shared yet.';
+  static const String reportShareFailed =
+      'The phone could not open the share menu. Tap "Share again".';
+  static const String reportOpeningShare = 'Opening the share menu…';
+
+  // The form and the result card (T3).
+  static const String reportsIntro =
+      'Download the custody steps of a period as a spreadsheet file (CSV), '
+      'then share it.';
+  static const String reportsBuyerNote =
+      'Your file holds only the consignments you bought.';
+  static const String reportPeriod = 'Period';
+  static String reportFrom(DateTime day) => 'From ${_day(day)}';
+  static String reportTo(DateTime day) => 'To ${_day(day)}';
+  static const String reportPickPeriod = 'Choose the period';
+  static const String reportUtcNote =
+      'Days are counted in UTC, Lusaka time minus 2 hours.';
+  static const String filterAny = 'Any';
+  static const String filterMineral = 'Mineral';
+  static const String filterStep = 'Step';
+  static const String filterReview = 'Review';
+  static const String filterChain = 'On the blockchain';
+  static const String stepRegistrations = 'Registrations';
+  static const String stepHandoffs = 'Handoffs';
+  static const String stepPurchases = 'Purchases';
+  static const String filterReviewPassed = 'Passed';
+  static const String filterReviewFlagged = 'Flagged';
+  static const String filterReviewCleared = 'Cleared';
+  static const String filterReviewRejected = 'Rejected';
+  static const String chainWaiting = 'Waiting';
+  static const String chainSent = 'Sent';
+  static const String chainConfirmed = 'Confirmed';
+  static const String chainFailed = 'Failed';
+  static const String downloadAndShare = 'Download and share';
+  static const String downloading = 'Downloading…';
+  static const String reportNeedsPassword =
+      'Your session has expired. Enter your password, and the report '
+      'downloads.';
+  static String reportRows(int rows) => switch (rows) {
+    0 => 'No rows: nothing matched.',
+    1 => '1 row',
+    _ => '$rows rows',
+  };
+  static String reportDownloadedAt(DateTime localTime) =>
+      'Downloaded ${_dayAndTime(localTime)}';
+
+  // The audit trails (T4).
+  static const String downloadAuditTrail = 'Download audit trail';
+  static String downloadPersonTrail(String username) =>
+      'Download audit trail of $username';
+  static String personTrailTitle(String username) => 'Audit trail of $username';
+  static const String personTrailHint =
+      'Everything this person recorded in the period, the alerts and '
+      'blockchain records of those steps, and changes to their account.';
+  static const String download = 'Download';
+
+  /// "1 Nov 2026".
+  static String _day(DateTime day) =>
+      '${day.day} ${_months[day.month - 1]} ${day.year}';
+
   // ---- Problems with the server's answer (core/errors/failure_text.dart) ----
 
   static const String invalidCredentials = 'Wrong username or password.';

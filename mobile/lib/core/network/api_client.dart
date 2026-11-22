@@ -3,8 +3,10 @@
 //
 // Everything above it (repositories, from F6) calls methods like
 // `api.get(['auth', 'me'], token: t)` and gets back either decoded JSON or an
-// AppFailure. Nothing above it ever sees a socket, a status code, a header or
-// raw bytes.
+// AppFailure. Nothing above it ever sees a socket, a status code or a header.
+// The one exception is [ApiClient.getFile] (reports plan, T1): a report is a
+// file, so its caller gets the bytes and the checked filename, still never a
+// header.
 //
 // SECURITY rules this file keeps:
 // - the token goes only in the Authorization header, never in the address;
@@ -19,6 +21,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -105,7 +108,41 @@ class ApiClient {
     expectBody: expectBody,
   );
 
-  /// Sends one request.
+  /// GET [path] for a file of [mediaType] (for example `text/csv`), not JSON.
+  ///
+  /// Sends `Accept: <mediaType>`. A 2xx answer must say it is [mediaType] and
+  /// have a body, or it is a [BadResponse]: an HTML page with status 200 must
+  /// never be saved as a report. Refusals are still the API's JSON error
+  /// format, so they become the same AppFailures as for [get], with the same
+  /// session events.
+  Future<DownloadedFile> getFile(
+    List<String> path, {
+    required String mediaType,
+    Map<String, String>? query,
+    String? token,
+    Duration? timeout,
+  }) async {
+    final response = await _exchange(
+      'GET',
+      path,
+      query: query,
+      token: token,
+      timeout: timeout,
+      accept: mediaType,
+    );
+    final status = response.statusCode;
+    if (response.bodyBytes.isEmpty ||
+        _mediaTypeOf(response.headers['content-type']) !=
+            mediaType.toLowerCase()) {
+      throw BadResponse(status: status);
+    }
+    return DownloadedFile(
+      bytes: response.bodyBytes,
+      filename: _filenameFrom(response.headers['content-disposition']),
+    );
+  }
+
+  /// Sends one request and decodes its JSON answer.
   ///
   /// - [path]: the path as separate pieces, for example
   ///   `['consignments', 'by-qr', qrCode]`. Each piece is encoded on its own,
@@ -127,6 +164,30 @@ class ApiClient {
     Duration? timeout,
     required bool expectBody,
   }) async {
+    final response = await _exchange(
+      method,
+      path,
+      body: body,
+      query: query,
+      token: token,
+      timeout: timeout,
+      accept: 'application/json',
+    );
+    return _decodeSuccess(response, expectBody: expectBody);
+  }
+
+  /// Sends one request and returns its 2xx answer, for [_send] and
+  /// [getFile]. Every other answer, and every exception, is thrown as an
+  /// [AppFailure], after announcing a session-ending refusal.
+  Future<http.Response> _exchange(
+    String method,
+    List<String> path, {
+    Object? body,
+    Map<String, String>? query,
+    String? token,
+    Duration? timeout,
+    required String accept,
+  }) async {
     final uri = _baseUri.replace(
       pathSegments: path,
       // null (not an empty map) so no stray "?" is added.
@@ -143,7 +204,7 @@ class ApiClient {
             abortTrigger: _delay(timeout ?? defaultTimeout),
           )
           ..followRedirects = false
-          ..headers['accept'] = 'application/json';
+          ..headers['accept'] = accept;
     if (token != null) request.headers['authorization'] = 'Bearer $token';
     if (body != null) {
       request.headers['content-type'] = 'application/json';
@@ -185,9 +246,7 @@ class ApiClient {
     }
 
     final status = response.statusCode;
-    if (status >= 200 && status < 300) {
-      return _decodeSuccess(response, expectBody: expectBody);
-    }
+    if (status >= 200 && status < 300) return response;
 
     final failure = _refusalFrom(response);
     // Only a request that carried a token can have its session refused. A 401
@@ -245,6 +304,29 @@ class ApiClient {
     return BadResponse(status: status);
   }
 
+  /// The media type of a Content-Type header in lower case, without its
+  /// parameters: `text/csv; charset=utf-8` gives `text/csv`.
+  static String? _mediaTypeOf(String? header) =>
+      header?.split(';').first.trim().toLowerCase();
+
+  /// The filename of a `Content-Disposition: attachment; filename="..."`
+  /// header, or null.
+  ///
+  /// Only the API's own filename form is accepted (api.md, "The file"):
+  /// lower-case letters, digits, `.` and `-`, not starting with a dot. Such
+  /// a name has no `/`, `\` or `..` that could reach outside a folder, so
+  /// it is safe to write a file under. Anything else gives null and the
+  /// caller picks its own name.
+  static String? _filenameFrom(String? header) {
+    if (header == null) return null;
+    final match = RegExp(
+      r'^attachment;\s*filename="([a-z0-9][a-z0-9.-]{0,119})"$',
+    ).firstMatch(header.trim());
+    final name = match?.group(1);
+    if (name == null || name.contains('..')) return null;
+    return name;
+  }
+
   /// A `Retry-After` of whole seconds (the form express-rate-limit sends).
   /// The other allowed form, an HTTP date, is not used by this API and gives
   /// null, as does anything odd: the caller then picks its own wait.
@@ -271,4 +353,19 @@ class ApiClient {
           ),
     ];
   }
+}
+
+/// A file from [ApiClient.getFile].
+class DownloadedFile {
+  const DownloadedFile({required this.bytes, required this.filename});
+
+  /// The body exactly as received.
+  final Uint8List bytes;
+
+  /// The server's filename if it had the API's safe form, else null.
+  final String? filename;
+
+  /// No bytes and no name: a report holds people's usernames and places.
+  @override
+  String toString() => 'DownloadedFile(${bytes.length} bytes)';
 }

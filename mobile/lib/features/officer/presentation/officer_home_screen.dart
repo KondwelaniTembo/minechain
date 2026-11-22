@@ -1,6 +1,6 @@
-// The regulatory officer's home (plan section 4.2). Placeholder tiles for now:
-// each says "Coming soon" until its module is built. "Check a consignment"
-// (consignment check plan) and "Alerts" (officer alerts plan) are built.
+// The regulatory officer's home (plan section 4.2). Every tile is built:
+// "Check a consignment" (consignment check plan), "Alerts" (officer alerts
+// plan), "Reports" and "Audit trail" (reports plan, T3 and T4).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,7 +8,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
-import '../../../core/widgets/coming_soon.dart';
 import '../../../core/widgets/home_scaffold.dart';
 import '../../auth/presentation/home_header.dart';
 
@@ -17,8 +16,6 @@ class OfficerHomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    void soon() => showComingSoon(context);
-
     return HomeScaffold(
       title: AppText.officerTitle,
       username: watchUsername(ref),
@@ -45,9 +42,17 @@ class OfficerHomeScreen extends ConsumerWidget {
         HomeAction(
           icon: Icons.table_chart,
           label: AppText.reports,
-          onTap: soon,
+          // push(): a task page over the home (reports plan, T3).
+          onTap: () => context.push(AppRoutes.officerReports),
         ),
-        HomeAction(icon: Icons.history, label: AppText.auditTrail, onTap: soon),
+        HomeAction(
+          icon: Icons.history,
+          label: AppText.auditTrail,
+          // The check screen (reports plan, T4, Q2): the officer scans the
+          // consignment, then taps "Download audit trail" on its result. One
+          // person's trail starts from an alert's page instead.
+          onTap: () => context.push(AppRoutes.officerCheck),
+        ),
       ],
     );
   }

@@ -22,6 +22,7 @@ import '../../auth/domain/auth_state.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../../auth/presentation/password_prompt.dart';
 import '../../registration/presentation/mineral_text.dart';
+import '../../reports/presentation/audit_trail_panel.dart';
 import '../../steps/presentation/saved_work_gate.dart' show backOrHome;
 import '../../verification/domain/consignment_view.dart'
     show ConsignmentStage, ReviewStatus;
@@ -188,6 +189,10 @@ class AlertDetailScreen extends ConsumerWidget {
         icon: Icons.rule,
         text: _reviewText(alert.step.reviewStatus),
       ),
+      // One person's audit trail (reports plan, T4, §4.3): the alert names
+      // who recorded the step, and the officer cannot list users.
+      const SizedBox(height: AppSizes.spaceS),
+      PersonTrailPanel(actorId: alert.actor.id, username: alert.actor.username),
 
       _Section(AppText.theConsignment),
       AlertInfoLine(
