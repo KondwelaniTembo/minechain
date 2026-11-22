@@ -4,9 +4,10 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 22 Nov 2026, Reports 7/7 on `feature/reports` (2481 passed, 0 skipped;
-the T5b re-check passed on the A57). Next: the developer's two commits and PR #21, then the
-verification fix on its own branch. The
+Last updated: 22 Nov 2026, the verification fix's server part (A) on
+`fix/chain-check-pruned-receipts` (`npm test` 2318, `npm run test:db` 914). Scope (10): FR-16
+cut, FR-14 kept and built. Next: the developer's commit, PR and Render settings (B), the two
+0008 alerts cleared, then the dashboard plan. The
 submission window is open until about 16:47 on Tue 24 Nov (news on 22 Nov); the day plan
 for 22 Nov evening is in (b).
 
@@ -66,8 +67,8 @@ for 22 Nov evening is in (b).
   end-to-end test
 - ✅ Reports (7/7, done 22 Nov): download the CSV and share it from the phone, and the
   officer's two audit trails (FR-09, FR-13); PR #21
-- ⬜ Dashboard (FR-14, kept under Scope (4); the first feature to cut if time runs short)
-- ⬜ FR-16 decision: the signed PDF certificate, build or cut (Scope (4))
+- ➡️ Dashboard (FR-14): moved to 22–23 Nov, kept and built (Scope (10))
+- ✅ FR-16 decision: the signed PDF certificate is cut (22 Nov, Scope (10))
 - ⬜ End-to-end test of every role (it starts with the walked "Phone check site" zone and a
   registration inside it, GPS zones T6 steps 2 and 3)
 
@@ -82,7 +83,11 @@ for 22 Nov evening is in (b).
 
 - ✅ Production migration `1794528000000_users-deleted`: closed. Run on 15 Nov, about 22:30,
   after a backup and before PR #8 was merged (`docs/deployment.md`, commit `efd8a5f`).
-- ✅ Scope (4): FR-14 kept (17 Nov); FR-16 is decided on Sat 21 Nov.
+- ✅ Scope (4): FR-14 kept (17 Nov); FR-16 cut (22 Nov, Scope (10)). FR-15 and FR-16 are
+  the only requirements left out.
+- ⬜ The admin's "Anchoring" tile says "Coming soon": the server endpoints exist (Anchoring
+  admin N1–N5), the app screen was never planned. Build it or take the tile away: the
+  developer's choice.
 - ✅ Day plan: approved by the developer on 18 Nov.
 
 ## (b) Today, Sun 22 Nov (evening; submission window until about 16:47 on Tue 24 Nov)
@@ -91,10 +96,17 @@ for 22 Nov evening is in (b).
 2. ⬜ Verification fix (server, approved 22 Nov: both parts): a pruned receipt is no
    longer called tampering, and Alchemy becomes the primary RPC with PublicNode as the
    fallback; then the two false 0008 alerts are cleared with a reason
-3. ⬜ Cut FR-14 (dashboard) and FR-16 (PDF certificate), recorded as decisions
-4. ⬜ End-to-end test of every role, shortened, with the typed zone
-5. ⬜ README, final pass (security over the last features), `CLAUDE.md` status
-6. ⬜ The submission zip (`git archive`, committed files only) and the release tag
+   - ✅ (A) the code and docs, on `fix/chain-check-pruned-receipts` (2318 + 914 passed)
+   - ⬜ the developer's commit, PR and merge (this deploys to Render)
+   - ⬜ (B) Render settings: `SEPOLIA_RPC_URL` Alchemy, `SEPOLIA_RPC_URL_FALLBACK` PublicNode
+   - ⬜ check on production: 0008 checked again reads "Verified" or "could not check", no new
+     alert; then the officer clears the two 0008 alerts with a reason
+3. ✅ Scope (10): FR-16 cut; FR-14 (dashboard) kept and built, decided by the developer
+   (the earlier "cut FR-14" here was a proposal the developer did not agree to)
+4. ⬜ Dashboard (FR-14): plan first, then build
+5. ⬜ End-to-end test of every role, shortened, with the typed zone
+6. ⬜ README, final pass (security over the last features), `CLAUDE.md` status
+7. ⬜ The submission zip (`git archive`, committed files only) and the release tag
 
 The thesis starts on Mon 23 Nov, in chat.
 
@@ -121,7 +133,20 @@ The thesis starts on Mon 23 Nov, in chat.
 Done on Thu 19 (session ended 20 Nov, 00:40): Hardening (PR #13), "My account" back arrow
 (PR #14), Consignment check T1–T5 (1584 tests passed, 0 skipped).
 
-## (c) Current feature: Reports — 7/7
+## (c) Current feature: Verification fix — 1/4
+
+No plan file: the fix was approved on 22 Nov as described in `CLAUDE.md` (found in Reports
+T5). Branch `fix/chain-check-pruned-receipts`, from `main` after PR #21. **Server code:
+merging deploys to Render.** Decisions Verification fix (1), (2), one known limitation.
+
+- ✅ A. `chainCheck.js` step 4 (`receiptPruned`), `chainReader.getTransaction`, the fake
+  reader; docs (`contract-spec.md` 7.1 and 7.2, `api.md` the chain check, `decisions.md`,
+  `deployment.md`); 18 new tests, `npm test` 2318, `npm run test:db` 914
+- ⬜ The commit, PR and merge (developer)
+- ⬜ B. Render settings (developer): Alchemy primary, PublicNode fallback
+- ⬜ Production check (0008 again, no new alert), then the officer clears the two 0008 alerts
+
+## (c) Earlier: Reports — 7/7
 
 Plan: `docs/plans/reports-plan.md`, approved 21 Nov (Q1–Q6 as proposed; Q1 adds
 `share_plus` 13.3.1). Branch `feature/reports`, from `main` after PR #20. App only (`mobile/`, `docs/`);

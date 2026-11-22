@@ -212,8 +212,9 @@ anchoring worker's chain client. The reader has no wallet and never reads
 `RECORDER_PRIVATE_KEY`, so it works whether or not `ANCHOR_ENABLED` is true. The server
 creates it whenever `SEPOLIA_RPC_URL` and `MINECHAIN_CONTRACT_ADDRESS` are set (with
 `SEPOLIA_RPC_URL_FALLBACK` as a fallback, used only when the primary cannot be reached).
-Creating it makes no network call. It can do two things: fetch a transaction receipt, and
-read the latest block number. Each request gives up after 8 seconds.
+Creating it makes no network call. It can do three things: fetch a transaction receipt, read
+the latest block number, and fetch a transaction itself (its block and recipient only, used
+when its receipt is missing, 7.2 step 4). Each request gives up after 8 seconds.
 
 It shares the provider set-up, fallback rule and event decoding with the chain client
 (`backend/src/chain/rpc.js`), and the same secret rules: the RPC URLs stay inside the module,
@@ -256,9 +257,18 @@ network would honestly report "no such receipt" for every honest step.
    consignment `id`, the actor reference, `weightMilligrams` and `dataHash`. The `dataHash` is
    compared with the **recomputed** hash, never the stored `data_hash` column, so the chain is
    compared with the evidence itself.
-4. **No receipt** is a mismatch (`TX_NOT_FOUND`) only when the reader's latest block is at
-   least the stored `block_number` plus `ANCHOR_CONFIRMATIONS`; before that the RPC may be
-   behind, and the result is `chain_unavailable`.
+4. **No receipt** is a mismatch (`TX_NOT_FOUND`) only when both of these hold:
+   - the reader's latest block is at least the stored `block_number` plus
+     `ANCHOR_CONFIRMATIONS` (before that the RPC may be behind); and
+   - the reader does not hold the transaction itself in that block: `eth_getTransactionByHash`
+     (`getTransaction`, asked only at this point) answers nothing, or a transaction that is
+     pending, in another block, or sent to anything but the MineChain address.
+
+   Otherwise the result is `chain_unavailable`. The second condition exists because some RPC
+   providers prune old history: PublicNode keeps receipts and logs for only about the last
+   10,000 blocks (about 33 hours) but still answers for the transactions in them. A step anchored
+   before that would otherwise read as tampering on such a node. Without the receipt there is no
+   event to compare, so a pruned receipt is never a `match` either (Verification fix (1)).
 5. **Any reader error**, a network-check refusal included, or no reader configured, gives
    `chain_unavailable`, never a mismatch.
 
@@ -266,7 +276,8 @@ A mismatch raises a `record_tampered` alert on the step, which holds the consign
 ([database-schema.md, alerts](database-schema.md#alerts)).
 
 **Why the receipt and not `getLogs`.** The cost is fixed: one `eth_getTransactionReceipt` per
-step, plus `eth_blockNumber` only when a receipt is missing. A log search needs a block range
+step, plus `eth_blockNumber` only when a receipt is missing, and `eth_getTransactionByHash`
+only when the node is also past the block. A log search needs a block range
 from the deployment block, which grows every day. It is just as safe: the stored hash is only a
 pointer, and what is trusted is the event, which only the recorder wallet can emit, matched in
 full against the recomputed hash.

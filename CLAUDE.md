@@ -37,15 +37,29 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 22 Nov 2026, after Reports T6 (7/7). Read this first in a new session,
-then `docs/progress.md` (the day plan and the current feature's subtasks), then
+Updated 22 Nov 2026, after the verification fix's server part (A). Read this first in a new
+session, then `docs/progress.md` (the day plan and the current feature's subtasks), then
 `docs/decisions.md`.
+
+- **In progress: Verification fix** on `fix/chain-check-pruned-receipts` (from `main` after
+  PR #21). (A) done: `chainCheck.js` step 4 `receiptPruned` and `chainReader.getTransaction`
+  (asked only when the receipt is missing and the node is past the block; found in the
+  stored block and sent to MineChain → `chain_unavailable`). Decisions Verification fix (1),
+  (2), one known limitation; `contract-spec.md` 7.1–7.2, `api.md`, `deployment.md` "RPC
+  gateways from 22 Nov". `npm test` 2318, `npm run test:db` 914. Next: the developer's
+  commit and PR (merging deploys), (B) the Render settings, a production check of 0008, the
+  officer clears the two 0008 alerts. Then the dashboard plan (FR-14).
+  - **Scope (10), 22 Nov, the developer:** FR-16 (signed PDF certificate) cut; FR-14
+    (dashboard) kept and built. FR-15 and FR-16 are the only cuts. Open: the admin's
+    "Anchoring" tile ("Coming soon"; the server endpoints exist): build or remove.
+  - Lesson: never mutate a file with PowerShell `Set-Content` (5.1 adds a BOM) or Git
+    Bash `sed -i` (it rewrote CRLF as LF); and run backend vitest from PowerShell, as
+    Git Bash's `/c/` path loads vitest twice ("reading 'config'").
 
 - **Done: Reports** (7/7, T5b added) on `feature/reports` (from `main` after PR #20),
   `docs/plans/reports-plan.md`, approved 21 Nov (Q1–Q6 as proposed; `share_plus` 13.3.1).
   App only; nothing deploys. 2481 tests passed, 0 skipped. Decisions Reports app
-  (1)–(10), five known limitations. Next: two commits and PR #21 (the branch's first
-  push needs `--set-upstream`), then the verification fix below.
+  (1)–(10), five known limitations. Merged as PR #21 (`a83a727`).
   - Built in `features/reports/`: `domain/report_request.dart` (the three requests, UTC
     days, 366 days at most), `csv_records.dart` (`countRecords`, `withoutByteOrderMark`),
     `saved_report.dart` (the safe filename); `data/reports_api.dart`,
@@ -119,9 +133,9 @@ then `docs/progress.md` (the day plan and the current feature's subtasks), then
     `test/fakes/fake_accounts_server.dart` and `account_page_helpers.dart`.
   - Lesson: a page must not rely on go_router's `extra`; a redirect re-run (the token
     running out) rebuilds the page without it. Keep such state in a provider.
-- **Then (22 Nov evening, `docs/progress.md` (b)):** the verification fix; cut FR-14
-  and FR-16 as decisions; a shortened end-to-end test; README and a final pass; the
-  submission zip (`git archive`, committed files only) and the release tag.
+- **Then (22 Nov evening, `docs/progress.md` (b)):** the verification fix; the dashboard
+  (FR-14, kept; FR-16 cut, Scope (10)); a shortened end-to-end test; README and a final
+  pass; the submission zip (`git archive`, committed files only) and the release tag.
 
 - **Done: Officer alerts** (7/7) on `feature/officer-alerts`, `docs/plans/officer-alerts-plan.md`
   (approved 20 Nov, Q1–Q6 as proposed). App only (`mobile/`, `docs/`); nothing deploys to
@@ -622,10 +636,10 @@ Priorities: **M** Must, **S** Should, **C** Could.
 | FR-13 | Officers download audit trails as spreadsheets | S |
 | FR-14 | Analytics dashboard | C (kept) |
 | FR-15 | Multi-language interface | C (cut) |
-| FR-16 | Signed PDF provenance certificate | S |
+| FR-16 | Signed PDF provenance certificate | S (cut) |
 
-FR-15 is cut; do not start it without being asked. FR-14 is kept (Scope (4), 17 Nov) and is
-the first feature to cut if time runs short. FR-16 is decided on Saturday 21 Nov.
+FR-15 and FR-16 are cut (Scope (1), Scope (10)); do not start them without being asked.
+FR-14 is kept and built (Scope (4), 17 Nov; Scope (10), 22 Nov, by the developer).
 
 ### Non-functional
 

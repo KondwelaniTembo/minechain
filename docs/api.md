@@ -2481,7 +2481,7 @@ Every listed step gets a `check.result`:
 | `match` | The stored record is exactly what was signed, the signature still verifies, and the Sepolia transaction holds a MineChain event for this step with the same consignment, actor reference, weight and hash. Nothing has been changed since it was anchored |
 | `mismatch` | Something differs: the stored record no longer agrees with its own signature or hash, or with what the blockchain recorded. This is treated as tampering |
 | `not_anchored_yet` | The step is not confirmed on the blockchain yet (pending, submitted or failed, and every flagged or rejected step), so there is nothing to compare. The blockchain is not asked |
-| `chain_unavailable` | The server could not ask the blockchain this time, or could not trust the answer: the RPC provider was down or slow, it is on the wrong network or has the wrong contract, or no reader is configured. **Never shown as tampering, and it raises no alert.** Scanning again later may give a real result |
+| `chain_unavailable` | The server could not ask the blockchain this time, or could not trust the answer: the RPC provider was down or slow, it is on the wrong network or has the wrong contract, it has pruned the step's receipt (step 3 below), or no reader is configured. **Never shown as tampering, and it raises no alert.** Scanning again later may give a real result |
 
 **How a step is checked**, cheapest first:
 
@@ -2497,9 +2497,12 @@ Every listed step gets a `check.result`:
    block, and hold one MineChain event that matches the step, compared with the **recomputed**
    hash, not the stored one.
 3. **A missing receipt** is a `mismatch` only when the server's RPC provider has already
-   reached the step's block plus the confirmations (`ANCHOR_CONFIRMATIONS`, 2 by default). The
-   officer then sees `fields: ["chain_tx_hash"]` and `reason: "TX_NOT_FOUND"`. Before that, the
-   provider may simply be behind, so the result is `chain_unavailable`.
+   reached the step's block plus the confirmations (`ANCHOR_CONFIRMATIONS`, 2 by default)
+   **and** does not have the transaction itself in that block, sent to the MineChain contract.
+   The officer then sees `fields: ["chain_tx_hash"]` and `reason: "TX_NOT_FOUND"`. Before that
+   block, the provider may simply be behind. And a provider that holds the transaction but not
+   its receipt has pruned old receipts, as PublicNode does after about 10,000 blocks. Both give
+   `chain_unavailable`, never tampering.
 
 **On a mismatch**, officers see the names of what differs in `check.fields`, never the values.
 Column names (`weight_mg`, `captured_at`, `signature`, `data_hash`, …) mean the stored record

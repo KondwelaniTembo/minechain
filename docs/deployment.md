@@ -17,7 +17,7 @@ provider name.
 |---|---|
 | REST API and anchoring worker | Render web service **minechain-api** (Frankfurt, Free) |
 | Server database | Render PostgreSQL **minechain-db** (Frankfurt, Free) |
-| Ledger | The MineChain contract on Ethereum Sepolia, reached through PublicNode, with 1RPC configured as a fallback |
+| Ledger | The MineChain contract on Ethereum Sepolia, reached through Alchemy, with PublicNode as the fallback (from 22 Nov; before that PublicNode, with 1RPC as a fallback that never answered from Render) |
 | Migrations, seed and backups | Run by hand from the developer's laptop, never on Render |
 
 The API reaches the database over Render's private network. Clients reach the API through
@@ -94,8 +94,8 @@ settings that are not secret.
 | `TRUST_PROXY` | How many proxies sit in front of the app, so rate limits and audit entries see the real client address | No | `TRUST_PROXY=3`, measured (see [Verification](#trust_proxy)) |
 | `ANCHOR_ENABLED` | Runs the anchoring worker in this process | No | `ANCHOR_ENABLED=true` |
 | `MINECHAIN_CONTRACT_ADDRESS` | The deployed MineChain contract on Sepolia | No (public on-chain) | The deployment recorded in `docs/contract-spec.md` |
-| `SEPOLIA_RPC_URL` | Primary RPC gateway | Yes (treated as secret, because RPC URLs can carry API keys) | PublicNode's Sepolia endpoint |
-| `SEPOLIA_RPC_URL_FALLBACK` | Fallback RPC gateway | Yes (as above) | 1RPC's Sepolia endpoint |
+| `SEPOLIA_RPC_URL` | Primary RPC gateway | Yes (treated as secret, because RPC URLs can carry API keys) | Alchemy's Sepolia endpoint, from 22 Nov (it keeps receipts for the whole chain; see [Verification fix](#rpc-gateways-from-22-nov)) |
+| `SEPOLIA_RPC_URL_FALLBACK` | Fallback RPC gateway | Yes (as above) | PublicNode's Sepolia endpoint, from 22 Nov (1RPC before) |
 | `RECORDER_PRIVATE_KEY` | Signs the anchoring transactions | Yes | The throwaway recorder wallet that holds `RECORDER_ROLE` |
 
 The anchoring settings not in this list (`CHAIN_ID`, `ANCHOR_INTERVAL_SECONDS`,
@@ -249,6 +249,24 @@ backup root, never the server certificate).
   PublicNode. If PublicNode is down, anchoring pauses: steps stay `pending`, the worker backs
   off, and it resumes when PublicNode answers again.
 
+### RPC gateways from 22 Nov
+
+PublicNode keeps receipts and logs for only about the last 10,000 blocks (about 33 hours).
+In the Reports T5 phone check, checking MC-2026-LSK-0008 therefore found no receipts for its
+older steps and raised two false `record_tampered` alerts. Two changes followed (decisions
+log, Verification fix (1) and (2)):
+
+- **The code:** a missing receipt whose transaction is still in its block is
+  `chain_unavailable`, not tampering (`fix/chain-check-pruned-receipts`).
+- **Render's settings**, changed by the developer in the dashboard, never in Git:
+  `SEPOLIA_RPC_URL` is Alchemy's Sepolia endpoint and `SEPOLIA_RPC_URL_FALLBACK` is
+  PublicNode's. After the change, the service restarts. Check the logs for the worker's
+  preflight passing and no `rpcUnreachable` warning, and check that `GET /admin/anchoring`
+  shows `worker.state` `running`.
+- **Then** an officer clears the two 0008 alerts with "Clear, no problem" and a reason. Until
+  both changes are live, no consignment is checked on production: each step gets one tamper
+  alert, ever (Verification (12)).
+
 ---
 
 ## Operational security
@@ -332,7 +350,8 @@ Also recorded in [decisions.md](decisions.md), dated 14 Nov 2026.
   suits a server next to its database, not remote administration over a weak network.
 - **The proxy hop count is specific to this path** and must be measured again if the hosting
   changes.
-- **Production effectively has one RPC gateway** (PublicNode).
+- ~~**Production effectively has one RPC gateway** (PublicNode).~~ From 22 Nov, Alchemy with
+  PublicNode as the fallback ([RPC gateways from 22 Nov](#rpc-gateways-from-22-nov)).
 
 ---
 
