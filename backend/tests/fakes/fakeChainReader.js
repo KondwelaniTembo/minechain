@@ -1,6 +1,7 @@
 // An in-memory chain reader for tests: the same methods, shapes and errors as
 // src/chain/chainReader.js, plus controls for what verification must survive (the RPC
-// down, a node on the wrong network, a receipt that is missing or altered).
+// down, a node on the wrong network, a receipt that is missing or altered, a receipt pruned
+// while its transaction is kept).
 //
 // Two ways to use it:
 //   createFakeChainReader()                 its own receipts and block number, set by the test
@@ -16,6 +17,7 @@ import { FAKE_CONTRACT_ADDRESS } from './fakeChainClient.js';
 export function createFakeChainReader({ chain = null } = {}) {
   const state = {
     receipts: new Map(),
+    transactions: new Map(),
     blockNumber: DEPLOY_BLOCK + 100,
     down: false,
     refusal: null,
@@ -47,6 +49,15 @@ export function createFakeChainReader({ chain = null } = {}) {
       return read('getBlockNumber', () => (chain ? chain.getBlockNumber() : state.blockNumber));
     },
 
+    // Only what setTransaction planted, in both modes: the fake chain client keeps every
+    // receipt, so a transaction without one exists only when a test plays a pruning node.
+    async getTransaction(hash) {
+      if (typeof hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(hash)) {
+        throw new TypeError('hash must be 0x and 64 hex characters');
+      }
+      return read('getTransaction', () => state.transactions.get(hash.toLowerCase()) ?? null, { hash });
+    },
+
     close() {
       state.closed = true;
     },
@@ -61,6 +72,11 @@ export function createFakeChainReader({ chain = null } = {}) {
     },
     setBlockNumber(blockNumber) {
       state.blockNumber = blockNumber;
+    },
+    // transaction: the shape getTransaction returns ({ hash, blockNumber, to }). With no
+    // receipt for the same hash, this is a node that pruned the receipt (chain check step 4).
+    setTransaction(hash, transaction) {
+      state.transactions.set(hash.toLowerCase(), Object.freeze({ ...transaction }));
     },
     // Every call fails as an unreachable RPC does: RPC_UNAVAILABLE.
     failRpc(down = true) {
