@@ -137,11 +137,13 @@ void main() {
       // "transporter tiles" below checks each of its tiles instead.
       //
       // The buyer's last tile, "Send my work", is wired since Buyer
-      // purchase T3 (changed by plan), so its case taps "Reports", the one
-      // buyer tile still to come (Reports feature); "buyer tiles" below
-      // checks the four that are built.
-      if (role != Role.miner && role != Role.transporter) {
-        final soon = role == Role.buyer ? AppText.reports : labels.last;
+      // purchase T3 (changed by plan), and its "Reports" since Reports T3;
+      // the officer's "Reports" and "Audit trail" since Reports T3 and T4
+      // (changed by plan). "buyer tiles" and "officer tiles" below check
+      // each of their tiles instead. Only the administrator's "Anchoring"
+      // still says "Coming soon" (its "Reports", the last tile, is wired).
+      if (role == Role.admin) {
+        const soon = AppText.anchoring;
         testWidgets('a tile says "Coming soon"', (tester) async {
           await pumpHome(tester, screen, signedInAs(role));
           await tester.ensureVisible(tile(soon));
@@ -318,20 +320,23 @@ void main() {
     );
   });
 
-  // Buyer purchase T3: the four built buyer tiles, the same way. "Reports"
-  // is left out: it still says "Coming soon" (checked above).
+  // Buyer purchase T3: the four built buyer tiles, the same way. Reports T3
+  // (changed by plan): "Reports" is built too, so it joined them.
   group('buyer tiles', () {
     tilesOpenTheirPages(Role.buyer, AppRoutes.buyer, const BuyerHomeScreen(), [
       (AppText.checkConsignment, AppRoutes.buyerCheck),
       (AppText.recordPurchase, AppRoutes.buyerPurchase),
       (AppText.myPurchases, AppRoutes.buyerPurchases),
+      (AppText.reports, AppRoutes.buyerReports),
       (AppText.sendMyWork, AppRoutes.buyerSync),
     ]);
   });
 
   // Officer alerts T2: "Alerts" and "Check a consignment" are built.
-  // "Reports" and "Audit trail" still say "Coming soon" (the officer's case
-  // above taps "Audit trail").
+  // Reports T3 and T4 (changed by plan): "Reports" opens its screen, and
+  // "Audit trail" opens the check (Q2: the trail is downloaded from the
+  // result), so the "Reports still says Coming soon" case went and both
+  // tiles joined this list.
   group('officer tiles', () {
     tilesOpenTheirPages(
       Role.officer,
@@ -340,34 +345,25 @@ void main() {
       [
         (AppText.alerts, AppRoutes.officerAlerts),
         (AppText.checkConsignment, AppRoutes.officerCheck),
+        (AppText.reports, AppRoutes.officerReports),
+        (AppText.auditTrail, AppRoutes.officerCheck),
       ],
     );
-
-    testWidgets('"Reports" still says "Coming soon"', (tester) async {
-      await pumpHome(
-        tester,
-        const OfficerHomeScreen(),
-        signedInAs(Role.officer),
-      );
-      await tester.ensureVisible(tile(AppText.reports));
-      await tester.pump();
-      await tester.tap(tile(AppText.reports));
-      await tester.pump();
-      expect(find.text(AppText.comingSoon), findsOneWidget);
-    });
   });
 
   // Admin accounts T2: "Accounts" is wired. GPS zones T2 (changed by plan):
-  // "GPS zones" is wired too, so it left the "Coming soon" loop below; the
-  // two tiles still to come (Anchoring, Reports) still say "Coming soon".
+  // "GPS zones" is wired too, so it left the "Coming soon" loop below.
+  // Reports T3 (changed by plan): so is "Reports"; only "Anchoring" still
+  // says "Coming soon".
   group('admin tiles', () {
     tilesOpenTheirPages(Role.admin, AppRoutes.admin, const AdminHomeScreen(), [
       (AppText.accountRequests, AppRoutes.adminRequests),
       (AppText.accounts, AppRoutes.adminAccounts),
       (AppText.gpsZones, AppRoutes.adminZones),
+      (AppText.reports, AppRoutes.adminReports),
     ]);
 
-    for (final label in [AppText.anchoring, AppText.reports]) {
+    for (final label in [AppText.anchoring]) {
       testWidgets('"$label" still says "Coming soon"', (tester) async {
         await pumpHome(tester, const AdminHomeScreen(), signedInAs(Role.admin));
         await tester.ensureVisible(tile(label));
@@ -395,7 +391,9 @@ void tilesOpenTheirPages(
         initialLocation: homePath,
         routes: [
           GoRoute(path: homePath, builder: (_, _) => home),
-          for (final (_, page) in tiles)
+          // A set: two tiles may open the same page (the officer's "Check a
+          // consignment" and "Audit trail", Reports T4).
+          for (final page in {for (final (_, path) in tiles) path})
             GoRoute(
               path: page,
               builder: (_, _) => Scaffold(body: Text('page $page')),

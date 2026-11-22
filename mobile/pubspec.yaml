@@ -41,6 +41,11 @@ dependencies:
   path_provider: 2.1.6
   mobile_scanner: 7.5.0
   geolocator: 14.1.2
+  # Android's share sheet for a downloaded report (reports plan, T2, Q1):
+  # Drive, Gmail, WhatsApp and the phone's own "save" targets. Flutter
+  # Community, verified publisher; it hands the chosen app a one-file read
+  # grant through its own FileProvider, so no storage permission is needed.
+  share_plus: 13.3.1
 
 dev_dependencies:
   flutter_test:

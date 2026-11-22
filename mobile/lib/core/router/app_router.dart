@@ -36,6 +36,7 @@ import '../../features/handoff/presentation/take_custody_screen.dart';
 import '../../features/miner/presentation/miner_home_screen.dart';
 import '../../features/officer/presentation/officer_home_screen.dart';
 import '../../features/registration/presentation/register_consignment_screen.dart';
+import '../../features/reports/presentation/reports_screen.dart';
 import '../../features/sync/presentation/send_work_screen.dart';
 import '../../features/transporter/presentation/transporter_home_screen.dart';
 import '../../features/verification/presentation/consignment_check_screen.dart';
@@ -169,6 +170,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           path: path,
           builder: (context, state) => const ConsignmentCheckScreen(),
         ),
+      // "Reports" (reports plan, T3): one screen under three homes, as
+      // above; each home opens it with push().
+      for (final path in [
+        AppRoutes.buyerReports,
+        AppRoutes.officerReports,
+        AppRoutes.adminReports,
+      ])
+        GoRoute(path: path, builder: (context, state) => const ReportsScreen()),
       // Under /transporter, so redirect rule 4 sends every other role home.
       // The transporter home opens it with push().
       GoRoute(

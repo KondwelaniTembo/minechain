@@ -1,8 +1,7 @@
-// The buyer's home (plan section 4.2). Placeholder tiles for now: each says
-// "Coming soon" until its module is built.
+// The buyer's home (plan section 4.2).
 // "Check a consignment" is built (consignment check plan), and "Record
 // purchase" (buyer purchase plan, T2), "My purchases" and "Send my work"
-// (T3). "Reports" waits for the Reports feature (Sat 21).
+// (T3), and "Reports" (reports plan, T3). Every tile is built.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,7 +9,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
-import '../../../core/widgets/coming_soon.dart';
 import '../../../core/widgets/home_scaffold.dart';
 import '../../auth/presentation/home_header.dart';
 
@@ -19,8 +17,6 @@ class BuyerHomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    void soon() => showComingSoon(context);
-
     return HomeScaffold(
       title: AppText.buyerTitle,
       username: watchUsername(ref),
@@ -51,7 +47,8 @@ class BuyerHomeScreen extends ConsumerWidget {
         HomeAction(
           icon: Icons.table_chart,
           label: AppText.reports,
-          onTap: soon,
+          // push(): a task page over the home (reports plan, T3).
+          onTap: () => context.push(AppRoutes.buyerReports),
         ),
         HomeAction(
           icon: Icons.cloud_upload,

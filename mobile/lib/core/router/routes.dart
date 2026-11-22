@@ -45,6 +45,13 @@ abstract final class AppRoutes {
   static const String buyerCheck = '/buyer/check';
   static const String officerCheck = '/officer/check';
 
+  /// "Reports" (reports plan, T3): one screen, the transactions report,
+  /// under each of the three homes that have the tile, so the redirect's
+  /// role rule keeps miners and transporters out with no new rule.
+  static const String buyerReports = '/buyer/reports';
+  static const String officerReports = '/officer/reports';
+  static const String adminReports = '/admin/reports';
+
   /// "Take custody" (transporter handoff plan). Under /transporter, so the
   /// redirect's role rule keeps it for transporters only.
   static const String transporterCustody = '/transporter/custody';

@@ -16,9 +16,13 @@ import '../../../core/errors/app_failure.dart';
 import '../../../core/errors/failure_text.dart';
 import '../../../core/text/app_text.dart';
 import '../../../core/theme/sizes.dart';
+import '../../auth/domain/auth_state.dart';
+import '../../auth/domain/user.dart';
+import '../../auth/presentation/auth_controller.dart';
 import '../../auth/presentation/password_prompt.dart';
 import '../../registration/data/location_source.dart';
 import '../../registration/presentation/qr_scanner_view.dart';
+import '../../reports/presentation/audit_trail_panel.dart';
 import 'check_result_view.dart';
 import 'consignment_check_controller.dart';
 
@@ -29,6 +33,12 @@ class ConsignmentCheckScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(consignmentCheckControllerProvider);
     final controller = ref.read(consignmentCheckControllerProvider.notifier);
+    // The audit trail is the officer's only (FR-13; reports plan, T4).
+    final officer = switch (ref.watch(authControllerProvider)) {
+      SignedIn(:final user) ||
+      SignedInNeedsPassword(:final user) => user.role == Role.officer,
+      _ => false,
+    };
 
     return Scaffold(
       appBar: AppBar(title: const Text(AppText.checkConsignment)),
@@ -60,9 +70,15 @@ class ConsignmentCheckScreen extends ConsumerWidget {
                 ),
                 CheckDone(:final view) => CheckResultView(
                   view: view,
-                  footer: _Buttons(
-                    main: null,
-                    onScanAgain: controller.scanAgain,
+                  footer: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (officer) ...[
+                        ConsignmentTrailPanel(consignmentId: view.id),
+                        const SizedBox(height: AppSizes.spaceM),
+                      ],
+                      _Buttons(main: null, onScanAgain: controller.scanAgain),
+                    ],
                   ),
                 ),
               },

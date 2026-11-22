@@ -71,6 +71,10 @@ String? _ourTextFor(String code) {
     // their names), so it is not here; INVALID_STATUS_TRANSITION keeps the
     // server's sentence, as for accounts.
     ApiCodes.zoneNotFound => AppText.zoneNotFound,
+    // Reports. TOO_MANY_REQUESTS, USER_NOT_FOUND and CONSIGNMENT_NOT_FOUND
+    // get report words in reports/presentation (reportFailureText): the
+    // shared sentences are about login tries and the admin's lists.
+    ApiCodes.reportTooLarge => AppText.reportTooLarge,
     _ => null,
   };
 }
