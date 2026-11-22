@@ -13,7 +13,8 @@ prototype shown in a simulated supply chain, not a production system.
 - **Roles:** miner, transporter, buyer, regulatory officer, system administrator.
 - **Core flow:** a consignment is registered at extraction, handed off to a transporter and
   purchased by a licensed buyer. Each step is signed and anchored on-chain.
-- **Deadline:** Sunday 22 November 2026, 12:00. Work stops at 10:00 that day.
+- **Deadline:** the submission window opened on 22 Nov 2026 and closes about 16:47 on
+  Tuesday 24 November: the application as a zip, then the thesis (written in chat).
 
 ### Four-layer architecture
 
@@ -36,9 +37,42 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 21 Nov 2026, after GPS zones T7 (7/7). Read this first in a new session,
+Updated 22 Nov 2026, after Reports T6 (7/7). Read this first in a new session,
 then `docs/progress.md` (the day plan and the current feature's subtasks), then
 `docs/decisions.md`.
+
+- **Done: Reports** (7/7, T5b added) on `feature/reports` (from `main` after PR #20),
+  `docs/plans/reports-plan.md`, approved 21 Nov (Q1–Q6 as proposed; `share_plus` 13.3.1).
+  App only; nothing deploys. 2481 tests passed, 0 skipped. Decisions Reports app
+  (1)–(10), five known limitations. Next: two commits and PR #21 (the branch's first
+  push needs `--set-upstream`), then the verification fix below.
+  - Built in `features/reports/`: `domain/report_request.dart` (the three requests, UTC
+    days, 366 days at most), `csv_records.dart` (`countRecords`, `withoutByteOrderMark`),
+    `saved_report.dart` (the safe filename); `data/reports_api.dart`,
+    `report_file_store.dart` (one file in `<cache>/reports`), `reports_repository.dart`,
+    `report_sharer.dart`; `presentation/report_download_controller.dart` (a family by
+    `ReportSlot`), `report_widgets.dart` (`ReportStatusCard` scrolls itself into view),
+    `reports_screen.dart`, `audit_trail_panel.dart`. Core: `ApiClient.getFile`. Routes
+    `/officer|buyer|admin/reports`; the officer's "Audit trail" tile opens the check.
+    Tests use `test/fakes/fake_reports_server.dart` and `fake_report_files.dart`.
+  - T5 phone check (22 Nov, A57 as `officer_demo`, emulator as buyer Kay and admin,
+    production): all seven steps as planned. T5b: no BOM in the saved file (Sheets on
+    Android showed `ï»¿`), the card in sight, a new choice clears a failure.
+  - **Found in T5, to fix next (approved by the developer, both parts):** checking 0008
+    raised two false high `record_tampered` alerts (`TX_NOT_FOUND`). PublicNode, the only
+    working RPC, keeps receipts and logs for about the last 10,000 blocks (about 33 h);
+    the transactions are still in their blocks (`eth_getTransactionByHash` answers).
+    (A) Server, on its own branch (suggested `fix/chain-check-pruned-receipts`): in
+    `chainCheck.js` `checkStep`, a missing receipt whose transaction is still found in
+    its stored block is `chain_unavailable`, not a mismatch (a new
+    `chainReader.getTransaction`); decisions, `contract-spec.md` step 4 and `api.md` to
+    match Verification (3)'s change. (B) Render, by the developer: `SEPOLIA_RPC_URL`
+    Alchemy, `SEPOLIA_RPC_URL_FALLBACK` PublicNode. Then the officer clears the two 0008
+    alerts with a reason. Until both are done, check no consignment on production: each
+    step gets one tamper alert, ever.
+  - Lesson: a page ignores taps while it scrolls, so a widget test that taps during
+    a reveal waits for the scroll (about four 200 ms frames, as a progress bar rules out
+    `pumpAndSettle`).
 
 - **Done: GPS zones** (7/7) on `feature/gps-zones` (from `main` after PR #19),
   `docs/plans/gps-zones-plan.md`, approved 21 Nov (Q1–Q6 as proposed). App only; nothing
@@ -85,8 +119,9 @@ then `docs/progress.md` (the day plan and the current feature's subtasks), then
     `test/fakes/fake_accounts_server.dart` and `account_page_helpers.dart`.
   - Lesson: a page must not rely on go_router's `extra`; a redirect re-run (the token
     running out) rebuilds the page without it. Keep such state in a provider.
-- **Then:** GPS zones, Reports, the FR-16 decision, the dashboard (first cut) and the
-  end-to-end test; order in `docs/progress.md`.
+- **Then (22 Nov evening, `docs/progress.md` (b)):** the verification fix; cut FR-14
+  and FR-16 as decisions; a shortened end-to-end test; README and a final pass; the
+  submission zip (`git archive`, committed files only) and the release tag.
 
 - **Done: Officer alerts** (7/7) on `feature/officer-alerts`, `docs/plans/officer-alerts-plan.md`
   (approved 20 Nov, Q1–Q6 as proposed). App only (`mobile/`, `docs/`); nothing deploys to

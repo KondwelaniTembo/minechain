@@ -4,8 +4,11 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 21 Nov 2026, after GPS zones T6 (part) and T7 on `feature/gps-zones` (7/7).
-Next: the two commits and the PR; then Reports. The walked zone goes into the end-to-end test.
+Last updated: 22 Nov 2026, Reports 7/7 on `feature/reports` (2481 passed, 0 skipped;
+the T5b re-check passed on the A57). Next: the developer's two commits and PR #21, then the
+verification fix on its own branch. The
+submission window is open until about 16:47 on Tue 24 Nov (news on 22 Nov); the day plan
+for 22 Nov evening is in (b).
 
 ## (a) Whole project
 
@@ -61,7 +64,8 @@ Next: the two commits and the PR; then Reports. The walked zone goes into the en
 - ✅ GPS zones (7/7): list, create (walked or typed corners, a sketch), rename, deactivate,
   reactivate (FR-11, Scope (7)). The walked zone is checked in daylight on 22 Nov, with the
   end-to-end test
-- ⬜ Reports: download the CSV and share it from the phone (FR-09, FR-13)
+- ✅ Reports (7/7, done 22 Nov): download the CSV and share it from the phone, and the
+  officer's two audit trails (FR-09, FR-13); PR #21
 - ⬜ Dashboard (FR-14, kept under Scope (4); the first feature to cut if time runs short)
 - ⬜ FR-16 decision: the signed PDF certificate, build or cut (Scope (4))
 - ⬜ End-to-end test of every role (it starts with the walked "Phone check site" zone and a
@@ -81,12 +85,25 @@ Next: the two commits and the PR; then Reports. The walked zone goes into the en
 - ✅ Scope (4): FR-14 kept (17 Nov); FR-16 is decided on Sat 21 Nov.
 - ✅ Day plan: approved by the developer on 18 Nov.
 
-## (b) Today, Sat 21 Nov
+## (b) Today, Sun 22 Nov (evening; submission window until about 16:47 on Tue 24 Nov)
+
+1. ✅ Reports: T5b re-check passed on the A57, T6 docs and the PR text done (7/7)
+2. ⬜ Verification fix (server, approved 22 Nov: both parts): a pruned receipt is no
+   longer called tampering, and Alchemy becomes the primary RPC with PublicNode as the
+   fallback; then the two false 0008 alerts are cleared with a reason
+3. ⬜ Cut FR-14 (dashboard) and FR-16 (PDF certificate), recorded as decisions
+4. ⬜ End-to-end test of every role, shortened, with the typed zone
+5. ⬜ README, final pass (security over the last features), `CLAUDE.md` status
+6. ⬜ The submission zip (`git archive`, committed files only) and the release tag
+
+The thesis starts on Mon 23 Nov, in chat.
+
+## (b) Sat 21 Nov
 
 1. ✅ Officer alerts (7/7), merged as PR #18
 2. ✅ Admin accounts (8/8), merged as PR #19
 3. ✅ GPS zones (7/7; walked zone on 22 Nov)
-4. ⬜ Reports
+4. ⬜ Reports (T1–T4 done; the T5 phone check next)
 5. ⬜ The FR-16 decision
 6. ⬜ Dashboard (FR-14, the first cut)
 7. ⬜ End-to-end test of every role
@@ -104,7 +121,29 @@ Next: the two commits and the PR; then Reports. The walked zone goes into the en
 Done on Thu 19 (session ended 20 Nov, 00:40): Hardening (PR #13), "My account" back arrow
 (PR #14), Consignment check T1–T5 (1584 tests passed, 0 skipped).
 
-## (c) Current feature: GPS zones — 7/7
+## (c) Current feature: Reports — 7/7
+
+Plan: `docs/plans/reports-plan.md`, approved 21 Nov (Q1–Q6 as proposed; Q1 adds
+`share_plus` 13.3.1). Branch `feature/reports`, from `main` after PR #20. App only (`mobile/`, `docs/`);
+nothing deploys to Render.
+
+- ✅ T1 Download data: `ApiClient.getFile`, the queries, the record count, the file store;
+  65 new, full run 2402 passed
+- ✅ T2 Share: `share_plus` 13.3.1, `ReportSharer`, the download controller; 12 new, 2414
+- ✅ T3 Reports screen: the form, the result card, the three routes and tiles; 30 new
+- ✅ T4 Audit trails: the check result's button, the alert page's button and period
+  dialog, the "Audit trail" tile; 19 new; full run after T3 and T4: 2463 passed, 0 skipped
+- ✅ T5 Phone check (the developer, 22 Nov, A57 and emulator, production): all seven steps as
+  planned; three rough edges found (the BOM in Sheets, cards out of sight, a stale failure
+  card), plus false `record_tampered` alerts on 0008 from PublicNode's pruned receipts
+  (fixed on its own branch)
+- ✅ T5b Fixes: no BOM in the saved file, the card scrolls into view, a new choice clears a
+  failure; 18 new, 2481 passed. Re-check passed on the A57 (22 Nov)
+- ✅ T6 Docs and PR: decisions Reports app (1)–(10), five known limitations, one future
+  improvement; the PR text in chat
+- Commits: (1) code, T1–T4 and T5b, with `pubspec.yaml` and `pubspec.lock`; (2) docs
+
+### GPS zones — 7/7, merged as PR #20 (`2fbf65b`)
 
 Plan: `docs/plans/gps-zones-plan.md`, approved 21 Nov (Q1–Q6 as proposed). Branch
 `feature/gps-zones`, created by the developer from `main` after PR #19. App only
