@@ -157,10 +157,11 @@ describe('createChainReader: construction', () => {
     reader.close();
   });
 
-  it('exposes only contractAddress, getReceipt, getBlockNumber and close', () => {
+  // getTransaction added by the verification fix (22 Nov): still read-only, no signing.
+  it('exposes only contractAddress, getReceipt, getBlockNumber, getTransaction and close', () => {
     const { reader } = readerWith(noRequestsExpected);
 
-    expect(Object.keys(reader).sort()).toEqual(['close', 'contractAddress', 'getBlockNumber', 'getReceipt']);
+    expect(Object.keys(reader).sort()).toEqual(['close', 'contractAddress', 'getBlockNumber', 'getReceipt', 'getTransaction']);
     expect(reader.contractAddress).toBe(CONTRACT_ADDRESS);
     expect(Object.isFrozen(reader)).toBe(true);
     reader.close();
@@ -388,6 +389,91 @@ describe('createChainReader: getReceipt', () => {
 
     await expect(reader.getReceipt('0x1234')).rejects.toThrow(TypeError);
     expect(requests).toEqual([]);
+    reader.close();
+  });
+});
+
+describe('createChainReader: getTransaction', () => {
+  // An EIP-1559 transaction as eth_getTransactionByHash returns it from a node that has
+  // pruned the receipt but kept the block's transactions. Fake values only.
+  const nodeTransaction = {
+    hash: TX_HASH,
+    blockHash: `0x${'bb'.repeat(32)}`,
+    blockNumber: '0x64',
+    transactionIndex: '0x0',
+    from: `0x${'25'.repeat(20)}`,
+    to: CONTRACT_ADDRESS.toLowerCase(),
+    gas: '0x186a0',
+    gasPrice: '0x3b9aca00',
+    maxFeePerGas: '0x77359400',
+    maxPriorityFeePerGas: '0x3b9aca00',
+    input: '0x1234abcd',
+    nonce: '0x5',
+    value: '0x0',
+    type: '0x2',
+    accessList: [],
+    chainId: SEPOLIA_HEX,
+    v: '0x0',
+    yParity: '0x0',
+    r: `0x${'11'.repeat(32)}`,
+    s: `0x${'22'.repeat(32)}`,
+  };
+
+  it('returns the block and recipient only, after the network check', async () => {
+    const { reader, requests, methods } = readerWith(sepoliaNode({ eth_getTransactionByHash: () => ({ result: nodeTransaction }) }));
+
+    const tx = await reader.getTransaction(TX_HASH);
+
+    expect(methods()).toEqual(['eth_chainId', 'eth_getCode', 'eth_getTransactionByHash']);
+    expect(requests.at(-1)).toMatchObject({ params: [TX_HASH] });
+    // ethers gives the address checksummed; nothing else of the transaction is passed on.
+    expect(tx).toEqual({ hash: TX_HASH, blockNumber: 100, to: CONTRACT_ADDRESS });
+    expect(Object.isFrozen(tx)).toBe(true);
+    reader.close();
+  });
+
+  it('returns a block of null for a pending transaction', async () => {
+    const pending = { ...nodeTransaction, blockHash: null, blockNumber: null, transactionIndex: null };
+    const { reader } = readerWith(sepoliaNode({ eth_getTransactionByHash: () => ({ result: pending }) }));
+
+    await expect(reader.getTransaction(TX_HASH)).resolves.toMatchObject({ blockNumber: null });
+    reader.close();
+  });
+
+  it('returns null for a transaction the node does not know', async () => {
+    const { reader } = readerWith(sepoliaNode({ eth_getTransactionByHash: () => ({ result: null }) }));
+
+    await expect(reader.getTransaction(TX_HASH)).resolves.toBeNull();
+    reader.close();
+  });
+
+  it('refuses a malformed hash before any request', async () => {
+    const { reader, requests } = readerWith(noRequestsExpected);
+
+    await expect(reader.getTransaction('0x1234')).rejects.toThrow(TypeError);
+    expect(requests).toEqual([]);
+    reader.close();
+  });
+
+  it('moves on to the fallback when the primary cannot be reached, naming roles only', async () => {
+    const { reader, requests, log } = readerWith(
+      sepoliaNode({
+        eth_chainId: (_p, url) => (url === FAKE_RPC_URL ? unreachable(url) : { result: SEPOLIA_HEX }),
+        eth_getTransactionByHash: () => ({ result: nodeTransaction }),
+      }),
+    );
+
+    await expect(reader.getTransaction(TX_HASH)).resolves.toMatchObject({ blockNumber: 100 });
+    expect(requests.at(-1).url).toBe(FAKE_FALLBACK_URL);
+    expect(log.warn).toHaveBeenCalledWith('Chain reader: primary RPC unavailable during getTransaction; trying fallback RPC');
+    reader.close();
+  });
+
+  it('is refused on a node that fails the network check, and the transaction is not asked for', async () => {
+    const { reader, methods } = readerWith(sepoliaNode({ eth_chainId: () => ({ result: '0x1' }) }));
+
+    await expectChainError(reader.getTransaction(TX_HASH), { code: 'WRONG_CHAIN', action: 'stop', endpoint: 'primary' });
+    expect(methods()).not.toContain('eth_getTransactionByHash');
     reader.close();
   });
 });

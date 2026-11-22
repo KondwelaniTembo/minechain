@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { CHECK_RESULTS, checkStep, evidenceMismatches, missingReceiptIsMismatch } from '../src/services/chainCheck.js';
+import { CHECK_RESULTS, checkStep, evidenceMismatches, missingReceiptIsMismatch, receiptPruned } from '../src/services/chainCheck.js';
 import { anchorHash } from '../src/services/signatureService.js';
 import { ChainClientError } from '../src/chain/rpc.js';
 import { classifyChainError } from '../src/chain/chainErrors.js';
@@ -108,6 +108,9 @@ const untouchable = Object.freeze({
     throw new Error('no chain call was expected');
   },
   getBlockNumber: () => {
+    throw new Error('no chain call was expected');
+  },
+  getTransaction: () => {
     throw new Error('no chain call was expected');
   },
   close() {},
@@ -330,19 +333,84 @@ describe('checkStep: the receipt (step 3)', () => {
 });
 
 describe('checkStep: no receipt (step 4)', () => {
-  it('node at block_number + confirmations: mismatch TX_NOT_FOUND', async () => {
+  // Changed by the verification fix (22 Nov): the node is now also asked for the
+  // transaction before a missing receipt is called a mismatch, so a third call is expected.
+  it('node at block_number + confirmations, transaction unknown too: mismatch TX_NOT_FOUND', async () => {
     const { reader, control } = readerWith(null, { latest: BLOCK + CONFIRMATIONS });
 
     await expect(checkStep(reader, rowFor('registration'), OPTIONS)).resolves.toEqual(
       mismatchOf(['chain_tx_hash'], { reason: 'TX_NOT_FOUND' }),
     );
+    expect(control.calls.map((c) => c.method)).toEqual(['getReceipt', 'getBlockNumber', 'getTransaction']);
+    expect(control.calls.at(-1).hash).toBe(TX_HASH_HEX);
+  });
+
+  it('node one block short of that: chain_unavailable (it is behind), and the transaction is not asked for', async () => {
+    const { reader, control } = readerWith(null, { latest: BLOCK + CONFIRMATIONS - 1 });
+
+    await expect(checkStep(reader, rowFor('registration'), OPTIONS)).resolves.toEqual({ result: 'chain_unavailable', fields: [] });
     expect(control.calls.map((c) => c.method)).toEqual(['getReceipt', 'getBlockNumber']);
   });
 
-  it('node one block short of that: chain_unavailable (it is behind)', async () => {
-    const { reader } = readerWith(null, { latest: BLOCK + CONFIRMATIONS - 1 });
+  it('a receipt is found: the transaction is not asked for', async () => {
+    const { reader, control } = readerWith(receiptFor('registration'));
+
+    await expect(checkStep(reader, rowFor('registration'), OPTIONS)).resolves.toEqual({ result: 'match', fields: [] });
+    expect(control.calls.map((c) => c.method)).toEqual(['getReceipt']);
+  });
+
+  // The 0008 case from the Reports T5 phone check: the node pruned the receipt, long past
+  // the block, but still holds the transaction where the row says it was mined.
+  it.each(['registration', 'handoff', 'purchase'])(
+    'a %s whose receipt was pruned (its transaction still in the stored block, sent to MineChain): chain_unavailable',
+    async (name) => {
+      const { reader, control } = readerWith(null, { latest: BLOCK + 20_000 });
+      control.setTransaction(TX_HASH_HEX, { hash: TX_HASH_HEX, blockNumber: BLOCK, to: FAKE_CONTRACT_ADDRESS });
+
+      await expect(checkStep(reader, rowFor(name), OPTIONS)).resolves.toEqual({ result: 'chain_unavailable', fields: [] });
+    },
+  );
+
+  it('compares the contract address without regard to letter case', async () => {
+    const { reader, control } = readerWith(null);
+    control.setTransaction(TX_HASH_HEX, { hash: TX_HASH_HEX, blockNumber: BLOCK, to: FAKE_CONTRACT_ADDRESS.toLowerCase() });
+
+    await expect(checkStep(reader, rowFor('registration'), OPTIONS)).resolves.toMatchObject({ result: 'chain_unavailable' });
+  });
+
+  it.each([
+    ['in another block', { blockNumber: BLOCK + 1 }],
+    ['still pending (no block)', { blockNumber: null }],
+    ['sent to another address', { to: `0x${'12'.repeat(20)}` }],
+    ['a contract creation (no recipient)', { to: null }],
+  ])('a transaction found but %s cannot be this anchoring: mismatch TX_NOT_FOUND', async (_label, overrides) => {
+    const { reader, control } = readerWith(null);
+    control.setTransaction(TX_HASH_HEX, { hash: TX_HASH_HEX, blockNumber: BLOCK, to: FAKE_CONTRACT_ADDRESS, ...overrides });
+
+    await expect(checkStep(reader, rowFor('registration'), OPTIONS)).resolves.toEqual(
+      mismatchOf(['chain_tx_hash'], { reason: 'TX_NOT_FOUND' }),
+    );
+  });
+
+  it('the transaction cannot be read: chain_unavailable, never a mismatch', async () => {
+    const reader = {
+      contractAddress: FAKE_CONTRACT_ADDRESS,
+      getReceipt: async () => null,
+      getBlockNumber: async () => BLOCK + 100,
+      getTransaction: async () => {
+        throw rpcDown();
+      },
+    };
 
     await expect(checkStep(reader, rowFor('registration'), OPTIONS)).resolves.toEqual({ result: 'chain_unavailable', fields: [] });
+  });
+
+  it('receiptPruned compares the block exactly, with block_number as pg text', () => {
+    const tx = { hash: TX_HASH_HEX, blockNumber: 100, to: FAKE_CONTRACT_ADDRESS };
+
+    expect(receiptPruned(tx, '100', FAKE_CONTRACT_ADDRESS)).toBe(true);
+    expect(receiptPruned(tx, '101', FAKE_CONTRACT_ADDRESS)).toBe(false);
+    expect(receiptPruned(null, '100', FAKE_CONTRACT_ADDRESS)).toBe(false);
   });
 
   it('the block number cannot be read: chain_unavailable', async () => {

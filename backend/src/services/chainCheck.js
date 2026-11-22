@@ -1,4 +1,4 @@
-// The chain check behind the consignment view (FR-04; plan §3, "The chain check, per
+// The chain check behind the consignment view (FR-04; plan Â§3, "The chain check, per
 // confirmed step"). For one stored step it answers one of four results:
 //   match              the stored evidence, the row's columns and the anchored event agree
 //   mismatch           something differs; `fields` names what (names only, never values)
@@ -9,7 +9,8 @@
 // (a ChainClientError, including the reader's network-check refusals) and a missing reader
 // give chain_unavailable. A mismatch is only ever declared from evidence: the stored bytes
 // themselves, a receipt that says something else, or a receipt that is missing although
-// the node is past its block.
+// the node is past its block AND does not hold the transaction in that block either (a
+// node that prunes old receipts still keeps the transactions; see step 4).
 //
 // Steps 1 and 2 are pure and need no network, so a row whose own evidence disagrees is a
 // mismatch before, and without, any chain call. No database here: B2.4 reads the row and
@@ -36,7 +37,7 @@ export const CHECK_RESULTS = Object.freeze({
   CHAIN_UNAVAILABLE: 'chain_unavailable',
 });
 
-// The only anchor hash scheme ever written (signing-spec §7).
+// The only anchor hash scheme ever written (signing-spec Â§7).
 const SUPPORTED_HASH_VERSION = 1;
 
 const EMPTY = Object.freeze([]);
@@ -169,9 +170,25 @@ export function receiptMismatches(receipt, row, recomputedHash, contractAddress)
 }
 
 // Step 4: no receipt for the stored hash. Missing is only evidence once the node has
-// reached the block (plus the confirmations); before that, the node is behind.
+// reached the block (plus the confirmations); before that, the node is behind. This is the
+// first of step 4's two conditions; receiptPruned below is the second.
 export function missingReceiptIsMismatch(latestBlock, blockNumber, confirmations) {
   return BigInt(latestBlock) >= BigInt(columnText(blockNumber)) + BigInt(confirmations);
+}
+
+// Step 4, second condition: the receipt is gone but the transaction is still in the stored
+// block, sent to MineChain. Nodes that prune history (PublicNode kept receipts and logs for
+// only about the last 10,000 blocks, Reports T5) still answer for the transaction, so this
+// is a node that threw the receipt away, not a step that was never anchored. Without the
+// receipt there is no event to compare, so the caller answers chain_unavailable, never a
+// match. A transaction in another block, still pending, or sent anywhere else could not
+// be this step's anchoring, and stays evidence.
+//
+// transaction: getTransaction's answer, { hash, blockNumber, to } or null.
+export function receiptPruned(transaction, blockNumber, contractAddress) {
+  if (transaction === null) return false;
+  if (transaction.blockNumber === null || String(transaction.blockNumber) !== columnText(blockNumber)) return false;
+  return typeof transaction.to === 'string' && transaction.to.toLowerCase() === contractAddress.toLowerCase();
 }
 
 const toHex = (bytes) => `0x${Buffer.from(bytes).toString('hex')}`;
@@ -190,11 +207,18 @@ export async function checkStep(reader, row, { confirmations }) {
 
   if (!reader) return CHAIN_UNAVAILABLE;
 
+  const txHash = toHex(row.chain_tx_hash);
   let receipt;
-  let latestBlock = null;
+  let nodeIsPast = false;
+  let transaction = null;
   try {
-    receipt = await reader.getReceipt(toHex(row.chain_tx_hash));
-    if (receipt === null) latestBlock = await reader.getBlockNumber();
+    receipt = await reader.getReceipt(txHash);
+    if (receipt === null) {
+      nodeIsPast = missingReceiptIsMismatch(await reader.getBlockNumber(), row.block_number, confirmations);
+      // Asked only when the missing receipt would otherwise accuse someone, so a healthy
+      // check still costs one request per step.
+      if (nodeIsPast) transaction = await reader.getTransaction(txHash);
+    }
   } catch (err) {
     // Only chain errors are "unavailable". Anything else is a bug, and hiding it as an
     // unavailable chain would hide it for good.
@@ -203,9 +227,10 @@ export async function checkStep(reader, row, { confirmations }) {
   }
 
   if (receipt === null) {
-    return missingReceiptIsMismatch(latestBlock, row.block_number, confirmations)
-      ? mismatch(['chain_tx_hash'], 'TX_NOT_FOUND')
-      : CHAIN_UNAVAILABLE;
+    if (!nodeIsPast || receiptPruned(transaction, row.block_number, reader.contractAddress)) {
+      return CHAIN_UNAVAILABLE;
+    }
+    return mismatch(['chain_tx_hash'], 'TX_NOT_FOUND');
   }
 
   const fields = receiptMismatches(receipt, row, evidence.recomputedHash, reader.contractAddress);

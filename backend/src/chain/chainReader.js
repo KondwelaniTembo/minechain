@@ -35,6 +35,14 @@ export const READER_REFUSALS = Object.freeze({
   ),
 });
 
+// Only what the chain check compares: the block (null while pending) and the recipient
+// (null for a contract creation). The rest of an ethers TransactionResponse, the sender and
+// the signature among them, is not passed on.
+function toTransaction(tx) {
+  if (tx === null) return null;
+  return Object.freeze({ hash: tx.hash, blockNumber: tx.blockNumber ?? null, to: tx.to ?? null });
+}
+
 function requireSetting(value, name) {
   if (value === null || value === undefined) {
     throw new Error(`Chain reader needs ${name}`);
@@ -127,6 +135,16 @@ export function createChainReader(anchorConfig, options = {}) {
 
     async getBlockNumber() {
       return read('getBlockNumber', (e) => e.provider.getBlockNumber());
+    },
+
+    // The transaction itself, asked only when its receipt is missing (chain check step 4).
+    // Nodes that prune old history drop receipts and logs but keep the transactions in their
+    // blocks, so this tells "receipt thrown away" from "never mined". null when the node
+    // does not know the hash.
+    async getTransaction(hash) {
+      assertBytes32Hex(hash, 'hash');
+      const tx = await read('getTransaction', (e) => e.provider.getTransaction(hash));
+      return toTransaction(tx);
     },
 
     // Stops the providers at shutdown. A call after this fails with a ChainClientError.

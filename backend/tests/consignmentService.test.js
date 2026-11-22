@@ -88,9 +88,10 @@ function fakeDb({ consignment = CONSIGNMENT, steps = [], heldAfterInsert = true 
 }
 
 // A reader that fails if a transaction is open, and counts how many calls run at once.
-// receipt null with the node far ahead: every check becomes a TX_NOT_FOUND mismatch;
+// receipt null with the node far ahead: every check becomes a TX_NOT_FOUND mismatch (the
+// transaction is unknown too), unless `transaction` plays a node that pruned the receipt;
 // with the node behind: chain_unavailable.
-function watchingReader(dbState, { latest = BLOCK - 10 } = {}) {
+function watchingReader(dbState, { latest = BLOCK - 10, transaction = null } = {}) {
   const stats = { calls: [], inFlight: 0, maxInFlight: 0 };
   async function call(method, answer) {
     if (dbState.open) throw new Error(`${method} called with a database transaction open`);
@@ -105,6 +106,7 @@ function watchingReader(dbState, { latest = BLOCK - 10 } = {}) {
     contractAddress: FAKE_CONTRACT_ADDRESS,
     getReceipt: () => call('getReceipt', null),
     getBlockNumber: () => call('getBlockNumber', latest),
+    getTransaction: () => call('getTransaction', transaction),
     close() {},
   };
   return { reader, stats };
@@ -186,6 +188,21 @@ describe('createConsignmentService: phases', () => {
     // Nothing is written outside a transaction.
     expect(state.log.filter((q) => !q.inTransaction)).toEqual([]);
     expect(body.consignment.held).toBe(true);
+  });
+
+  // The verification fix (22 Nov): the two false 0008 alerts came from a node that had
+  // pruned the receipts. With the transactions still in their blocks, nothing is written.
+  it('a node that pruned the receipts but kept the transactions raises no alert', async () => {
+    const { db, state } = fakeDb({ steps: confirmedSteps(2) });
+    const transaction = { hash: `0x${'c0'.repeat(32)}`, blockNumber: BLOCK, to: FAKE_CONTRACT_ADDRESS };
+    const { reader, stats } = watchingReader(state, { latest: BLOCK + 20_000, transaction });
+
+    const body = await createConsignmentService({ db, chainReader: reader, confirmations: 2 }).viewByQr(VIEWER, CONSIGNMENT.qr_code);
+
+    expect(stats.calls.filter((m) => m === 'getTransaction')).toHaveLength(2);
+    expect(body.steps.map((s) => s.check.result)).toEqual(['chain_unavailable', 'chain_unavailable']);
+    expect(state.transactions).toEqual(['repeatable read']);
+    expect(state.log.some((q) => q.text.includes('INSERT'))).toBe(false);
   });
 
   it('writes nothing when no step mismatches', async () => {
