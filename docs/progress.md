@@ -4,9 +4,11 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 23 Nov 2026, 15:30. End-to-end test passed and the final security review
-done (no Critical or High), on `chore/end-to-end`; the zip is dropped. Left: release-build
-timing and L6 on the A57, README, release tag. Earlier: 23 Nov, 00:45. Verification fix 4/4: merged as PR #22 (`4ef4ded`),
+Last updated: 23 Nov 2026, evening. PR #26 (end-to-end) merged. On `chore/release`: L6
+closed on the A57 (release build not debuggable), NFR-03 settled from the recorded timings
+(NFR-03 (1)), README, `docs/codebase.md`. Left: the developer's commit, PR, merge and the
+`v1.0.0` tag; then the thesis in chat. Before: 23 Nov, 15:30, end-to-end test and final
+security review. Earlier: 23 Nov, 00:45. Verification fix 4/4: merged as PR #22 (`4ef4ded`),
 Render on Alchemy with PublicNode as the fallback, 0007 verified and the two false 0008
 alerts cleared on production. Scope (11): the admin's Anchoring tile becomes a read-only
 status screen. Next: Anchoring status on `feature/anchoring-status`, then the dashboard
@@ -77,10 +79,10 @@ for 22 Nov evening is in (b).
 
 ### Sun 22 Nov, until 10:00
 
-- ⬜ Final OWASP review and fixes
-- ⬜ Release-build performance, including 3G on the emulator (NFR-03)
-- ⬜ README with screenshots and Mapalo's design credit
-- ⬜ Release tag (created by the developer)
+- ✅ Final OWASP review and fixes (23 Nov, `security-review.md` §7–§8)
+- ✅ NFR-03: settled from the recorded debug timings, no separate run (NFR-03 (1))
+- ✅ README with Mapalo's design credit (screenshots go in the thesis)
+- ⬜ Release tag `v1.0.0` (created by the developer)
 
 ### Open items
 
@@ -114,9 +116,10 @@ for 22 Nov evening is in (b).
    `docs/plans/end-to-end-plan.md` §5; regression pass 2348 + 932 + 37 + 2623
 7. ✅ Final security pass over the later features (23 Nov, by reading the code;
    `security-review.md` §7): no Critical or High; new Low L7; L6 still open (device)
-   - ⬜ Release-build timing (NFR-03) and the L6 `run-as` re-check: need the A57
-8. ⬜ README, `CLAUDE.md` status
-9. ~~The submission zip~~ dropped by the developer (23 Nov); ⬜ the release tag
+   - ✅ L6 `run-as` re-check on the A57: closed (`security-review.md` §8); NFR-03 from the
+     recorded timings (NFR-03 (1), developer's decision)
+8. ✅ README, `docs/codebase.md`, `CLAUDE.md` status (on `chore/release`)
+9. ~~The submission zip~~ dropped by the developer (23 Nov); ⬜ the release tag `v1.0.0`
 
 The thesis starts later on Mon 23 Nov, in chat.
 
