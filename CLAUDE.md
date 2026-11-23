@@ -37,21 +37,43 @@ Rules that shape the design:
 
 ## Current status
 
-Updated 22 Nov 2026, after the verification fix's server part (A). Read this first in a new
+Updated 23 Nov 2026, 00:45, after the verification fix (4/4). Read this first in a new
 session, then `docs/progress.md` (the day plan and the current feature's subtasks), then
 `docs/decisions.md`.
 
-- **In progress: Verification fix** on `fix/chain-check-pruned-receipts` (from `main` after
-  PR #21). (A) done: `chainCheck.js` step 4 `receiptPruned` and `chainReader.getTransaction`
-  (asked only when the receipt is missing and the node is past the block; found in the
-  stored block and sent to MineChain → `chain_unavailable`). Decisions Verification fix (1),
-  (2), one known limitation; `contract-spec.md` 7.1–7.2, `api.md`, `deployment.md` "RPC
-  gateways from 22 Nov". `npm test` 2318, `npm run test:db` 914. Next: the developer's
-  commit and PR (merging deploys), (B) the Render settings, a production check of 0008, the
-  officer clears the two 0008 alerts. Then the dashboard plan (FR-14).
+- **Next: Anchoring status** (Scope (11), option A, decided by the developer on 23 Nov) on
+  `feature/anchoring-status`, from `main` after PR #22. The docs changes of 23 Nov
+  (`CLAUDE.md`, `progress.md`, `decisions.md` Scope (11), `deployment.md`, `testing-log.md`)
+  are carried to that branch by the start-of-feature script's stash and go in its docs
+  commit. Plan `docs/plans/anchoring-status-plan.md` approved 23 Nov (Q1–Q5 A). **Done,
+  5/5** (2556 passed, 0 skipped; phone check passed 23 Nov 02:00–02:07; decisions
+  Anchoring app (1)–(6), three known limitations). Next: the developer's two commits and
+  the PR (first push needs `--set-upstream`), then the dashboard (FR-14) plan.
+  New: `admin/domain/anchoring_status.dart`, `data/admin_anchoring_api.dart`,
+  `admin_anchoring_repository.dart`, `presentation/anchoring_status_controller.dart`,
+  `anchoring_words.dart`, `anchoring_screen.dart`; route `AppRoutes.adminAnchoring`; tests
+  use `test/fakes/fake_anchoring_server.dart`. The plan's two parts:
+  - the admin's "Anchoring" tile (`admin_home_screen.dart`, now `showComingSoon`) opens a
+    read-only screen on `GET /admin/anchoring` (`api.md` "Anchoring administration": worker
+    state, counts, failed and stuck steps, problems). "Run now" and "Retry" stay API-only.
+    The codes are already in `core/errors/api_codes.dart`;
+  - plus two wording fixes the production check found: `AppText` "Kept for ever in the
+    audit log" → "forever"; `AppText.noLongerMatches` says "The other details no longer
+    matches the blockchain." (it counts list items, not plural nouns; `fieldOther` stands
+    for `chain_tx_hash` with `TX_NOT_FOUND`, which could be named "blockchain
+    transaction"). The second wording is a plan question.
+  - Then the **dashboard (FR-14)**: in the proposal it is the regulatory officer's supply
+    chain dashboard (transaction volumes, anomaly frequencies, where and when transactions
+    happen, by mineral and period). It probably needs a read-only backend endpoint (ask
+    first). Not the Anchoring screen.
+- **Done: Verification fix** (4/4), merged as PR #22 (`4ef4ded`; code `3ba9435`, docs
+  `2e05cc1`). `chainCheck.js` step 4 `receiptPruned` and `chainReader.getTransaction`;
+  Render now uses Alchemy with PublicNode as the fallback (changed by the developer).
+  Production check passed on 23 Nov (0007 verified; the two false 0008 alerts cleared,
+  0008 no longer held, 8 open alerts as before). `npm test` 2318, `npm run test:db` 914.
   - **Scope (10), 22 Nov, the developer:** FR-16 (signed PDF certificate) cut; FR-14
-    (dashboard) kept and built. FR-15 and FR-16 are the only cuts. Open: the admin's
-    "Anchoring" tile ("Coming soon"; the server endpoints exist): build or remove.
+    (dashboard) kept and built. FR-15 and FR-16 are the only cuts (with the 1 Nov cuts of
+    QR tag parameters and the export stage, and Scope (2)'s in-app alerts in place of push).
   - Lesson: never mutate a file with PowerShell `Set-Content` (5.1 adds a BOM) or Git
     Bash `sed -i` (it rewrote CRLF as LF); and run backend vitest from PowerShell, as
     Git Bash's `/c/` path loads vitest twice ("reading 'config'").
