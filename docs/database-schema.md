@@ -751,6 +751,25 @@ read these tables through fixed queries in `backend/src/services/reportService.j
   `REPEATABLE READ` transaction (`db.transaction(fn, { isolation: 'repeatable read' })`), so
   every query sees the same moment and an export is never sent without its entry.
 
+## Dashboard
+
+The officer's dashboard (FR-14; [api.md, GET /dashboard](api.md#get-dashboard)) reads
+counts through fixed queries in `backend/src/services/dashboardService.js`:
+
+- **Five queries in one `REPEATABLE READ` transaction:** open alerts and consignments by
+  stage (`now`); steps by UTC day and type; steps and accepted registration weight by
+  mineral; steps by zone (`LEFT JOIN gps_zones`, NULL is outside every zone); alerts by
+  type, severity and status.
+- **The period** is `captured_at` from `utcDayRange` (as in the reports, using the
+  `(captured_at)` and `(zone_id, captured_at)` indexes). The day of a step is
+  `(captured_at AT TIME ZONE 'UTC')::date`, which never depends on the session's time zone.
+  An alert is counted by its step's `captured_at`.
+- **What is selected:** counts, `weight_mg` sums, and the grouping columns `type`,
+  `mineral_type`, `stage`, alert `type`, `severity` and `status`, and a zone's `id`, `name`
+  and `status`. No column of `users` is read, and no step or consignment id, QR code or
+  coordinate leaves the queries.
+- Nothing is written, not even an audit entry.
+
 ## Rules enforced by the service, not the database
 
 A CHECK constraint can only see its own row, so these rules live in the backend services:

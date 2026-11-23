@@ -104,8 +104,10 @@ for 22 Nov evening is in (b).
      0008 no longer held, 8 open alerts as before
 3. ✅ Scope (10): FR-16 cut; FR-14 (dashboard) kept and built, decided by the developer
    (the earlier "cut FR-14" here was a proposal the developer did not agree to)
-4. ✅ Anchoring status (Scope (11)), 5/5, with the two wording fixes; PR next
-5. ⬜ Dashboard (FR-14): plan first, then build
+4. ✅ Anchoring status (Scope (11)), 5/5, with the two wording fixes; merged as PR #23
+   (`c3161c5`)
+5. ⬜ Dashboard (FR-14): plan approved 23 Nov; Part 1 server (`feature/dashboard-api`)
+   built, T1–T2, waiting for its PR; Part 2 app (`feature/dashboard`) next
 6. ⬜ End-to-end test of every role, shortened, with the typed zone
 7. ⬜ Release-build timing (NFR-03) and the final security pass over the later features
 8. ⬜ README, `CLAUDE.md` status
@@ -136,7 +138,20 @@ The thesis starts later on Mon 23 Nov, in chat.
 Done on Thu 19 (session ended 20 Nov, 00:40): Hardening (PR #13), "My account" back arrow
 (PR #14), Consignment check T1–T5 (1584 tests passed, 0 skipped).
 
-## (c) Current feature: Anchoring status — 5/5
+## (c) Current feature: Dashboard (FR-14) — 2/6
+
+Plan: `docs/plans/dashboard-plan.md`, approved 23 Nov (Q1–Q5 as proposed, A). Part 1
+changes `backend/`: merging it deploys to Render.
+
+- ✅ T1 Server: schema and `dashboardService.summary()`, DB tests (16 + 14 new)
+- ✅ T2 Server: `GET /dashboard` route, real-stack test, docs (16 + 2 new); `npm test`
+  2348, `npm run test:db` 932. Next: the developer's commit, PR and merge (deploys)
+- ⬜ T3 App data: model, periods, API, repository, fake server
+- ⬜ T4 App screen: controller, widgets, screen, route, officer tile
+- ⬜ T5 Phone check (A57 as `officer_demo`, production)
+- ⬜ T6 Docs and PR text
+
+## (c) Done: Anchoring status — 5/5 (PR #23, `c3161c5`)
 
 Plan: `docs/plans/anchoring-status-plan.md`, approved 23 Nov (Q1–Q5 as proposed, A). Branch
 `feature/anchoring-status`, from `main` after PR #22. App only, using the existing
