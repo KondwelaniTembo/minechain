@@ -11,6 +11,7 @@ import { createReportService } from './reportService.js';
 import { createAnchorStatusService } from './anchorStatusService.js';
 import { createAlertService } from './alertService.js';
 import { createConsignmentService } from './consignmentService.js';
+import { createDashboardService } from './dashboardService.js';
 
 // The one place where the real services are connected to each other. server.js and the
 // end-to-end DB tests both use it, so the wiring is never written twice. Unit tests skip it
@@ -38,6 +39,8 @@ export function createServices({ db, config, anchorWorker = null, chainReader = 
   const alerts = createAlertService({ db, audit });
   // The consignment view and its live chain check (FR-04, Scope (9)).
   const consignments = createConsignmentService({ db, chainReader, confirmations: config.anchor?.confirmations });
+  // The officer's dashboard counts (FR-14), read-only.
+  const dashboard = createDashboardService({ db });
 
-  return { users, tokens, accounts, signatures, sync, zones, reports, anchoring, alerts, consignments };
+  return { users, tokens, accounts, signatures, sync, zones, reports, anchoring, alerts, consignments, dashboard };
 }
