@@ -9,6 +9,7 @@ import { syncRoutes } from './routes/sync.js';
 import { reportRoutes } from './routes/reports.js';
 import { alertRoutes } from './routes/alerts.js';
 import { consignmentRoutes } from './routes/consignments.js';
+import { dashboardRoutes } from './routes/dashboard.js';
 import {
   createRegisterLimiter,
   createLoginIpLimiter,
@@ -128,6 +129,11 @@ export function createApp({ db, services, trustProxyHops = 0, rateLimits = {} } 
   // not in the checks above; if it were missing, the route would fail closed with a logged
   // 500.
   app.use('/consignments', consignmentRoutes({ consignments: services.consignments, requireAuth, consignmentViewLimiter }));
+
+  // FR-14 the officer's dashboard counts (dashboard plan). Like consignments,
+  // services.dashboard is not in the checks above; if it were missing, the route would fail
+  // closed with a logged 500.
+  app.use('/dashboard', dashboardRoutes({ dashboard: services.dashboard, requireAuth }));
 
   // Order matters: these two must come after every route.
   app.use(notFound);

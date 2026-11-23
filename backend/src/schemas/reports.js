@@ -30,7 +30,8 @@ function utcDayStart(text) {
 // to=2026-11-30 cover the whole of November.
 // One superRefine rather than .regex().refine(): Zod runs every check on a string even after
 // one fails, so '01/11/2026' would get both messages. Here it gets exactly one.
-const daySchema = z.string().superRefine((text, ctx) => {
+// Exported for the dashboard (FR-14), which uses the same period rules.
+export const daySchema =z.string().superRefine((text, ctx) => {
   if (!DAY_FORMAT.test(text)) {
     ctx.addIssue({ code: 'custom', message: 'must be a date such as 2026-11-01' });
   } else if (utcDayStart(text) === null) {
@@ -53,7 +54,7 @@ export function utcDayRange({ from, to }) {
 
 // Adds the range problems, if any, to the issues. Runs only once both days are valid (see the
 // .pipe() calls below), so it never has to cope with a malformed date.
-function checkRange({ from, to }, ctx) {
+export function checkRange({ from, to }, ctx) {
   const days = (utcDayStart(to).getTime() - utcDayStart(from).getTime()) / MS_PER_DAY + 1;
   if (days < 1) {
     ctx.addIssue({ code: 'custom', path: ['to'], message: 'must be the same day as from or later' });

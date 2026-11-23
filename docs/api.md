@@ -41,6 +41,7 @@ and `FAKE-SIGNATURE`. None of them is a real identifier, password or token.
 | `POST` | [`/alerts/{id}/review`](#post-alertsidreview) | "Confirm problem": close an alert as a real problem, with notes; its step is rejected (FR-08) | Yes, officer only |
 | `POST` | [`/alerts/{id}/dismiss`](#post-alertsiddismiss) | "Clear, no problem": close an alert as a false alarm, with notes; its step can be cleared and the hold released (FR-08) | Yes, officer only |
 | `GET` | [`/consignments/by-qr/{qrCode}`](#get-consignmentsby-qrqrcode) | Scan a consignment: its custody steps, what this role may see of them, and a live check of each anchored step against the blockchain (FR-04) | Yes, transporter, buyer or officer |
+| `GET` | [`/dashboard`](#get-dashboard) | The officer's dashboard: counts of steps by day, mineral and zone, and of alerts by rule and severity, for a period (FR-14) | Yes, officer only |
 | `GET` | [`/reports/transactions`](#get-reportstransactions) | Download custody steps as a spreadsheet (CSV), filtered (FR-09) | Yes, officer, buyer (own purchases only) or admin |
 | `GET` | [`/reports/audit-trail`](#get-reportsaudit-trail) | Download the audit trail of one consignment or one actor as CSV (FR-13) | Yes, officer only |
 | `POST` | [`/sync/steps`](#post-syncsteps) | Upload signed custody steps from the phone's offline queue (FR-03, FR-07) | Yes, miner, transporter or buyer |
@@ -261,6 +262,7 @@ the endpoint sections below remain the source of truth for what exists.
 | Transaction reports and spreadsheet export (FR-09): `GET /reports/transactions` (a buyer sees only consignments they bought) | | | ✓ | ✓ | ✓ read-only | **Built** |
 | Review anomaly alerts, with case notes (FR-08): `GET /alerts`, `/alerts/{id}`, `POST /alerts/{id}/review`, `/dismiss` (officers only; administrators are refused) | | | | ✓ | | **Built** |
 | Download audit trails (FR-13): `GET /reports/audit-trail` | | | | ✓ | | **Built** |
+| Supply chain dashboard: volumes, anomaly frequencies, where steps happen, by mineral and period (FR-14): `GET /dashboard` | | | | ✓ | | **Built** |
 | Approve or reject account requests (FR-12): `/admin/users/{id}/approve`, `/reject` | | | | | ✓ | **Built** |
 | List accounts; suspend and reactivate them (FR-10): `GET /admin/users`, `/admin/users/{id}/suspend`, `/reactivate` | | | | | ✓ | **Built** |
 | Reset a lost phone's device key (FR-10, [signing spec](signing-spec.md) section 2): `/admin/users/{id}/reset-key` | | | | | ✓ | **Built** |
@@ -2354,6 +2356,103 @@ or purchase moves the stage (see [the two decisions](#the-two-decisions)).
 
 **Errors:** `VALIDATION_FAILED`, `FORBIDDEN`, `ALERT_NOT_FOUND`, `INVALID_STATUS_TRANSITION`,
 `STEP_CANNOT_BE_CLEARED` and `TOO_MANY_REQUESTS`.
+
+---
+
+## GET /dashboard
+
+The regulatory officer's dashboard (FR-14): how much is moving through the supply chain, how
+often the anomaly rules fire, and where steps are recorded, for a period and optionally one
+mineral. **Counts only:** no names, usernames, licence numbers, ids of people or
+consignments, QR codes or coordinates. Detail stays in the alerts, the consignment check and
+the reports.
+
+| | |
+|---|---|
+| **Login needed** | Yes, officer only. Anyone else gets 403 `FORBIDDEN`, on any path under `/dashboard` |
+| **Rate limits** | None: it only reads counts, like `GET /alerts` |
+| **Audited** | No: nothing leaves the system but counts |
+| **Request body** | None |
+
+**Query parameters**
+
+| Parameter | Required | Rules |
+|---|---|---|
+| `from` | yes | A UTC day, `YYYY-MM-DD`, that exists on the calendar |
+| `to` | yes | The same, on or after `from`; at most **366 days, counting both**, as in the reports |
+| `mineral` | no | `gold`, `copper`, `cobalt`, `manganese`, `emerald` or `amethyst` |
+
+A parameter may appear once; any other parameter is refused (400 `VALIDATION_FAILED`, the
+field named).
+
+**Which time counts.**
+
+- A step belongs to the **UTC day its phone recorded it** (`captured_at`), as in
+  [GET /reports/transactions](#get-reportstransactions), so the same period downloaded as a
+  report lists the same steps. Zambia is UTC+2, so a step at 01:00 in Lusaka counts on the
+  day before.
+- An alert belongs to **its step's day**, so an alert and its step are always in the same
+  period, even when the alert was raised later (a `record_tampered` alert from a check).
+- `now` ignores the period, and follows the mineral.
+
+**Which steps count.** Every stored step, whatever its review status: the dashboard shows
+activity, and `anomalies` shows what was flagged. `registeredWeightMg` counts **accepted
+registrations only** (`passed` or `cleared`), so a flagged duplicate registration does not
+count the same load twice, and a handoff or purchase (a re-weighing of the same load) adds
+nothing.
+
+**200 OK** (fake values):
+
+```json
+{
+  "period": { "from": "2026-11-17", "to": "2026-11-23", "days": 7 },
+  "mineral": null,
+  "now": {
+    "openAlerts": 8,
+    "consignments": { "registered": 4, "in_transit": 3, "purchased": 2 }
+  },
+  "steps": { "total": 21, "registration": 9, "handoff": 7, "purchase": 5 },
+  "registeredWeightMg": "18500000",
+  "byDay": [
+    { "day": "2026-11-17", "registration": 2, "handoff": 0, "purchase": 0 },
+    { "day": "2026-11-18", "registration": 0, "handoff": 0, "purchase": 0 }
+  ],
+  "byMineral": [
+    { "mineral": "gold", "steps": 12, "registeredWeightMg": "6500000" },
+    { "mineral": "copper", "steps": 9, "registeredWeightMg": "12000000" }
+  ],
+  "byZone": [
+    { "zoneId": "7a1c2d3e-0000-4000-8000-0000000000aa", "zoneName": "ZCAS Campus (demo)", "active": true, "steps": 15 }
+  ],
+  "outsideZones": 6,
+  "anomalies": {
+    "total": 5,
+    "open": 3,
+    "byType": {
+      "duplicate_consignment": 1, "quantity_discrepancy": 2, "gps_zone": 1,
+      "invalid_signature": 0, "handoff_order": 1, "record_tampered": 0
+    },
+    "bySeverity": { "low": 0, "medium": 3, "high": 2 }
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `period` | The days asked for, and how many there are |
+| `mineral` | The mineral asked for, or `null` for all |
+| `now.openAlerts` | Alerts still open, on any day |
+| `now.consignments` | Consignments by their stage now; every stage is always present |
+| `steps` | Steps in the period, by type |
+| `registeredWeightMg` | Whole milligrams, **as text**, of accepted registrations in the period. Never a JSON number: a sum can pass 2^53 |
+| `byDay` | **Every day** of the period, in order, zeros included, with the steps of each type |
+| `byMineral` | Minerals with at least one step, most steps first, then by name, with their registered weight as text |
+| `byZone` | Zones with at least one step, most steps first, then by name. The zone the step was matched to when it arrived; a zone deactivated since has `active: false` |
+| `outsideZones` | Steps outside every active zone when they arrived |
+| `anomalies` | Alerts on the period's steps: `total`, how many are still `open`, and counts by `byType` and `bySeverity`; every type and severity is always present |
+
+**Errors:** the [token errors](#authentication), `VALIDATION_FAILED`, `FORBIDDEN` and
+`INTERNAL_ERROR`. Every response, errors included, carries `Cache-Control: no-store`.
 
 ---
 

@@ -47,8 +47,11 @@ session, then `docs/progress.md` (the day plan and the current feature's subtask
   are carried to that branch by the start-of-feature script's stash and go in its docs
   commit. Plan `docs/plans/anchoring-status-plan.md` approved 23 Nov (Q1–Q5 A). **Done,
   5/5** (2556 passed, 0 skipped; phone check passed 23 Nov 02:00–02:07; decisions
-  Anchoring app (1)–(6), three known limitations). Next: the developer's two commits and
-  the PR (first push needs `--set-upstream`), then the dashboard (FR-14) plan.
+  Anchoring app (1)–(6), three known limitations). Merged as PR #23 (`c3161c5`).
+  **Now: the dashboard (FR-14)**, plan `docs/plans/dashboard-plan.md` approved 23 Nov
+  (Q1–Q5 A). Part 1 server on `feature/dashboard-api` done (T1–T2: `GET /dashboard`,
+  officer only, `dashboardService.js`; `npm test` 2348, `npm run test:db` 932); next its
+  commits and PR (merging deploys), then Part 2 app on `feature/dashboard` (T3–T6).
   New: `admin/domain/anchoring_status.dart`, `data/admin_anchoring_api.dart`,
   `admin_anchoring_repository.dart`, `presentation/anchoring_status_controller.dart`,
   `anchoring_words.dart`, `anchoring_screen.dart`; route `AppRoutes.adminAnchoring`; tests
