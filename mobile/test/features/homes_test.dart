@@ -61,8 +61,10 @@ final homes = <(Role, Widget, String, List<String>)>[
     Role.officer,
     const OfficerHomeScreen(),
     AppText.officerTitle,
+    // "Dashboard" added second by Dashboard T4 (changed by plan).
     [
       AppText.alerts,
+      AppText.dashboard,
       AppText.checkConsignment,
       AppText.reports,
       AppText.auditTrail,
@@ -326,7 +328,8 @@ void main() {
   // Reports T3 and T4 (changed by plan): "Reports" opens its screen, and
   // "Audit trail" opens the check (Q2: the trail is downloaded from the
   // result), so the "Reports still says Coming soon" case went and both
-  // tiles joined this list.
+  // tiles joined this list. Dashboard T4 (changed by plan): the new
+  // "Dashboard" tile joined it too.
   group('officer tiles', () {
     tilesOpenTheirPages(
       Role.officer,
@@ -334,6 +337,7 @@ void main() {
       const OfficerHomeScreen(),
       [
         (AppText.alerts, AppRoutes.officerAlerts),
+        (AppText.dashboard, AppRoutes.officerDashboard),
         (AppText.checkConsignment, AppRoutes.officerCheck),
         (AppText.reports, AppRoutes.officerReports),
         (AppText.auditTrail, AppRoutes.officerCheck),

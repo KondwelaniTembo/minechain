@@ -39,6 +39,7 @@ import '../../features/officer/presentation/officer_home_screen.dart';
 import '../../features/registration/presentation/register_consignment_screen.dart';
 import '../../features/reports/presentation/reports_screen.dart';
 import '../../features/sync/presentation/send_work_screen.dart';
+import '../../features/dashboard/presentation/dashboard_screen.dart';
 import '../../features/transporter/presentation/transporter_home_screen.dart';
 import '../../features/verification/presentation/consignment_check_screen.dart';
 import '../widgets/app_navigation.dart';
@@ -273,6 +274,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.adminAnchoring,
         builder: (context, state) => const AnchoringScreen(),
+      ),
+      // The officer's dashboard (dashboard plan, T4), pushed by the
+      // officer's home; under /officer for the same role rule.
+      GoRoute(
+        path: AppRoutes.officerDashboard,
+        builder: (context, state) => const DashboardScreen(),
       ),
     ],
     // No path, query or other text from the address is logged.
