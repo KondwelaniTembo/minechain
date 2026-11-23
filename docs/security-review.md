@@ -3,6 +3,9 @@
 Hardening T1, 19 Nov 2026, on `chore/hardening` from `main` at `58b4c81`. Plan:
 `docs/plans/hardening-plan.md`.
 
+**Final review (23 Nov):** §7 covers every feature built after this review. No Critical or
+High finding; one new Low (L7, a server dependency) and L6 still open.
+
 **Status (Hardening T5, 19 Nov):** H1, M1 and L1 are fixed (T2 `18d5808`, M1 corrected in T4
 `8c18bbf`). The device checks in §5 all passed on the A57 (T4), which closes L2 and L3. T4
 added one finding, L6. The choices and accepted limits are recorded in `docs/decisions.md`,
@@ -172,3 +175,35 @@ Done by the developer on the A57 on 19 Nov; the raw results are in `docs/testing
   real overlay app.
 - The cause of M1's first failure is likely, not proven: the window flags and `run-as` were
   not reported again for the corrected build (L6).
+
+## 7. Final review of the later features (23 Nov 2026)
+
+On `chore/end-to-end` from `main` at `60ef8a0` (after PR #25), by reading the source, the
+plugin manifests and the lock files. **Scope:** everything merged after the review above:
+the consignment check, transporter handoff, buyer purchase, officer alerts, admin accounts,
+GPS zones, reports and audit trails, the anchoring status screen and the dashboard, plus the
+server routes they call. The same limits as §6 apply; no device was used.
+
+**Result: no Critical or High finding.** NFR-02 is still met for the app as built. One new
+Low (L7) and two Info notes; L6 stays open.
+
+| ID | Rating | Area | Finding | Status |
+|---|---|---|---|---|
+| L7 | Low | Server dependencies | `npm audit --omit=dev` in `backend/`: three moderate advisories (GHSA-g3hv-75wg-m249 in `minimatch` 7–11, GHSA-3g3m-2fjr-6pw4 in `glob` 9–14), all through `node-pg-migrate`. That package only runs the migrations, by hand, on fixed file paths; no request reaches it. npm's fix is a breaking downgrade to `node-pg-migrate` 7.6.1 | Accepted for the prototype; recheck the advisories before any real deployment. `contracts/`: 0 advisories |
+| L6 | Low | STORAGE-2 | `run-as` on the release build (§3) | Still open: it needs the A57 and a release build, and was not repeated |
+| I7 | Info | Server | `GET /dashboard` has no rate limiter | By design, Dashboard (3): officer only, counts only, nothing personal |
+| I8 | Info | PRIVACY | A shared report leaves the app with names, licence numbers and coordinates | Known limitations after Reports app (10): the officer chooses where it goes; one copy in the private cache |
+
+**Checked and found in order:**
+
+| Control | What was checked | Result |
+|---|---|---|
+| Access control (server) | Every route file under `backend/src/routes/` | Every route but `/health` has `requireAuth` and a role check: admin for `/admin/*`; officer for `/alerts`, `/dashboard` and `/reports/audit-trail`; officer, buyer and admin for `/reports`; transporter, buyer and officer for `/consignments/by-qr`; signing roles for `/sync` and the device key. All have `no-store` and a schema check on params, query and body; JSON bodies are capped at 100 kB, and helmet sets the headers |
+| Data shown by role | `consignmentDisclosure.js`, `consignmentService.js` | The server leaves out what a role may not see (weights before custody, coordinates, alerts for non-officers). The phone never receives them, as the end-to-end run showed (the transporter's check had no coordinates and hid the weight before custody) |
+| Platform (app) | `AndroidManifest.xml`; the manifest of `share_plus` 13.3.1, the only plugin added since §4 | No new permission, activity or intent filter. share_plus adds a FileProvider and a receiver, both `exported="false"`; the provider shares only `cache/share_plus/` and grants read access to one file at a time. `FLAG_SECURE` and the touch filter are set on the one activity, so the new screens have them too |
+| Storage (app) | `report_file_store.dart`, `report_download_controller.dart` | One report at a time in the private cache, under a checked file name (Reports app (5)); the report card is `autoDispose`, so it is gone after a logout and the next user cannot reach the file |
+| Logging (app) | Every `debugPrint`, `print` and `log` under `mobile/lib` | Two: the sync stop (class names only, and only when `kDebugMode`) and the config error (the rule's name, never the value) |
+| Clipboard (app) | Every `Clipboard.setData` | One: the anchoring screen's recorder wallet and contract addresses, which are public on Sepolia. The activation code is never copied by the app |
+| Secrets (repository) | `git grep` for Render host names, RPC keys, private keys, JWT secrets and database URLs; `git ls-files` for `.env`, `api.json`, keystores | Only placeholders (`.env.example`, test fixtures); no secret file is tracked |
+| Development shortcuts | `DEV-SHORTCUT` markers | Three markers for two known shortcuts: `demo-journey` (two files; it refuses production) and the in-memory rate-limit stores (fine while Render runs one instance) |
+| Notes and audit | Alert decisions, account and zone actions | The notes field warns "Kept forever in the audit log. Do not add personal details."; the password is asked again before account and zone changes |

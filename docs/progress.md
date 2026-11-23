@@ -4,7 +4,9 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 23 Nov 2026, 00:45. Verification fix 4/4: merged as PR #22 (`4ef4ded`),
+Last updated: 23 Nov 2026, 15:30. End-to-end test passed and the final security review
+done (no Critical or High), on `chore/end-to-end`; the zip is dropped. Left: release-build
+timing and L6 on the A57, README, release tag. Earlier: 23 Nov, 00:45. Verification fix 4/4: merged as PR #22 (`4ef4ded`),
 Render on Alchemy with PublicNode as the fallback, 0007 verified and the two false 0008
 alerts cleared on production. Scope (11): the admin's Anchoring tile becomes a read-only
 status screen. Next: Anchoring status on `feature/anchoring-status`, then the dashboard
@@ -106,12 +108,15 @@ for 22 Nov evening is in (b).
    (the earlier "cut FR-14" here was a proposal the developer did not agree to)
 4. ✅ Anchoring status (Scope (11)), 5/5, with the two wording fixes; merged as PR #23
    (`c3161c5`)
-5. ✅ Dashboard (FR-14), 6/6: server merged as PR #24; app done, phone check passed
-   (23 Nov), PR next
-6. ⬜ End-to-end test of every role, shortened, with the typed zone
-7. ⬜ Release-build timing (NFR-03) and the final security pass over the later features
+5. ✅ Dashboard (FR-14), 6/6: server merged as PR #24, app as PR #25 (`60ef8a0`);
+   phone check passed (23 Nov)
+6. ✅ End-to-end test of every role, shortened (23 Nov, 13:41–14:51, production): passed,
+   `docs/plans/end-to-end-plan.md` §5; regression pass 2348 + 932 + 37 + 2623
+7. ✅ Final security pass over the later features (23 Nov, by reading the code;
+   `security-review.md` §7): no Critical or High; new Low L7; L6 still open (device)
+   - ⬜ Release-build timing (NFR-03) and the L6 `run-as` re-check: need the A57
 8. ⬜ README, `CLAUDE.md` status
-9. ⬜ The submission zip (`git archive`, committed files only) and the release tag
+9. ~~The submission zip~~ dropped by the developer (23 Nov); ⬜ the release tag
 
 The thesis starts later on Mon 23 Nov, in chat.
 
@@ -138,7 +143,19 @@ The thesis starts later on Mon 23 Nov, in chat.
 Done on Thu 19 (session ended 20 Nov, 00:40): Hardening (PR #13), "My account" back arrow
 (PR #14), Consignment check T1–T5 (1584 tests passed, 0 skipped).
 
-## (c) Current feature: Dashboard (FR-14) — 6/6
+## (c) Current feature: End-to-end test (shortened) — 5/5
+
+Plan: `docs/plans/end-to-end-plan.md`. Branch `chore/end-to-end` from `main` after PR #25.
+Docs only; nothing deploys.
+
+- ✅ T1 Regression pass: `npm test` 2348, `npm run test:db` 932, contract 37,
+  `flutter analyze` clean, `flutter test` 2623
+- ✅ T2 Device steps (developer, 23 Nov 13:41–14:51, emulator and A57, production)
+- ✅ T3 Verdict: passed, no fault; observation O1 (no change)
+- ✅ T4 Docs and PR text
+- ✅ T5 Final security review of the later features (`security-review.md` §7)
+
+## (c) Done: Dashboard (FR-14) — 6/6
 
 Plan: `docs/plans/dashboard-plan.md`, approved 23 Nov (Q1–Q5 as proposed, A). Part 1
 changes `backend/`: merging it deploys to Render.
@@ -153,8 +170,7 @@ changes `backend/`: merging it deploys to Render.
   30 days 19 steps = the transactions report's 19 rows
 - ✅ T5b The chart's dates with years when they differ (12 months); 1 new, 2623
 - ✅ T6 Docs and PR text: decisions Dashboard app (1)–(6), three known limitations
-- Next: the developer's two commits on `feature/dashboard`, the PR, then the end-to-end
-  test
+- Merged as PR #25 (`60ef8a0`). Next: the shortened end-to-end test (new chat)
 
 ## (c) Done: Anchoring status — 5/5 (PR #23, `c3161c5`)
 

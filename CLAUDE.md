@@ -60,9 +60,30 @@ session, then `docs/progress.md` (the day plan and the current feature's subtask
   same files, so the uncommitted work moves with `git switch -c feature/dashboard`).
   T5 phone check passed (23 Nov 03:32–03:53, A57 as `officer_demo`: 30 days 19 steps =
   the transactions report's 19 rows); T5b years on the chart's dates; T6 docs done
-  (decisions Dashboard app (1)–(6)); `flutter test` 2623. **Dashboard 6/6.** Next: the
-  developer's script (creates `feature/dashboard`, two commits, first push with
-  `--set-upstream`), the PR; then the shortened end-to-end test, README, the zip.
+  (decisions Dashboard app (1)–(6)); `flutter test` 2623. **Dashboard 6/6, merged as
+  PR #25 (`60ef8a0`, 23 Nov).**
+- **Done 23 Nov (15:30): the shortened end-to-end test (5/5) and the final security
+  review**, on `chore/end-to-end` (docs only; PR to open). Device run 13:41–14:51 on
+  production passed (`docs/plans/end-to-end-plan.md` §5: 0011 full chain verified; 0012
+  GPS alert cleared, then a 30% lighter purchase flagged and confirmed). Regression pass:
+  `npm test` 2348, `npm run test:db` 932, contract 37, `flutter test` 2623. `security-review.md` §7: no Critical or High; new Low L7
+  (`node-pg-migrate`'s glob/minimatch advisories, accepted); L6 still open. The developer
+  dropped the submission zip. **Left:** release-build timing (NFR-03) and the L6 `run-as`
+  re-check on the A57, README, release tag. Production now has open alerts back at 8.
+- **Was next: the shortened end-to-end test.** Claude Code writes the plan
+  (`docs/plans/end-to-end-plan.md`: every role on production, the expected result of
+  each step, a results table) and runs every automated suite as the regression pass
+  (`npm test`, `npm run test:db`, `flutter test`; the contract's tests only if the
+  developer agrees). The developer runs the device steps (A57 and `emulator-5554`) and
+  sends screenshots; Claude Code checks them against the plan and gives the verdict and
+  the `testing-log.md` entry. Start from `main` after PR #25 (suggested branch
+  `chore/end-to-end`); this status edit is uncommitted on the merged local
+  `feature/dashboard`, so the start-of-feature script stashes `CLAUDE.md` and
+  `docs/progress.md` and pops them on the new branch. Then: release-build timing
+  (NFR-03) and the final security pass, README, the submission zip and the release tag.
+  Lesson: a commit script that first switches branches must stash and pull, as the
+  start-of-feature script does (the first dashboard script failed on an old local
+  `main`).
   New: `admin/domain/anchoring_status.dart`, `data/admin_anchoring_api.dart`,
   `admin_anchoring_repository.dart`, `presentation/anchoring_status_controller.dart`,
   `anchoring_words.dart`, `anchoring_screen.dart`; route `AppRoutes.adminAnchoring`; tests
