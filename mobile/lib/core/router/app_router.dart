@@ -17,6 +17,7 @@ import '../../features/admin/presentation/account_page_screen.dart';
 import '../../features/admin/presentation/accounts_screen.dart';
 import '../../features/admin/presentation/create_account_screen.dart';
 import '../../features/admin/presentation/admin_home_screen.dart';
+import '../../features/admin/presentation/anchoring_screen.dart';
 import '../../features/admin/presentation/create_zone_screen.dart';
 import '../../features/admin/presentation/zone_page_screen.dart';
 import '../../features/admin/presentation/zones_screen.dart';
@@ -266,6 +267,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.adminZone,
         builder: (context, state) => const ZonePageScreen(),
+      ),
+      // The anchoring status (anchoring status plan, T3), pushed by the
+      // administrator's home; under /admin for the same role rule.
+      GoRoute(
+        path: AppRoutes.adminAnchoring,
+        builder: (context, state) => const AnchoringScreen(),
       ),
     ],
     // No path, query or other text from the address is logged.

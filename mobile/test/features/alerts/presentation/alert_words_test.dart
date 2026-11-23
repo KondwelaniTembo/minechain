@@ -343,6 +343,30 @@ void main() {
       );
     });
 
+    // Anchoring status plan, T1 (Q4): the production check of 23 Nov showed
+    // "The other details no longer matches the blockchain." for TX_NOT_FOUND.
+    test('chain_tx_hash alone: the transaction could not be found', () {
+      expect(findings('record_tampered', tampered(['chain_tx_hash'])), [
+        'The blockchain transaction for this step could not be found.',
+      ]);
+    });
+
+    test('chain_tx_hash with another field: named in the list', () {
+      expect(
+        findings('record_tampered', tampered(['weight_mg', 'chain_tx_hash'])),
+        [
+          'The weight and blockchain transaction no longer match the '
+              'blockchain.',
+        ],
+      );
+    });
+
+    test('"other details" alone takes "match", as a plural', () {
+      expect(findings('record_tampered', tampered(['later_field'])), [
+        'The other details no longer match the blockchain.',
+      ]);
+    });
+
     test('no fields named', () {
       expect(findings('record_tampered', tampered([])), [
         'Something in this record no longer matches the blockchain.',

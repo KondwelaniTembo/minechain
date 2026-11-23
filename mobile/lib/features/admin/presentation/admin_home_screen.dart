@@ -1,7 +1,8 @@
 // The administrator's home (plan section 4.2). "Account requests" opens its
 // screen (plan A1), "Accounts" its list (admin accounts plan, T2) and "GPS
 // zones" theirs (GPS zones plan, T2), "Reports" the transactions report
-// (reports plan, T3); "Anchoring" says "Coming soon" until it is built.
+// (reports plan, T3), and "Anchoring" the read-only anchoring status
+// (anchoring status plan, T3; Scope (11)).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,7 +10,6 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/router/routes.dart';
 import '../../../core/text/app_text.dart';
-import '../../../core/widgets/coming_soon.dart';
 import '../../../core/widgets/home_scaffold.dart';
 import '../../auth/presentation/home_header.dart';
 
@@ -18,8 +18,6 @@ class AdminHomeScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    void soon() => showComingSoon(context);
-
     return HomeScaffold(
       title: AppText.adminTitle,
       username: watchUsername(ref),
@@ -46,7 +44,12 @@ class AdminHomeScreen extends ConsumerWidget {
           label: AppText.gpsZones,
           onTap: () => context.push(AppRoutes.adminZones),
         ),
-        HomeAction(icon: Icons.link, label: AppText.anchoring, onTap: soon),
+        HomeAction(
+          icon: Icons.link,
+          label: AppText.anchoring,
+          // push(): a task page over the home, like the others.
+          onTap: () => context.push(AppRoutes.adminAnchoring),
+        ),
         HomeAction(
           icon: Icons.table_chart,
           label: AppText.reports,

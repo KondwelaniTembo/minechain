@@ -232,6 +232,7 @@ String _fieldWord(String name) {
     'signature' || 'signer_public_key' => AppText.fieldSignature,
     'signed_payload' => AppText.fieldSignedRecord,
     'data_hash' || 'hash_version' => AppText.fieldFingerprint,
+    'chain_tx_hash' => AppText.fieldTransaction,
     _ => AppText.fieldOther,
   };
 }
@@ -239,6 +240,11 @@ String _fieldWord(String name) {
 List<String>? _tampered(Map<String, Object?> details) {
   final fields = details['fields'];
   if (fields is! List || !fields.every((f) => f is String)) return null;
+  // The chain check names chain_tx_hash alone, for TX_NOT_FOUND (backend
+  // chainCheck.js, step 4); "no longer matches" would not say what happened.
+  if (fields.length == 1 && fields.single == 'chain_tx_hash') {
+    return const [AppText.transactionNotFound];
+  }
   // In the server's order, each word once.
   final words = <String>[];
   for (final field in fields.cast<String>()) {

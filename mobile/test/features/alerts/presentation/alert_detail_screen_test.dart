@@ -75,6 +75,30 @@ void main() {
       expect(find.text(AppText.onlyConfirm), findsNothing);
     });
 
+    // Anchoring status plan, T1 (Q4): MC-2026-LSK-0008's false alerts of
+    // 22 Nov, raised by a pruned receipt, as the officer saw them.
+    testWidgets('a missing blockchain transaction says so', (tester) async {
+      server = FakeAlertsServer([
+        alertJson(
+          1,
+          type: 'record_tampered',
+          severity: 'high',
+          stepType: 'registration',
+          reviewStatus: 'passed',
+          details: {
+            'source': 'verification',
+            'fields': ['chain_tx_hash'],
+            'chainTxHash': '0x${'c0' * 32}',
+          },
+        ),
+      ]);
+      await openAlert(tester);
+
+      await toPart(tester, find.text(AppText.whatTheCheckFound));
+      expect(find.text(AppText.transactionNotFound), findsOneWidget);
+      expect(find.textContaining('no longer'), findsNothing);
+    });
+
     testWidgets('other alerts on the consignment, with the hold sentence', (
       tester,
     ) async {
