@@ -1,6 +1,7 @@
 // The regulatory officer's home (plan section 4.2). Every tile is built:
 // "Check a consignment" (consignment check plan), "Alerts" (officer alerts
-// plan), "Reports" and "Audit trail" (reports plan, T3 and T4).
+// plan), "Dashboard" (dashboard plan, T4), "Reports" and "Audit trail"
+// (reports plan, T3 and T4).
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -32,6 +33,12 @@ class OfficerHomeScreen extends ConsumerWidget {
           // push(): a task page over the home (officer alerts plan, T2).
           onTap: () => context.push(AppRoutes.officerAlerts),
           primary: true,
+        ),
+        HomeAction(
+          icon: Icons.insights,
+          label: AppText.dashboard,
+          // push(): a task page over the home (dashboard plan, T4).
+          onTap: () => context.push(AppRoutes.officerDashboard),
         ),
         HomeAction(
           icon: Icons.fact_check,

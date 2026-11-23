@@ -1524,6 +1524,75 @@ abstract final class AppText {
   static const String copy = 'Copy';
   static const String copied = 'Copied.';
 
+  // ---- Dashboard (dashboard plan, T4: dashboard_words.dart) ----
+
+  static const String dashboard = 'Dashboard';
+  static const String dashboardNeedsPassword =
+      'Your session has expired. Enter your password to see the dashboard.';
+  static const String loadingDashboard = 'Reading the dashboard…';
+  static const String refreshDashboard = 'Refresh the dashboard';
+
+  static const String dashboardPeriod = 'Period';
+  static const String last7Days = 'Last 7 days';
+  static const String last30Days = 'Last 30 days';
+  static const String last12Months = 'Last 12 months';
+  static const String dashboardMineral = 'Mineral';
+
+  /// "17 Nov 2026 to 23 Nov 2026, UTC days".
+  static String dashboardDays(DateTime from, DateTime to) =>
+      '${_day(from)} to ${_day(to)}, UTC days';
+  static const String dashboardDaysNote =
+      'A step counts on the day its phone recorded it.';
+
+  static const String rightNow = 'Right now';
+  static String openAlertsNow(int count) => switch (count) {
+    0 => 'No open alerts',
+    1 => '1 open alert',
+    _ => '$count open alerts',
+  };
+  static const String consignmentsByStage = 'Consignments, by stage now';
+
+  static const String volumesHeading = 'Volumes';
+  static String stepsRecorded(int count) =>
+      count == 1 ? '1 step recorded' : '$count steps recorded';
+
+  /// "18.5 kg registered".
+  static String registeredKg(String kilograms) => '$kilograms kg registered';
+  static const String registeredWeightNote =
+      'Weight counts accepted registrations only.';
+  static const String stepsPerDay = 'Steps per day';
+  static const String stepsPerWeek = 'Steps per week';
+
+  /// One bar's label for screen readers: "17 Nov: 2 steps", or "Week from
+  /// 17 Nov: 5 steps".
+  static String barLabel(
+    DateTime start, {
+    required bool week,
+    required int steps,
+  }) =>
+      '${week ? 'Week from ' : ''}${start.day} ${_months[start.month - 1]}: '
+      '${steps == 1 ? '1 step' : '$steps steps'}';
+
+  static const String byMineralHeading = 'By mineral';
+
+  /// "12 steps, 6.5 kg registered".
+  static String mineralSteps(int steps, String kilograms) =>
+      '${steps == 1 ? '1 step' : '$steps steps'}, $kilograms kg registered';
+
+  static const String whereHeading = 'Where';
+  /// A zone deactivated since its steps arrived.
+  static String zoneDeactivated(String name) => '$name (deactivated)';
+
+  static const String anomaliesHeading = 'Anomalies';
+  static String anomaliesRaised(int total, int open) => total == 0
+      ? 'No alerts raised in this period.'
+      : '$total raised, $open still open';
+  static const String bySeverity = 'By severity';
+
+  /// "No steps were recorded in the last 7 days."
+  static String nothingInPeriod(String period) =>
+      'No steps were recorded in the ${period.toLowerCase()}.';
+
   /// A length of time in the largest whole unit: "45 seconds", "1 minute",
   /// "20 minutes", "2 hours", "3 days".
   static String age(int seconds) {

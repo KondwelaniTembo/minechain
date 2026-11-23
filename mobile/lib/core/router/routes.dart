@@ -80,6 +80,10 @@ abstract final class AppRoutes {
   static String officerAlert(String id) =>
       '/officer/alerts/${Uri.encodeComponent(id)}';
 
+  /// The officer's dashboard (dashboard plan, T4; FR-14). Under /officer,
+  /// for the same role rule.
+  static const String officerDashboard = '/officer/dashboard';
+
   /// The administrator's list of pending account requests. Under /admin, so
   /// the redirect's role rule keeps it for administrators only.
   static const String adminRequests = '/admin/requests';

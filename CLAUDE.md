@@ -50,8 +50,19 @@ session, then `docs/progress.md` (the day plan and the current feature's subtask
   Anchoring app (1)–(6), three known limitations). Merged as PR #23 (`c3161c5`).
   **Now: the dashboard (FR-14)**, plan `docs/plans/dashboard-plan.md` approved 23 Nov
   (Q1–Q5 A). Part 1 server on `feature/dashboard-api` done (T1–T2: `GET /dashboard`,
-  officer only, `dashboardService.js`; `npm test` 2348, `npm run test:db` 932); next its
-  commits and PR (merging deploys), then Part 2 app on `feature/dashboard` (T3–T6).
+  officer only, `dashboardService.js`; `npm test` 2348, `npm run test:db` 932), merged as
+  PR #24 and deployed. Part 2 app: T3 (data) and T4 (screen) done, `flutter test` 2622,
+  in `features/dashboard/` (`dashboard_period.dart`, `dashboard_summary.dart`,
+  `dashboard_api.dart`, `dashboard_repository.dart`, `dashboard_controller.dart`,
+  `dashboard_widgets.dart`, `dashboard_words.dart`, `dashboard_screen.dart`), route
+  `AppRoutes.officerDashboard`, fake `test/fakes/fake_dashboard_server.dart`. Written on
+  `feature/dashboard-api` locally (the Part 2 branch script not run yet; `main` has the
+  same files, so the uncommitted work moves with `git switch -c feature/dashboard`).
+  T5 phone check passed (23 Nov 03:32–03:53, A57 as `officer_demo`: 30 days 19 steps =
+  the transactions report's 19 rows); T5b years on the chart's dates; T6 docs done
+  (decisions Dashboard app (1)–(6)); `flutter test` 2623. **Dashboard 6/6.** Next: the
+  developer's script (creates `feature/dashboard`, two commits, first push with
+  `--set-upstream`), the PR; then the shortened end-to-end test, README, the zip.
   New: `admin/domain/anchoring_status.dart`, `data/admin_anchoring_api.dart`,
   `admin_anchoring_repository.dart`, `presentation/anchoring_status_controller.dart`,
   `anchoring_words.dart`, `anchoring_screen.dart`; route `AppRoutes.adminAnchoring`; tests

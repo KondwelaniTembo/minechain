@@ -1,7 +1,9 @@
 # Dashboard plan (FR-14)
 
 Status: **approved 23 Nov 2026, Q1–Q5 as proposed (A).** Part 1 (T1, T2) done: `npm test`
-2348, `npm run test:db` 932. Next: the server commit, PR and merge (deploys), then Part 2.
+2348, `npm run test:db` 932; merged as PR #24 and deployed. Part 2: **done, 6/6**
+(`flutter test` 2623; phone check passed 23 Nov 03:32–03:53; T5b added; decisions
+Dashboard app (1)–(6), three known limitations).
 
 Branches, both created by the developer:
 
@@ -192,8 +194,27 @@ Anomalies      5 raised, 3 still open
   (a new tile, changed by plan).
 
 **T5 Phone check** (the developer, A57 as `officer_demo`, production)
-- Steps planned at T4's end; the figures are checked against "Alerts" (8 open) and a
-  transactions report for the same 30 days.
+
+T3 and T4 done (2622 tests passed). Steps, planned at T4's end:
+
+1. Home: a "Dashboard" tile, second after "Alerts". Open it: "Last 7 days" chosen, a
+   spinner, then the cards. The line under the chips reads "17 Nov 2026 to 23 Nov 2026, UTC
+   days" (or the week ending today).
+2. "Right now": the open alerts match the "Alerts" list's Open count (8 on 23 Nov).
+3. "Last 30 days": every step since 25 Oct, so the whole demo history, a bar per day.
+   Note "N steps recorded". In "Reports", download the transactions report for the same
+   30 days (the dates shown on the dashboard) and check that it says the same N records.
+4. "Last 12 months": "Steps per week", the same N.
+5. A mineral chip (Gold): the counts drop to gold only; "Any" brings them back.
+6. "Where": "ZCAS Campus (demo)" and any typed or walked zone; "Anomalies": the rules that
+   fired, then High, Medium, Low.
+7. Airplane mode, tap refresh: the cards stay, "No internet connection" at the bottom.
+   Back out and open again while offline: the full-page message with "Try again".
+8. Settings → Display → font size largest: open again and scroll to the end; nothing cut
+   off.
+
+Screenshots for the thesis: `dashboard-7-days.png` (top), `dashboard-30-days-volumes.png`,
+`dashboard-where-anomalies.png`, `dashboard-12-months.png`, `dashboard-offline.png`.
 
 **T6 Docs and PR text**
 - `decisions.md` Dashboard app (1)–(n) and known limitations; `progress.md`,

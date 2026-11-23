@@ -106,8 +106,8 @@ for 22 Nov evening is in (b).
    (the earlier "cut FR-14" here was a proposal the developer did not agree to)
 4. ✅ Anchoring status (Scope (11)), 5/5, with the two wording fixes; merged as PR #23
    (`c3161c5`)
-5. ⬜ Dashboard (FR-14): plan approved 23 Nov; Part 1 server (`feature/dashboard-api`)
-   built, T1–T2, waiting for its PR; Part 2 app (`feature/dashboard`) next
+5. ✅ Dashboard (FR-14), 6/6: server merged as PR #24; app done, phone check passed
+   (23 Nov), PR next
 6. ⬜ End-to-end test of every role, shortened, with the typed zone
 7. ⬜ Release-build timing (NFR-03) and the final security pass over the later features
 8. ⬜ README, `CLAUDE.md` status
@@ -138,7 +138,7 @@ The thesis starts later on Mon 23 Nov, in chat.
 Done on Thu 19 (session ended 20 Nov, 00:40): Hardening (PR #13), "My account" back arrow
 (PR #14), Consignment check T1–T5 (1584 tests passed, 0 skipped).
 
-## (c) Current feature: Dashboard (FR-14) — 2/6
+## (c) Current feature: Dashboard (FR-14) — 6/6
 
 Plan: `docs/plans/dashboard-plan.md`, approved 23 Nov (Q1–Q5 as proposed, A). Part 1
 changes `backend/`: merging it deploys to Render.
@@ -146,10 +146,15 @@ changes `backend/`: merging it deploys to Render.
 - ✅ T1 Server: schema and `dashboardService.summary()`, DB tests (16 + 14 new)
 - ✅ T2 Server: `GET /dashboard` route, real-stack test, docs (16 + 2 new); `npm test`
   2348, `npm run test:db` 932. Next: the developer's commit, PR and merge (deploys)
-- ⬜ T3 App data: model, periods, API, repository, fake server
-- ⬜ T4 App screen: controller, widgets, screen, route, officer tile
-- ⬜ T5 Phone check (A57 as `officer_demo`, production)
-- ⬜ T6 Docs and PR text
+- ✅ T3 App data: model, periods, API, repository, fake server; 40 new, 2596
+- ✅ T4 App screen: controller, widgets, screen, route, officer tile; 26 new, 2622
+  (one overflow at text 2.0 found and fixed)
+- ✅ T5 Phone check (23 Nov, 03:32–03:53, A57 as `officer_demo`, production): passed;
+  30 days 19 steps = the transactions report's 19 rows
+- ✅ T5b The chart's dates with years when they differ (12 months); 1 new, 2623
+- ✅ T6 Docs and PR text: decisions Dashboard app (1)–(6), three known limitations
+- Next: the developer's two commits on `feature/dashboard`, the PR, then the end-to-end
+  test
 
 ## (c) Done: Anchoring status — 5/5 (PR #23, `c3161c5`)
 
