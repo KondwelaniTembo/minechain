@@ -90,8 +90,8 @@ journey on tag B (X1, X2) that also showed the "Confirm problem" path; the CSV f
 gold; no dashboard screenshot. None of them weakens the result.
 
 **Timing seen (debug build, Wi-Fi or 4G, not 3G):** every local save 0.1 s (NFR-03 asks
-3 s); sends 0.5–1.9 s (NFR-03 asks 10 s on 3G). The release-build timing still stands
-on its own (`progress.md`).
+3 s); sends 0.5–1.9 s (NFR-03 asks 10 s on 3G). These are the NFR-03 evidence (decision NFR-03 (1)); no separate release-build run was
+made.
 
 **Observation O1 (no change proposed):** a step that is sent to Sepolia but not yet mined
 (`submitted`) shows "Not on the blockchain yet" together with its transaction hash, for

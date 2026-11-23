@@ -4,7 +4,8 @@ Hardening T1, 19 Nov 2026, on `chore/hardening` from `main` at `58b4c81`. Plan:
 `docs/plans/hardening-plan.md`.
 
 **Final review (23 Nov):** §7 covers every feature built after this review. No Critical or
-High finding; one new Low (L7, a server dependency) and L6 still open.
+High finding; one new Low (L7, a server dependency). L6 was closed on 23 Nov by the
+re-check in §8.
 
 **Status (Hardening T5, 19 Nov):** H1, M1 and L1 are fixed (T2 `18d5808`, M1 corrected in T4
 `8c18bbf`). The device checks in §5 all passed on the A57 (T4), which closes L2 and L3. T4
@@ -190,7 +191,7 @@ Low (L7) and two Info notes; L6 stays open.
 | ID | Rating | Area | Finding | Status |
 |---|---|---|---|---|
 | L7 | Low | Server dependencies | `npm audit --omit=dev` in `backend/`: three moderate advisories (GHSA-g3hv-75wg-m249 in `minimatch` 7–11, GHSA-3g3m-2fjr-6pw4 in `glob` 9–14), all through `node-pg-migrate`. That package only runs the migrations, by hand, on fixed file paths; no request reaches it. npm's fix is a breaking downgrade to `node-pg-migrate` 7.6.1 | Accepted for the prototype; recheck the advisories before any real deployment. `contracts/`: 0 advisories |
-| L6 | Low | STORAGE-2 | `run-as` on the release build (§3) | Still open: it needs the A57 and a release build, and was not repeated |
+| L6 | Low | STORAGE-2 | `run-as` on the release build (§3) | Closed on 23 Nov 2026 (§8) |
 | I7 | Info | Server | `GET /dashboard` has no rate limiter | By design, Dashboard (3): officer only, counts only, nothing personal |
 | I8 | Info | PRIVACY | A shared report leaves the app with names, licence numbers and coordinates | Known limitations after Reports app (10): the officer chooses where it goes; one copy in the private cache |
 
@@ -207,3 +208,22 @@ Low (L7) and two Info notes; L6 stays open.
 | Secrets (repository) | `git grep` for Render host names, RPC keys, private keys, JWT secrets and database URLs; `git ls-files` for `.env`, `api.json`, keystores | Only placeholders (`.env.example`, test fixtures); no secret file is tracked |
 | Development shortcuts | `DEV-SHORTCUT` markers | Three markers for two known shortcuts: `demo-journey` (two files; it refuses production) and the in-memory rate-limit stores (fine while Render runs one instance) |
 | Notes and audit | Alert decisions, account and zone actions | The notes field warns "Kept forever in the audit log. Do not add personal details."; the password is asked again before account and zone changes |
+
+## 8. Release build re-check (23 Nov 2026)
+
+On `chore/release` from `main` at `baa82f0` (after PR #26). Done by the developer on the
+A57 (Android 17, normal firmware). The raw output is in `docs/testing-log.md`.
+
+| # | Check | Result |
+|---|---|---|
+| 1 | `flutter build apk --release --obfuscate --split-debug-info=build/symbols`, then `adb install -r` | Built (72.6 MB) and installed over the app with the data kept. The command left out `--dart-define-from-file=env/api.json`, so that build refused to start with "built without its server address" (the documented command was incomplete; corrected in Hardening (6)). Rebuilt with the flag |
+| 2 | `adb shell run-as io.github.kondwelanitembo.minechain ls files` on the release build | **Pass.** `run-as: package not debuggable: io.github.kondwelanitembo.minechain`. A computer trusted for USB debugging cannot read the app's files through `run-as` |
+
+**L6 is closed.** Why `run-as` worked in T4 is not known; one possibility, not proven, is
+that the debug build was still the one installed at that moment. The release build as
+built now is not debuggable, as `dumpsys package` already showed in T4.
+
+**Final state for NFR-02:** no Critical or High finding is open.
+- **Fixed:** H1, M1, L1, L2, L3, L6.
+- **Accepted:** M2, L4, L5, L7, which are known limitations in `decisions.md`.
+
