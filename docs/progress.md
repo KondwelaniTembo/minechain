@@ -4,10 +4,11 @@ The working plan to submission on **Sunday 22 November 2026, 12:00** (work stops
 Updated after every subtask. How the levels work (Project → Day → Feature → Subtask → Steps)
 is in `CLAUDE.md`, "Working agreement (autopilot)".
 
-Last updated: 22 Nov 2026, the verification fix's server part (A) on
-`fix/chain-check-pruned-receipts` (`npm test` 2318, `npm run test:db` 914). Scope (10): FR-16
-cut, FR-14 kept and built. Next: the developer's commit, PR and Render settings (B), the two
-0008 alerts cleared, then the dashboard plan. The
+Last updated: 23 Nov 2026, 00:45. Verification fix 4/4: merged as PR #22 (`4ef4ded`),
+Render on Alchemy with PublicNode as the fallback, 0007 verified and the two false 0008
+alerts cleared on production. Scope (11): the admin's Anchoring tile becomes a read-only
+status screen. Next: Anchoring status on `feature/anchoring-status`, then the dashboard
+(FR-14). The
 submission window is open until about 16:47 on Tue 24 Nov (news on 22 Nov); the day plan
 for 22 Nov evening is in (b).
 
@@ -85,9 +86,8 @@ for 22 Nov evening is in (b).
   after a backup and before PR #8 was merged (`docs/deployment.md`, commit `efd8a5f`).
 - ✅ Scope (4): FR-14 kept (17 Nov); FR-16 cut (22 Nov, Scope (10)). FR-15 and FR-16 are
   the only requirements left out.
-- ⬜ The admin's "Anchoring" tile says "Coming soon": the server endpoints exist (Anchoring
-  admin N1–N5), the app screen was never planned. Build it or take the tile away: the
-  developer's choice.
+- ✅ The admin's "Anchoring" tile: a read-only status screen (option A, decided by the
+  developer on 23 Nov, Scope (11)).
 - ✅ Day plan: approved by the developer on 18 Nov.
 
 ## (b) Today, Sun 22 Nov (evening; submission window until about 16:47 on Tue 24 Nov)
@@ -97,18 +97,21 @@ for 22 Nov evening is in (b).
    longer called tampering, and Alchemy becomes the primary RPC with PublicNode as the
    fallback; then the two false 0008 alerts are cleared with a reason
    - ✅ (A) the code and docs, on `fix/chain-check-pruned-receipts` (2318 + 914 passed)
-   - ⬜ the developer's commit, PR and merge (this deploys to Render)
-   - ⬜ (B) Render settings: `SEPOLIA_RPC_URL` Alchemy, `SEPOLIA_RPC_URL_FALLBACK` PublicNode
-   - ⬜ check on production: 0008 checked again reads "Verified" or "could not check", no new
-     alert; then the officer clears the two 0008 alerts with a reason
+   - ✅ the developer's commit, PR #22 and merge (`4ef4ded`), deployed to Render
+   - ✅ (B) Render settings: `SEPOLIA_RPC_URL` Alchemy, `SEPOLIA_RPC_URL_FALLBACK` PublicNode
+   - ✅ check on production (23 Nov, 00:26–00:39): 0007 "Verified"; 0008's registration and
+     handoff match, its purchase "Never put on the blockchain"; both false alerts cleared,
+     0008 no longer held, 8 open alerts as before
 3. ✅ Scope (10): FR-16 cut; FR-14 (dashboard) kept and built, decided by the developer
    (the earlier "cut FR-14" here was a proposal the developer did not agree to)
-4. ⬜ Dashboard (FR-14): plan first, then build
-5. ⬜ End-to-end test of every role, shortened, with the typed zone
-6. ⬜ README, final pass (security over the last features), `CLAUDE.md` status
-7. ⬜ The submission zip (`git archive`, committed files only) and the release tag
+4. ✅ Anchoring status (Scope (11)), 5/5, with the two wording fixes; PR next
+5. ⬜ Dashboard (FR-14): plan first, then build
+6. ⬜ End-to-end test of every role, shortened, with the typed zone
+7. ⬜ Release-build timing (NFR-03) and the final security pass over the later features
+8. ⬜ README, `CLAUDE.md` status
+9. ⬜ The submission zip (`git archive`, committed files only) and the release tag
 
-The thesis starts on Mon 23 Nov, in chat.
+The thesis starts later on Mon 23 Nov, in chat.
 
 ## (b) Sat 21 Nov
 
@@ -133,7 +136,21 @@ The thesis starts on Mon 23 Nov, in chat.
 Done on Thu 19 (session ended 20 Nov, 00:40): Hardening (PR #13), "My account" back arrow
 (PR #14), Consignment check T1–T5 (1584 tests passed, 0 skipped).
 
-## (c) Current feature: Verification fix — 1/4
+## (c) Current feature: Anchoring status — 5/5
+
+Plan: `docs/plans/anchoring-status-plan.md`, approved 23 Nov (Q1–Q5 as proposed, A). Branch
+`feature/anchoring-status`, from `main` after PR #22. App only, using the existing
+`GET /admin/anchoring` (Scope (11)); nothing deploys to Render.
+
+- ✅ T1 Wording fixes ("forever"; the missing-transaction alert sentence); 4 new, 2485
+- ✅ T2 Data: the status model, API, repository, fake server; 42 new, 2527
+- ✅ T3 Screen: controller, words, screen, route, tile; the admin's "Coming soon" tests
+  went (changed by plan); 30 new, 2556
+- ✅ T4 Phone check (23 Nov, 02:00–02:07, emulator as admin on production; A57 for
+  "forever"): passed
+- ✅ T5 Docs and PR text: decisions Anchoring app (1)–(6), three known limitations
+
+## (c) Done: Verification fix — 4/4 (PR #22, `4ef4ded`)
 
 No plan file: the fix was approved on 22 Nov as described in `CLAUDE.md` (found in Reports
 T5). Branch `fix/chain-check-pruned-receipts`, from `main` after PR #21. **Server code:
@@ -142,9 +159,10 @@ merging deploys to Render.** Decisions Verification fix (1), (2), one known limi
 - ✅ A. `chainCheck.js` step 4 (`receiptPruned`), `chainReader.getTransaction`, the fake
   reader; docs (`contract-spec.md` 7.1 and 7.2, `api.md` the chain check, `decisions.md`,
   `deployment.md`); 18 new tests, `npm test` 2318, `npm run test:db` 914
-- ⬜ The commit, PR and merge (developer)
-- ⬜ B. Render settings (developer): Alchemy primary, PublicNode fallback
-- ⬜ Production check (0008 again, no new alert), then the officer clears the two 0008 alerts
+- ✅ The commit, PR #22 and merge (developer)
+- ✅ B. Render settings (developer): Alchemy primary, PublicNode fallback
+- ✅ Production check (23 Nov, A57 as `officer_demo`): 0007 verified, 0008 matched where
+  anchored; the two 0008 alerts cleared with a reason
 
 ## (c) Earlier: Reports — 7/7
 

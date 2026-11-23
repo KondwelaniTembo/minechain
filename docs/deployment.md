@@ -267,6 +267,17 @@ log, Verification fix (1) and (2)):
   both changes are live, no consignment is checked on production: each step gets one tamper
   alert, ever (Verification (12)).
 
+**Done 22–23 Nov:** PR #22 merged and deployed. On 22 Nov, about 22:30, the developer set
+`SEPOLIA_RPC_URL` to Alchemy's Sepolia endpoint and `SEPOLIA_RPC_URL_FALLBACK` to
+PublicNode's (replacing 1RPC) in Render's Environment page, and redeployed. The logs then
+showed `Anchoring: enabled, running preflight`, `Verification: chain reader configured` and
+`Anchoring preflight passed`, with no `rpcUnreachable` warning, so both endpoints answered
+from Render (1RPC never had). The laptop's local `.env` was left unchanged: these settings
+live only on Render. Checked on the A57 as `officer_demo` (23 Nov, 00:26–00:39):
+MC-2026-LSK-0007 "Verified" with three steps matching the chain; 0008's registration and
+handoff match, its rejected purchase was never anchored; the two false alerts were cleared
+with a reason, and 0008 is no longer held.
+
 ---
 
 ## Operational security

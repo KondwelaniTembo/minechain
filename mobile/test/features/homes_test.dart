@@ -140,19 +140,9 @@ void main() {
       // purchase T3 (changed by plan), and its "Reports" since Reports T3;
       // the officer's "Reports" and "Audit trail" since Reports T3 and T4
       // (changed by plan). "buyer tiles" and "officer tiles" below check
-      // each of their tiles instead. Only the administrator's "Anchoring"
-      // still says "Coming soon" (its "Reports", the last tile, is wired).
-      if (role == Role.admin) {
-        const soon = AppText.anchoring;
-        testWidgets('a tile says "Coming soon"', (tester) async {
-          await pumpHome(tester, screen, signedInAs(role));
-          await tester.ensureVisible(tile(soon));
-          await tester.pump();
-          await tester.tap(tile(soon));
-          await tester.pump();
-          expect(find.text(AppText.comingSoon), findsOneWidget);
-        });
-      }
+      // each of their tiles instead. The administrator's "Anchoring", the
+      // last "Coming soon" tile, is wired since Anchoring status T3 (changed
+      // by plan), so no role has one now; "admin tiles" below checks it.
 
       testWidgets('signed in: no expired-password notice', (tester) async {
         await pumpHome(tester, screen, signedInAs(role));
@@ -353,26 +343,17 @@ void main() {
 
   // Admin accounts T2: "Accounts" is wired. GPS zones T2 (changed by plan):
   // "GPS zones" is wired too, so it left the "Coming soon" loop below.
-  // Reports T3 (changed by plan): so is "Reports"; only "Anchoring" still
-  // says "Coming soon".
+  // Reports T3 (changed by plan): so is "Reports". Anchoring status T3
+  // (changed by plan): "Anchoring" opens its status screen, so the "still
+  // says Coming soon" case went and it joined this list.
   group('admin tiles', () {
     tilesOpenTheirPages(Role.admin, AppRoutes.admin, const AdminHomeScreen(), [
       (AppText.accountRequests, AppRoutes.adminRequests),
       (AppText.accounts, AppRoutes.adminAccounts),
       (AppText.gpsZones, AppRoutes.adminZones),
+      (AppText.anchoring, AppRoutes.adminAnchoring),
       (AppText.reports, AppRoutes.adminReports),
     ]);
-
-    for (final label in [AppText.anchoring]) {
-      testWidgets('"$label" still says "Coming soon"', (tester) async {
-        await pumpHome(tester, const AdminHomeScreen(), signedInAs(Role.admin));
-        await tester.ensureVisible(tile(label));
-        await tester.pump();
-        await tester.tap(tile(label));
-        await tester.pump();
-        expect(find.text(AppText.comingSoon), findsOneWidget);
-      });
-    }
   });
 }
 

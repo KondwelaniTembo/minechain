@@ -1161,10 +1161,17 @@ abstract final class AppText {
   static const String fieldSignedRecord = 'signed record';
   static const String fieldFingerprint = 'record fingerprint';
   static const String fieldReceipt = 'blockchain receipt';
+  static const String fieldTransaction = 'blockchain transaction';
   static const String fieldOther = 'other details';
 
+  /// The chain check's TX_NOT_FOUND: the step's stored transaction hash names
+  /// a transaction the blockchain does not hold (anchoring status plan, Q4).
+  static const String transactionNotFound =
+      'The blockchain transaction for this step could not be found.';
+
   /// "The weight no longer matches the blockchain." / "The weight and
-  /// location no longer match the blockchain."
+  /// location no longer match the blockchain." / "The other details no
+  /// longer match the blockchain."
   static String noLongerMatches(List<String> what) {
     final names = switch (what.length) {
       0 => '',
@@ -1174,7 +1181,10 @@ abstract final class AppText {
     if (names.isEmpty) {
       return 'Something in this record no longer matches the blockchain.';
     }
-    final verb = what.length == 1 ? 'matches' : 'match';
+    // The verb follows the noun, not the count: "other details" is one entry
+    // but plural (found in the verification fix's production check).
+    final plural = what.length > 1 || what.single == fieldOther;
+    final verb = plural ? 'match' : 'matches';
     return 'The $names no longer $verb the blockchain.';
   }
 
@@ -1296,7 +1306,7 @@ abstract final class AppText {
   static const String decisionNotesHint =
       'For example: Weighed again at the depot, 1.6 kg confirmed';
   static const String decisionNotesWarning =
-      'Kept for ever in the audit log. Do not add personal details.';
+      'Kept forever in the audit log. Do not add personal details.';
   static const String decisionNotesTooShort = 'Write at least 3 characters.';
 
   /// Q3: decisions are never queued.
@@ -1406,6 +1416,123 @@ abstract final class AppText {
   /// "1 Nov 2026".
   static String _day(DateTime day) =>
       '${day.day} ${_months[day.month - 1]} ${day.year}';
+
+  // ---- Anchoring status (anchoring status plan, T3: anchoring_words.dart) ----
+
+  static const String anchoringNeedsPassword =
+      'Your session has expired. Enter your password to see the anchoring '
+      'status.';
+  static const String loadingAnchoring = 'Reading the anchoring status…';
+  static const String refreshStatus = 'Refresh the status';
+
+  /// "Updated 23 Nov, 00:45", in the phone's own time.
+  static String updatedAt(DateTime localTime) =>
+      'Updated ${_dayAndTime(localTime)}';
+
+  // Q1: the worker's state, one line.
+  static const String workerRunning =
+      'Running: steps go to the blockchain on their own.';
+  static const String workerPaused =
+      'Paused: the wallet cannot pay, the fee is too high, or a sent step is '
+      'waiting.';
+  static const String workerBackoff =
+      'Cannot reach the blockchain right now. Trying again.';
+  static const String workerStopped =
+      'Stopped. The server must be fixed and restarted.';
+  static const String workerNotStarted =
+      'Not started: the startup check did not pass.';
+  static const String workerDisabled =
+      'Anchoring is switched off on this server.';
+  static const String workerUnknown = 'State not known to this app version.';
+
+  static const String anchoringProblems = 'Problems';
+  static const String noProblems = 'No problems.';
+
+  static const String anchoringSteps = 'Steps';
+  static const String anchoringStepsNote =
+      'Steps waiting for an officer are not counted.';
+  static const String countSent = 'Sent, not confirmed yet';
+  static const String countConfirmed = 'On the blockchain';
+
+  /// "Waiting: 2".
+  static String countLine(String word, int count) => '$word: $count';
+
+  static const String lastActivity = 'Last activity';
+  static String lastAnchoredAt(DateTime localTime) =>
+      'Last put on the blockchain: ${_dayAndTime(localTime)}';
+  static const String nothingAnchoredYet =
+      'Nothing has been put on the blockchain yet.';
+
+  /// "Worker last ran: 23 Nov, 00:41, nothing to send".
+  static String workerLastRan(DateTime localTime, String outcome) =>
+      'Worker last ran: ${_dayAndTime(localTime)}, $outcome';
+  static const String workerNotRunYet = 'The worker has not run yet.';
+  static const String tickIdle = 'nothing to send';
+  static const String tickSent = 'sent a step';
+  static const String tickWaiting = 'waiting for a sent step';
+  static const String tickRefused = 'a step was refused';
+  static const String tickPaused = 'paused';
+  static const String tickBackoff = 'could not reach the blockchain';
+  static const String tickBusy = 'busy';
+  static const String tickStopped = 'stopped';
+  static const String tickError = 'an unexpected error';
+  static const String tickUnknown = 'an outcome this app does not know';
+
+  static const String waitingHeading = 'Waiting to be sent';
+
+  /// "Oldest waiting: 20 minutes".
+  static String oldestWaiting(String age) => 'Oldest waiting: $age';
+  static String onHeldConsignments(int count) => count == 1
+      ? '1 on a held consignment: an officer must decide first'
+      : '$count on held consignments: an officer must decide first';
+  static String behindFailedSteps(int count) =>
+      count == 1 ? '1 behind a failed step' : '$count behind failed steps';
+
+  /// "Handoff 9d4e5f60" (Q3: the step's type and the start of its id).
+  static String stepAndId(String step, String shortId) => '$step $shortId';
+  static const String stepOfUnknownType = 'Step';
+
+  /// "Sent 10 minutes ago".
+  static String sentAgo(String age) => 'Sent $age ago';
+  static const String sentStepStuck =
+      'Stuck: nothing else is sent until it moves.';
+  static String lastResendRefused(String code) => 'Last resend refused: $code';
+
+  static String failedReason(String code) => 'Reason: $code';
+  static String attempts(int count) =>
+      count == 1 ? '1 attempt' : '$count attempts';
+  static String lastChangedAt(DateTime localTime) =>
+      'Last changed ${_dayAndTime(localTime)}';
+
+  /// Q5: no button; a retry is made through the API (Scope (11)).
+  static const String canBeRetried = 'Can be retried through the API';
+
+  /// Under the failed steps when the server sent only the newest 50.
+  static String newestFailed(int shown, int total) =>
+      'The newest $shown of $total.';
+
+  static const String heldHeading = 'Held consignments';
+  static String heldWaiting(int steps, int alerts) =>
+      '${steps == 1 ? '1 step' : '$steps steps'} waiting, '
+      '${alerts == 1 ? '1 open alert' : '$alerts open alerts'}';
+
+  static const String walletHeading = 'Wallet and contract';
+  static const String recorderWallet = 'Recorder wallet';
+  static const String recorderWalletNote =
+      'Fund this one with Sepolia test ETH when it runs low.';
+  static const String mineChainContract = 'MineChain contract';
+  static const String copy = 'Copy';
+  static const String copied = 'Copied.';
+
+  /// A length of time in the largest whole unit: "45 seconds", "1 minute",
+  /// "20 minutes", "2 hours", "3 days".
+  static String age(int seconds) {
+    String unit(int n, String word) => n == 1 ? '1 $word' : '$n ${word}s';
+    if (seconds < 60) return unit(seconds, 'second');
+    if (seconds < 3600) return unit(seconds ~/ 60, 'minute');
+    if (seconds < 86400) return unit(seconds ~/ 3600, 'hour');
+    return unit(seconds ~/ 86400, 'day');
+  }
 
   // ---- Problems with the server's answer (core/errors/failure_text.dart) ----
 

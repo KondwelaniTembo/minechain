@@ -100,6 +100,10 @@ abstract final class AppRoutes {
   static const String adminZone = '/admin/zones/zone';
   static const String adminCreateZone = '/admin/zones/new';
 
+  /// The administrator's read-only anchoring status (anchoring status plan,
+  /// T3; Scope (11)). Under /admin, for the same role rule.
+  static const String adminAnchoring = '/admin/anchoring';
+
   /// The signed-in user's own account and Log out. Open to every role, so it
   /// is not under a home's path.
   static const String account = '/account';
